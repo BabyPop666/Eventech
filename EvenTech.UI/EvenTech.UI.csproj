@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>EvenTech.UI</RootNamespace>
+    <AssemblyName>EvenTech.UI</AssemblyName>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\EvenTech.BE\EvenTech.BE.csproj" />
+    <ProjectReference Include="..\EvenTech.BLL\EvenTech.BLL.csproj" />
+    <ProjectReference Include="..\EvenTech.Services\EvenTech.Services.csproj" />
+  </ItemGroup>
+</Project>
