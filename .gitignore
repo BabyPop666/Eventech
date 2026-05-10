@@ -1,0 +1,40 @@
+# Notas locales del entorno de desarrollo (nunca subir al repo).
+NOTES_LOCAL.md
+.notes-local/
+
+# Build output
+bin/
+obj/
+out/
+
+# .NET / Visual Studio
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+*.cache
+*.pdb
+
+# Rider
+.idea/
+
+# VS Code
+.vscode/
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Logs
+*.log
+logs/
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini

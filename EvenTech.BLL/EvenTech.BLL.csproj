@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>EvenTech.BLL</RootNamespace>
+    <AssemblyName>EvenTech.BLL</AssemblyName>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\EvenTech.BE\EvenTech.BE.csproj" />
+    <ProjectReference Include="..\EvenTech.DAL\EvenTech.DAL.csproj" />
+    <ProjectReference Include="..\EvenTech.Services\EvenTech.Services.csproj" />
+  </ItemGroup>
+</Project>
