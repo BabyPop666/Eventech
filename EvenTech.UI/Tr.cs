@@ -16,8 +16,19 @@ namespace EvenTech.UI
         {
             foreach (Control c in root.Controls)
             {
-                if (c.Tag is string tag && tag.StartsWith("T:"))
-                    c.Text = T(tag.Substring(2));
+                if (c.Tag is string tag)
+                {
+                    // "T:CLAVE": traduce el Text del propio control.
+                    if (tag.StartsWith("T:"))
+                        c.Text = T(tag.Substring(2));
+                    // "FIELD:CLAVE": traduce el caption (primer Label hijo) de un Ui.Field.
+                    else if (tag.StartsWith("FIELD:"))
+                    {
+                        string clave = tag.Substring(6);
+                        foreach (Control hijo in c.Controls)
+                            if (hijo is Label lbl) { lbl.Text = T(clave); break; }
+                    }
+                }
                 if (c.HasChildren)
                     AplicarTags(c);
             }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Data;
 using Microsoft.Data.SqlClient;
@@ -7,6 +8,29 @@ namespace EvenTech.DAL
 {
     public static class DAL_Perfil
     {
+        public static bool ExistsNombre(string nombre)
+        {
+            using (var cn = new DAL_DB_Connection())
+            using (var cmd = new SqlCommand("SELECT COUNT(1) FROM dbo.Perfiles WHERE Nombre = @n", cn.OpenConnection()))
+            {
+                cmd.Parameters.Add("@n", SqlDbType.NVarChar, 80).Value = nombre ?? string.Empty;
+                return (int)cmd.ExecuteScalar() > 0;
+            }
+        }
+
+        public static int Insert(string nombre, string descripcion)
+        {
+            using (var cn = new DAL_DB_Connection())
+            using (var cmd = new SqlCommand(
+                "INSERT INTO dbo.Perfiles (Nombre, Descripcion) VALUES (@n, @d); SELECT CAST(SCOPE_IDENTITY() AS INT);",
+                cn.OpenConnection()))
+            {
+                cmd.Parameters.Add("@n", SqlDbType.NVarChar, 80).Value = nombre;
+                cmd.Parameters.Add("@d", SqlDbType.NVarChar, 250).Value = (object)descripcion ?? DBNull.Value;
+                return (int)cmd.ExecuteScalar();
+            }
+        }
+
         public static List<BE_Perfil> GetAll()
         {
             var list = new List<BE_Perfil>();

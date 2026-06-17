@@ -47,9 +47,9 @@ namespace EvenTech.DAL
             using (var cn = new DAL_DB_Connection())
             {
                 using (var cmd = new SqlCommand(
-                    "INSERT INTO dbo.Reservas (ClienteNombre, SalonId, FechaEvento, Estado, Monto) " +
+                    "INSERT INTO dbo.Reservas (ClienteNombre, SalonId, FechaEvento, Estado, Monto, Dvh) " +
                     "OUTPUT INSERTED.Id " +
-                    "VALUES (@cliente, @salon, @fecha, @estado, @monto)",
+                    "VALUES (@cliente, @salon, @fecha, @estado, @monto, @dvh)",
                     cn.OpenConnection()))
                 {
                     BindEditable(cmd, reserva);
@@ -64,7 +64,7 @@ namespace EvenTech.DAL
             {
                 using (var cmd = new SqlCommand(
                     "UPDATE dbo.Reservas SET ClienteNombre = @cliente, SalonId = @salon, " +
-                    "FechaEvento = @fecha, Estado = @estado, Monto = @monto WHERE Id = @id",
+                    "FechaEvento = @fecha, Estado = @estado, Monto = @monto, Dvh = @dvh WHERE Id = @id",
                     cn.OpenConnection()))
                 {
                     BindEditable(cmd, reserva);
@@ -81,6 +81,7 @@ namespace EvenTech.DAL
             cmd.Parameters.Add("@fecha", SqlDbType.DateTime).Value = reserva.FechaEvento;
             cmd.Parameters.Add("@estado", SqlDbType.NVarChar, 20).Value = reserva.Estado.ToString();
             cmd.Parameters.Add("@monto", SqlDbType.Decimal).Value = reserva.Monto;
+            cmd.Parameters.Add("@dvh", SqlDbType.NVarChar, 64).Value = (object)reserva.Dvh ?? DBNull.Value;
         }
 
         private static BE_Reserva Map(SqlDataReader r) => new BE_Reserva

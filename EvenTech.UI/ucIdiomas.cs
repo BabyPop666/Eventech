@@ -4,13 +4,15 @@ using System.Drawing;
 using System.Windows.Forms;
 using EvenTech.BE;
 using EvenTech.BLL;
+using EvenTech.Services;
 
 namespace EvenTech.UI
 {
-    // Gestion de idiomas (T05). Permite al administrador dar de alta un idioma
-    // nuevo y editar las traducciones de cada leyenda. Al guardar, recarga el
-    // GestorDeIdioma en caliente y refresca el selector de la ventana principal.
-    public class ucIdiomas : UserControl
+    // Gestion de idiomas: alta de idioma y edicion de traducciones en grilla editable.
+    // Look de panel de administracion (titulo + tarjetas), layout 100% por
+    // TableLayoutPanel/FlowLayoutPanel + Dock (sin coordenadas magicas).
+    // Observa el cambio de idioma (patron Observer) para re-traducir sus textos.
+    public class ucIdiomas : UserControl, IObservadorIdioma
     {
         private ComboBox _cboIdioma;
         private TextBox _txtCodigo, _txtNombre;
@@ -21,100 +23,221 @@ namespace EvenTech.UI
         {
             BackColor = Theme.BgContent;
             BuildUi();
-            Load += (s, e) => CargarIdiomas();
+            ActualizarTextos();
+            Load += (s, e) => { CargarIdiomas(); GestorDeIdioma.GetInstance.Suscribir(this); };
+            Disposed += (s, e) => GestorDeIdioma.GetInstance.Desuscribir(this);
         }
 
         private void BuildUi()
         {
-            var lblTitle = new Label
+            // ---------------- Raiz: titulo / alta / selector / grilla / acciones ----------------
+            var root = new TableLayoutPanel
             {
-                Text = "Gestion de Idiomas",
-                Font = new Font("Ebrima", 18F, FontStyle.Bold),
-                ForeColor = Theme.TextOnLight,
-                AutoSize = true,
-                Location = new Point(10, 10)
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 5,
+                BackColor = Theme.BgContent,
+                Padding = new Padding(Theme.SpaceXl, Theme.SpaceLg, Theme.SpaceXl, Theme.SpaceLg)
+            };
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // titulo
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 116)); // tarjeta nuevo idioma
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // selector de idioma
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // tarjeta con grilla
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // acciones
+
+            // ---------------- Titulo de pagina ----------------
+            var lblTitle = Ui.H1("Gestion de Idiomas");
+            lblTitle.Tag = "T:IDI_TITULO";
+            lblTitle.Margin = new Padding(0, 0, 0, Theme.SpaceMd);
+
+            // ---------------- Tarjeta: nuevo idioma ----------------
+            root.Controls.Add(lblTitle, 0, 0);
+            root.Controls.Add(BuildTarjetaNuevo(), 0, 1);
+            root.Controls.Add(BuildSelector(), 0, 2);
+            root.Controls.Add(BuildTarjetaGrilla(), 0, 3);
+            root.Controls.Add(BuildAcciones(), 0, 4);
+
+            Controls.Add(root);
+        }
+
+        // Tarjeta de alta: codigo + nombre + boton crear (en fila, alineados al fondo).
+        private CardPanel BuildTarjetaNuevo()
+        {
+            var card = new CardPanel
+            {
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, 0, 0, Theme.SpaceMd),
+                Padding = new Padding(Theme.SpaceLg)
             };
 
-            // --- Panel alta de idioma nuevo ---
-            var pnlNuevo = new Panel
+            var inner = new TableLayoutPanel
             {
-                Location = new Point(12, 52),
-                Size = new Size(560, 70),
-                BackColor = Color.White,
-                BorderStyle = BorderStyle.FixedSingle
+                Dock = DockStyle.Top,
+                ColumnCount = 1,
+                RowCount = 2,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                BackColor = Color.Transparent
             };
-            var lblNuevo = new Label { Text = "Nuevo idioma", Font = new Font("Ebrima", 11F, FontStyle.Bold), ForeColor = Theme.TextOnLight, AutoSize = true, Location = new Point(10, 8) };
-            var lblCod = new Label { Text = "Codigo (ej. PT)", Font = new Font("Ebrima", 8.5F), ForeColor = Color.DimGray, AutoSize = true, Location = new Point(12, 32) };
-            _txtCodigo = new TextBox { Location = new Point(12, 48), Size = new Size(80, 24), Font = new Font("Ebrima", 10F), MaxLength = 5 };
-            var lblNom = new Label { Text = "Nombre", Font = new Font("Ebrima", 8.5F), ForeColor = Color.DimGray, AutoSize = true, Location = new Point(105, 32) };
-            _txtNombre = new TextBox { Location = new Point(105, 48), Size = new Size(180, 24), Font = new Font("Ebrima", 10F) };
-            var btnCrear = MakeButton("Crear idioma", 300, 46, Theme.AccentButton);
-            btnCrear.Size = new Size(140, 26);
+            inner.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            inner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            inner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            var lblNuevo = Ui.H2("Nuevo idioma");
+            lblNuevo.Tag = "T:IDI_NUEVO";
+            lblNuevo.Margin = new Padding(0, 0, 0, Theme.SpaceSm);
+
+            // Fila horizontal: campo codigo + campo nombre + boton crear.
+            var fila = new FlowLayoutPanel
+            {
+                FlowDirection = FlowDirection.LeftToRight,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                WrapContents = true,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0)
+            };
+
+            _txtCodigo = Ui.Input();
+            _txtCodigo.MaxLength = 5;
+            _txtCodigo.Width = 110;
+            var fldCodigo = Ui.Field("Codigo (ej. PT)", _txtCodigo);
+            fldCodigo.Width = 130;
+            fldCodigo.Margin = new Padding(0, 0, Theme.SpaceMd, 0);
+            ((Label)fldCodigo.GetControlFromPosition(0, 0)).Tag = "T:IDI_CODIGO";
+
+            _txtNombre = Ui.Input();
+            _txtNombre.Width = 240;
+            var fldNombre = Ui.Field("Nombre", _txtNombre);
+            fldNombre.Width = 260;
+            fldNombre.Margin = new Padding(0, 0, Theme.SpaceLg, 0);
+            ((Label)fldNombre.GetControlFromPosition(0, 0)).Tag = "T:IDI_NOMBRE";
+
+            var btnCrear = Ui.Primary("Crear idioma", Theme.IcoAdd);
+            btnCrear.Tag = "T:IDI_CREAR";
+            btnCrear.Size = new Size(170, 32);
+            // El boton vive sobre la tarjeta blanca -> BehindColor por defecto (Surface) es correcto.
+            btnCrear.Margin = new Padding(0, 18, 0, 0); // alinea con el input (debajo del caption)
             btnCrear.Click += (s, e) => CrearIdioma();
 
-            pnlNuevo.Controls.Add(lblNuevo);
-            pnlNuevo.Controls.Add(lblCod); pnlNuevo.Controls.Add(_txtCodigo);
-            pnlNuevo.Controls.Add(lblNom); pnlNuevo.Controls.Add(_txtNombre);
-            pnlNuevo.Controls.Add(btnCrear);
+            fila.Controls.Add(fldCodigo);
+            fila.Controls.Add(fldNombre);
+            fila.Controls.Add(btnCrear);
 
-            // --- Editor de traducciones ---
-            var lblEditar = new Label { Text = "Idioma:", Font = new Font("Ebrima", 11F), ForeColor = Theme.TextOnLight, AutoSize = true, Location = new Point(12, 138) };
-            _cboIdioma = new ComboBox { Location = new Point(75, 134), Size = new Size(220, 28), DropDownStyle = ComboBoxStyle.DropDownList, Font = new Font("Ebrima", 11F) };
+            inner.Controls.Add(lblNuevo, 0, 0);
+            inner.Controls.Add(fila, 0, 1);
+            card.Controls.Add(inner);
+            return card;
+        }
+
+        // Fila: label "Idioma:" + combo de seleccion.
+        private FlowLayoutPanel BuildSelector()
+        {
+            var fila = new FlowLayoutPanel
+            {
+                FlowDirection = FlowDirection.LeftToRight,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0, 0, 0, Theme.SpaceMd)
+            };
+
+            var lblEditar = Ui.BodyBold("Idioma:");
+            lblEditar.Tag = "T:IDI_IDIOMA";
+            lblEditar.Margin = new Padding(0, 6, Theme.SpaceMd, 0);
+            lblEditar.AutoSize = true;
+
+            _cboIdioma = Ui.Combo();
+            _cboIdioma.Width = 240;
+            _cboIdioma.Margin = new Padding(0, 2, 0, 0);
             _cboIdioma.SelectedIndexChanged += (s, e) => CargarTraducciones();
 
-            _grid = new DataGridView
-            {
-                Location = new Point(12, 172),
-                Size = new Size(905, 360),
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom,
-                BackgroundColor = Color.White,
-                BorderStyle = BorderStyle.FixedSingle,
-                AllowUserToAddRows = false,
-                AllowUserToDeleteRows = false,
-                AllowUserToResizeRows = false,
-                AutoGenerateColumns = false,
-                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                RowHeadersVisible = false,
-                SelectionMode = DataGridViewSelectionMode.CellSelect,
-                EnableHeadersVisualStyles = false,
-                Font = new Font("Ebrima", 9.5F)
-            };
-            _grid.ColumnHeadersDefaultCellStyle.BackColor = Theme.BgTitleBar;
-            _grid.ColumnHeadersDefaultCellStyle.ForeColor = Theme.TextOnDark;
-            _grid.ColumnHeadersDefaultCellStyle.Font = new Font("Ebrima", 10F, FontStyle.Bold);
-            _grid.ColumnHeadersHeight = 30;
+            fila.Controls.Add(lblEditar);
+            fila.Controls.Add(_cboIdioma);
+            return fila;
+        }
 
-            var colClave = new DataGridViewTextBoxColumn { HeaderText = "Clave", Name = "colClave", FillWeight = 40, ReadOnly = true };
-            colClave.DefaultCellStyle.BackColor = Color.FromArgb(240, 240, 240);
-            var colTexto = new DataGridViewTextBoxColumn { HeaderText = "Texto", Name = "colTexto", FillWeight = 60 };
+        // Tarjeta que contiene la grilla editable (Dock=Fill).
+        private CardPanel BuildTarjetaGrilla()
+        {
+            var card = new CardPanel
+            {
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, 0, 0, Theme.SpaceMd),
+                Padding = new Padding(Theme.SpaceSm)
+            };
+
+            _grid = new DataGridView { Dock = DockStyle.Fill };
+            UiGrid.Style(_grid, editable: true);
+            _grid.SelectionMode = DataGridViewSelectionMode.CellSelect;
+
+            var colClave = new DataGridViewTextBoxColumn
+            {
+                HeaderText = "Clave",
+                Name = "colClave",
+                FillWeight = 40,
+                ReadOnly = true
+            };
+            colClave.DefaultCellStyle.BackColor = Theme.SurfaceAlt;
+            colClave.DefaultCellStyle.ForeColor = Theme.TextMuted;
+
+            var colTexto = new DataGridViewTextBoxColumn
+            {
+                HeaderText = "Texto",
+                Name = "colTexto",
+                FillWeight = 60
+            };
+
             _grid.Columns.Add(colClave);
             _grid.Columns.Add(colTexto);
 
-            var btnGuardar = MakeButton("Guardar traducciones", 12, 540, Theme.AccentButton);
-            btnGuardar.Size = new Size(200, 34);
-            btnGuardar.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-            btnGuardar.Click += (s, e) => GuardarTraducciones();
-
-            _lblMsg = new Label { AutoSize = true, Font = new Font("Ebrima", 10F, FontStyle.Bold), Location = new Point(225, 548), Anchor = AnchorStyles.Bottom | AnchorStyles.Left, MaximumSize = new Size(560, 0) };
-
-            Controls.Add(lblTitle);
-            Controls.Add(pnlNuevo);
-            Controls.Add(lblEditar);
-            Controls.Add(_cboIdioma);
-            Controls.Add(_grid);
-            Controls.Add(btnGuardar);
-            Controls.Add(_lblMsg);
+            card.Controls.Add(_grid);
+            return card;
         }
 
-        private Button MakeButton(string text, int x, int y, Color back)
+        // Fila inferior: boton guardar + mensaje de estado.
+        private FlowLayoutPanel BuildAcciones()
         {
-            var b = new Button
+            var fila = new FlowLayoutPanel
             {
-                Text = text, Font = Theme.FontButton, BackColor = back, ForeColor = Theme.TextOnDark,
-                FlatStyle = FlatStyle.Flat, Size = new Size(140, 30), Location = new Point(x, y), Cursor = Cursors.Hand
+                FlowDirection = FlowDirection.LeftToRight,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0)
             };
-            b.FlatAppearance.BorderSize = 0;
-            return b;
+
+            var btnGuardar = Ui.Primary("Guardar traducciones", Theme.IcoSave);
+            btnGuardar.Tag = "T:IDI_GUARDAR";
+            btnGuardar.Size = new Size(220, 38);
+            btnGuardar.BehindColor = Theme.BgContent; // vive sobre el area de contenido, no sobre tarjeta
+            btnGuardar.Margin = new Padding(0, 0, Theme.SpaceLg, 0);
+            btnGuardar.Click += (s, e) => GuardarTraducciones();
+
+            _lblMsg = new Label
+            {
+                AutoSize = true,
+                Font = Theme.FontBodyBold,
+                BackColor = Color.Transparent,
+                MaximumSize = new Size(560, 0),
+                Margin = new Padding(0, 9, 0, 0)
+            };
+
+            fila.Controls.Add(btnGuardar);
+            fila.Controls.Add(_lblMsg);
+            return fila;
+        }
+
+        // Observer: re-traduce textos por Tag + encabezados de columnas.
+        public void ActualizarTextos()
+        {
+            Tr.AplicarTags(this);
+            if (_grid.Columns.Count >= 2)
+            {
+                _grid.Columns["colClave"].HeaderText = Tr.T("COL_CLAVE");
+                _grid.Columns["colTexto"].HeaderText = Tr.T("COL_TEXTO");
+            }
         }
 
         private void CargarIdiomas()
@@ -126,7 +249,7 @@ namespace EvenTech.UI
                 _cboIdioma.ValueMember = "Id";
                 if (_cboIdioma.Items.Count > 0) _cboIdioma.SelectedIndex = 0;
             }
-            catch (Exception ex) { Mensaje("Error cargando idiomas: " + ex.Message, true); }
+            catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Idiomas", "Cargar idiomas"); Mensaje("Error: " + ex.Message, true); }
         }
 
         private void CargarTraducciones()
@@ -139,7 +262,7 @@ namespace EvenTech.UI
                 foreach (var kv in trads)
                     _grid.Rows.Add(kv.Key, kv.Value);
             }
-            catch (Exception ex) { Mensaje("Error cargando traducciones: " + ex.Message, true); }
+            catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Idiomas", "Cargar traducciones"); Mensaje("Error: " + ex.Message, true); }
         }
 
         private void CrearIdioma()
@@ -157,16 +280,16 @@ namespace EvenTech.UI
                 CargarIdiomas();
                 _cboIdioma.SelectedValue = nuevoId;
                 RefrescarSelectorPrincipal();
-                Mensaje("Idioma creado. Edite los textos y guarde.", false);
+                Mensaje(Tr.T("MSG_IDI_CREADO"), false);
             }
-            catch (Exception ex) { Mensaje("No se pudo crear el idioma: " + ex.Message, true); }
+            catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Idiomas", "Crear idioma"); Mensaje("Error: " + ex.Message, true); }
         }
 
         private void GuardarTraducciones()
         {
             if (!(_cboIdioma.SelectedValue is int idiomaId))
             {
-                Mensaje("Seleccione un idioma.", true);
+                Mensaje(Tr.T("MSG_IDI_SELECCIONE"), true);
                 return;
             }
             try
@@ -181,13 +304,13 @@ namespace EvenTech.UI
                 }
                 BLL_Idioma.GuardarTraducciones(idiomaId, textos);
                 RefrescarSelectorPrincipal();
-                Mensaje($"Guardado ({textos.Count} leyendas).", false);
+                // Si edite el idioma activo, refrescar esta misma vista.
+                GestorDeIdioma.GetInstance.CambiarIdioma(GestorDeIdioma.GetInstance.IdiomaActual);
+                Mensaje(Tr.T("MSG_IDI_GUARDADO"), false);
             }
-            catch (Exception ex) { Mensaje("No se pudo guardar: " + ex.Message, true); }
+            catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Idiomas", "Guardar traducciones"); Mensaje("Error: " + ex.Message, true); }
         }
 
-        // Refresca el combo de idiomas de la ventana principal para que el idioma
-        // nuevo este disponible sin reiniciar la app.
         private void RefrescarSelectorPrincipal()
         {
             if (FindForm() is frmMain main) main.RefrescarIdiomas();
@@ -197,16 +320,16 @@ namespace EvenTech.UI
         {
             switch (r)
             {
-                case IdiomaResult.CodigoInvalido:  return "Codigo invalido (1 a 5 caracteres).";
-                case IdiomaResult.NombreInvalido:  return "Ingrese el nombre del idioma.";
-                case IdiomaResult.CodigoDuplicado: return "Ya existe un idioma con ese codigo.";
-                default:                           return "No se pudo crear el idioma.";
+                case IdiomaResult.CodigoInvalido:  return Tr.T("MSG_IDI_COD_INV");
+                case IdiomaResult.NombreInvalido:  return Tr.T("MSG_IDI_NOM_INV");
+                case IdiomaResult.CodigoDuplicado: return Tr.T("MSG_IDI_DUP");
+                default:                           return Tr.T("MSG_IDI_ERROR");
             }
         }
 
         private void Mensaje(string texto, bool error)
         {
-            _lblMsg.ForeColor = error ? Color.Firebrick : Color.SeaGreen;
+            _lblMsg.ForeColor = error ? Theme.Error : Theme.Success;
             _lblMsg.Text = texto;
         }
     }

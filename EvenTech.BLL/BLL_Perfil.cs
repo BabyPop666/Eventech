@@ -4,12 +4,29 @@ using EvenTech.DAL;
 
 namespace EvenTech.BLL
 {
+    public enum PerfilResult { Success, NombreInvalido, NombreDuplicado }
+
     // Logica de negocio de perfiles y arbol de permisos (Composite).
     public static class BLL_Perfil
     {
         public static List<BE_IComponentePermiso> GetArbolPermisos() => DAL_Permiso.GetArbol();
 
         public static List<BE_Perfil> GetPerfiles() => DAL_Perfil.GetAll();
+
+        // Alta de un perfil nuevo (luego se le asignan permisos y usuarios).
+        public static PerfilResult CrearPerfil(string nombre, string descripcion, out int nuevoId)
+        {
+            nuevoId = 0;
+            if (string.IsNullOrWhiteSpace(nombre) || nombre.Trim().Length > 80)
+                return PerfilResult.NombreInvalido;
+            nombre = nombre.Trim();
+            if (DAL_Perfil.ExistsNombre(nombre))
+                return PerfilResult.NombreDuplicado;
+
+            nuevoId = DAL_Perfil.Insert(nombre, string.IsNullOrWhiteSpace(descripcion) ? null : descripcion.Trim());
+            BLL_Bitacora.Registrar("Perfiles", "Alta de perfil", CriticidadBitacora.Info, $"Perfil '{nombre}' creado");
+            return PerfilResult.Success;
+        }
 
         public static HashSet<int> GetPermisosAsignados(int perfilId) => DAL_Perfil.GetPermisoIds(perfilId);
 

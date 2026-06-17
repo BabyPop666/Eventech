@@ -1,6 +1,5 @@
 using System;
 using System.Drawing;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using EvenTech.BLL;
 using EvenTech.Services;
@@ -8,117 +7,121 @@ using EvenTech.Services;
 namespace EvenTech.UI
 {
     // Alta de usuario accesible desde el login (link "¿No tenes cuenta? Crear").
-    // Misma paleta y estilo que frmLogin.
-    public class frmCrearCuenta : Form
+    // Borderless con la identidad de marca de frmLogin (azul oscuro + dorado).
+    // Layout por TableLayoutPanel/Dock (DPI-aware, sin coordenadas magicas) e
+    // implementa el patron Observer para re-traducir labels al cambiar de idioma.
+    public class frmCrearCuenta : FormBase, IObservadorIdioma
     {
-        [DllImport("user32.dll")] private static extern bool ReleaseCapture();
-        [DllImport("user32.dll")] private static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
-        private const int WM_NCLBUTTONDOWN = 0xA1;
-        private const int HT_CAPTION = 0x2;
-
         private TextBox _txtUser, _txtPass, _txtPass2;
-        private Label _lblStatus;
+        private Label _lblUser, _lblPass, _lblPass2, _lblTitle, _lblStatus;
+        private AppButton _btnCrear;
 
         public frmCrearCuenta()
         {
+            BuildUi();
+            ActualizarTextos();
+            GestorDeIdioma.GetInstance.Suscribir(this);
+            FormClosed += (s, e) => GestorDeIdioma.GetInstance.Desuscribir(this);
+            Shown += (s, e) => _txtUser.Focus();
+        }
+
+        private void BuildUi()
+        {
             Text = "EvenTech - Crear cuenta";
-            FormBorderStyle = FormBorderStyle.None;
-            StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(414, 500);
+            ClientSize = new Size(420, 660); // misma altura que el login para cubrirlo por completo
             BackColor = Theme.BgLogin;
-            Opacity = 0.97;
+            KeyPreview = true;
 
-            var pnlTitle = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = Theme.BgTitleBar };
-            pnlTitle.MouseDown += Drag;
+            // ---------------- Barra de titulo ----------------
+            var pnlTitle = new Panel { Dock = DockStyle.Top, Height = 44, BackColor = Theme.BgTitleBar };
+            EnableDrag(pnlTitle);
 
-            var lblTitle = new Label
+            _lblTitle = new Label
             {
-                Text = "Crear cuenta",
-                Font = new Font("Ebrima", 14F, FontStyle.Bold),
+                Font = Theme.FontH2,
                 ForeColor = Theme.Accent,
-                AutoSize = true,
-                Location = new Point(20, 14),
+                AutoSize = false,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Padding = new Padding(Theme.SpaceLg, 0, 0, 0),
                 BackColor = Color.Transparent
             };
-            var btnClose = new Label
-            {
-                Text = "✕",
-                ForeColor = Theme.TextLight,
-                Font = new Font("Segoe UI", 12F, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleCenter,
-                Size = new Size(35, 30),
-                Location = new Point(371, 10),
-                Cursor = Cursors.Hand
-            };
-            btnClose.Click += (s, e) => Close();
+
+            // Dock=Right: reserva su lugar a la derecha sin que el titulo (Dock=Fill)
+            // lo tape (antes quedaba oculto e impedia cerrar la ventana).
+            var btnClose = WindowButton(Theme.IcoClose, (s, e) => Close(), danger: true);
+            btnClose.Dock = DockStyle.Right;
+
+            pnlTitle.Controls.Add(_lblTitle);
             pnlTitle.Controls.Add(btnClose);
-            pnlTitle.Controls.Add(lblTitle);
 
-            _txtUser = MakeInput("Usuario", 100);
-            _txtPass = MakeInput("Contraseña", 180, true);
-            _txtPass2 = MakeInput("Repetir contraseña", 260, true);
-
-            var btnCrear = new Button
+            // ---------------- Cuerpo ----------------
+            var body = new Panel
             {
-                Text = "Crear",
-                Font = Theme.FontButton,
-                ForeColor = Theme.TextOnDark,
-                BackColor = Theme.AccentButton,
-                FlatStyle = FlatStyle.Flat,
-                Location = new Point(32, 360),
-                Size = new Size(350, 50),
-                Cursor = Cursors.Hand
+                Dock = DockStyle.Fill,
+                BackColor = Theme.BgLogin,
+                Padding = new Padding(44, 26, 44, 22)
             };
-            btnCrear.FlatAppearance.BorderSize = 0;
-            btnCrear.Click += BtnCrear_Click;
+
+            var tbl = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 8,
+                BackColor = Color.Transparent
+            };
+            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            int[] heights = { 64, 60, 60, 60, 8, 50, 42, /*fill*/ 0 };
+            for (int i = 0; i < heights.Length; i++)
+                tbl.RowStyles.Add(i == 7
+                    ? new RowStyle(SizeType.Percent, 100)
+                    : new RowStyle(SizeType.Absolute, heights[i]));
+
+            var lblLogo = new Label
+            {
+                Text = "EvenTech",
+                Font = Theme.FontDisplay,
+                ForeColor = Theme.Accent,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent
+            };
+
+            // Campos oscuros estilo login; se capturan los caption Label para re-traducir.
+            var userField  = Ui.DarkField("Usuario", false, out _txtUser,  out _lblUser);
+            var passField  = Ui.DarkField("Contraseña", true, out _txtPass,  out _lblPass);
+            var pass2Field = Ui.DarkField("Repetir contraseña", true, out _txtPass2, out _lblPass2);
+
+            _btnCrear = Ui.Primary("Crear cuenta");
+            _btnCrear.Dock = DockStyle.Fill;
+            _btnCrear.BehindColor = Theme.BgLogin;
+            _btnCrear.Margin = new Padding(0);
+            _btnCrear.Click += BtnCrear_Click;
 
             _lblStatus = new Label
             {
-                Location = new Point(32, 420),
-                Size = new Size(350, 50),
-                Font = new Font("Ebrima", 10F),
+                Dock = DockStyle.Fill,
+                ForeColor = Color.FromArgb(255, 170, 170),
+                Font = Theme.FontSmall,
                 TextAlign = ContentAlignment.MiddleCenter,
-                BackColor = Color.Transparent,
-                Text = ""
-            };
-
-            Controls.Add(pnlTitle);
-            Controls.Add(btnCrear);
-            Controls.Add(_lblStatus);
-            AcceptButton = btnCrear;
-        }
-
-        private TextBox MakeInput(string labelText, int top, bool password = false)
-        {
-            var lbl = new Label
-            {
-                Text = labelText,
-                Font = Theme.FontLabel,
-                ForeColor = Theme.TextLight,
-                Location = new Point(28, top),
-                AutoSize = true,
                 BackColor = Color.Transparent
             };
-            var tb = new TextBox
-            {
-                BorderStyle = BorderStyle.None,
-                Font = Theme.FontInput,
-                BackColor = Theme.BgInput,
-                ForeColor = Theme.TextLight,
-                Location = new Point(32, top + 34),
-                Size = new Size(350, 22),
-                UseSystemPasswordChar = password
-            };
-            var line = new Panel
-            {
-                BackColor = Theme.Accent,
-                Location = new Point(32, top + 59),
-                Size = new Size(350, 1)
-            };
-            Controls.Add(lbl);
-            Controls.Add(tb);
-            Controls.Add(line);
-            return tb;
+
+            tbl.Controls.Add(lblLogo, 0, 0);
+            tbl.Controls.Add(userField, 0, 1);
+            tbl.Controls.Add(passField, 0, 2);
+            tbl.Controls.Add(pass2Field, 0, 3);
+            tbl.Controls.Add(new Panel { BackColor = Color.Transparent }, 0, 4); // spacer
+            tbl.Controls.Add(_btnCrear, 0, 5);
+            tbl.Controls.Add(_lblStatus, 0, 6);
+            tbl.Controls.Add(new Panel { BackColor = Color.Transparent }, 0, 7); // fill
+
+            body.Controls.Add(tbl);
+
+            Controls.Add(body);
+            Controls.Add(pnlTitle);
+
+            AcceptButton = _btnCrear;
         }
 
         private void BtnCrear_Click(object sender, EventArgs e)
@@ -129,17 +132,17 @@ namespace EvenTech.UI
 
             if (string.IsNullOrWhiteSpace(user) || string.IsNullOrEmpty(p1))
             {
-                SetStatus("Completar todos los campos.", error: true);
+                SetStatus(T("CC_MSG_COMPLETAR", "Completar todos los campos."), error: true);
                 return;
             }
             if (p1 != p2)
             {
-                SetStatus("Las contraseñas no coinciden.", error: true);
+                SetStatus(T("CC_MSG_NO_COINCIDEN", "Las contraseñas no coinciden."), error: true);
                 return;
             }
             if (p1.Length < 4)
             {
-                SetStatus("La contraseña debe tener al menos 4 caracteres.", error: true);
+                SetStatus(T("CC_MSG_PASS_CORTA", "La contraseña debe tener al menos 4 caracteres."), error: true);
                 return;
             }
 
@@ -153,39 +156,48 @@ namespace EvenTech.UI
                 switch (r)
                 {
                     case CreateUserResult.Success:
-                        SetStatus("Usuario creado. Ya podes iniciar sesion.", error: false);
+                        SetStatus(T("CC_MSG_OK", "Usuario creado. Ya podes iniciar sesion."), error: false);
                         _txtUser.Clear();
                         break;
                     case CreateUserResult.InvalidUsername:
-                        SetStatus("Usuario invalido (3-50, letras/numeros/._-).", error: true);
+                        SetStatus(T("CC_MSG_USER_INVALIDO", "Usuario invalido (3-50, letras/numeros/._-)."), error: true);
                         break;
                     case CreateUserResult.UsernameAlreadyExists:
-                        SetStatus("Ese usuario ya existe.", error: true);
+                        SetStatus(T("CC_MSG_USER_EXISTE", "Ese usuario ya existe."), error: true);
                         break;
                     case CreateUserResult.InvalidPassword:
-                        SetStatus("Contraseña invalida.", error: true);
+                        SetStatus(T("CC_MSG_PASS_INVALIDA", "Contraseña invalida."), error: true);
                         break;
                 }
             }
             catch (Exception ex)
             {
-                SetStatus("Error: " + ex.Message, error: true);
+                BLL_Bitacora.RegistrarExcepcion(ex, "CrearCuenta", "Alta de usuario");
+                SetStatus(T("CC_MSG_ERROR", "Error:") + " " + ex.Message, error: true);
             }
         }
 
         private void SetStatus(string msg, bool error)
         {
-            _lblStatus.ForeColor = error ? Color.FromArgb(255, 180, 180) : Color.FromArgb(180, 255, 180);
+            _lblStatus.ForeColor = error ? Color.FromArgb(255, 170, 170) : Color.FromArgb(170, 235, 170);
             _lblStatus.Text = msg;
         }
 
-        private void Drag(object sender, MouseEventArgs e)
+        // Devuelve la traduccion de 'clave' o, si falta, el texto por defecto dado.
+        private static string T(string clave, string defecto)
         {
-            if (e.Button == MouseButtons.Left)
-            {
-                ReleaseCapture();
-                SendMessage(Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
-            }
+            string t = Tr.T(clave);
+            return t == clave ? defecto : t;
+        }
+
+        // Observador (patron Observer): re-traduce titulo, captions y boton.
+        public void ActualizarTextos()
+        {
+            if (_lblTitle != null) _lblTitle.Text = Tr.T("CC_TITULO");
+            if (_lblUser != null)  _lblUser.Text  = Tr.T("CC_USER");
+            if (_lblPass != null)  _lblPass.Text  = Tr.T("CC_PASS");
+            if (_lblPass2 != null) _lblPass2.Text = Tr.T("CC_PASS2");
+            if (_btnCrear != null) _btnCrear.Text = Tr.T("CC_CREAR");
         }
     }
 }
