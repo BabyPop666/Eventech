@@ -1,116 +1,167 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using EvenTech.BE;
 using EvenTech.BLL;
+using EvenTech.Services;
 
 namespace EvenTech.UI
 {
     // Ventana modal que muestra el historial de cambios (control de cambios) de
     // una reserva puntual, campo por campo y en orden cronologico.
-    public class frmHistorialReserva : Form
+    // Borderless heredando de FormBase (cromo compartido), con barra de titulo de
+    // marca y la grilla agrupada en una tarjeta. Implementa el Observer de idioma
+    // para re-traducir titulo, encabezados y estado vacio sin recrear la vista.
+    public class frmHistorialReserva : FormBase, IObservadorIdioma
     {
-        [DllImport("user32.dll")] private static extern bool ReleaseCapture();
-        [DllImport("user32.dll")] private static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
-        private const int WM_NCLBUTTONDOWN = 0xA1;
-        private const int HT_CAPTION = 0x2;
-
         private readonly int _reservaId;
+
+        private Label _lblTitle;
+        private DataGridView _grid;
+        private Label _lblVacio;
+        private DataGridViewTextBoxColumn _colFecha, _colUsuario, _colCampo, _colAnterior, _colNuevo;
 
         public frmHistorialReserva(int reservaId)
         {
             _reservaId = reservaId;
             BuildUi();
+            ActualizarTextos();
             Load += (s, e) => CargarHistorial();
+            GestorDeIdioma.GetInstance.Suscribir(this);
+            FormClosed += (s, e) => GestorDeIdioma.GetInstance.Desuscribir(this);
         }
 
         private void BuildUi()
         {
-            FormBorderStyle = FormBorderStyle.None;
-            StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(640, 420);
+            Text = "EvenTech";
+            ClientSize = new Size(680, 460);
             BackColor = Theme.BgContent;
 
+            // ---------------- Barra de titulo ----------------
             var pnlTop = new Panel { Dock = DockStyle.Top, Height = 44, BackColor = Theme.BgTitleBar };
-            pnlTop.MouseDown += Drag;
-            var lblTitle = new Label
+            EnableDrag(pnlTop);
+
+            _lblTitle = new Label
             {
-                Text = "Historial de la reserva #" + _reservaId,
-                Font = new Font("Ebrima", 12F, FontStyle.Bold),
+                Font = Theme.FontH2,
                 ForeColor = Theme.TextOnDark,
-                AutoSize = true,
-                Location = new Point(14, 11),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Padding = new Padding(Theme.SpaceLg, 0, 0, 0),
                 BackColor = Color.Transparent
             };
-            lblTitle.MouseDown += Drag;
-            var btnClose = new Label
-            {
-                Text = "✕", ForeColor = Theme.TextOnDark, Font = new Font("Segoe UI", 11F, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleCenter, Size = new Size(34, 28), Location = new Point(600, 8), Cursor = Cursors.Hand
-            };
-            btnClose.Click += (s, e) => Close();
-            pnlTop.Controls.Add(lblTitle);
+            EnableDrag(_lblTitle);
+
+            var btnClose = WindowButton(Theme.IcoClose, (s, e) => Close(), danger: true);
+            btnClose.Dock = DockStyle.Right;
+
+            pnlTop.Controls.Add(_lblTitle);
             pnlTop.Controls.Add(btnClose);
 
-            var grid = new DataGridView
+            // ---------------- Contenido (tarjeta con grilla) ----------------
+            var pnlContent = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Theme.BgContent,
+                Padding = new Padding(Theme.SpaceLg)
+            };
+
+            var card = new CardPanel
+            {
+                Dock = DockStyle.Fill,
+                BehindColor = Theme.BgContent,
+                Padding = new Padding(Theme.SpaceSm)
+            };
+
+            _grid = new DataGridView
             {
                 Name = "grid",
-                Location = new Point(15, 58),
-                Size = new Size(610, 348),
-                BackgroundColor = Color.White,
-                BorderStyle = BorderStyle.FixedSingle,
-                ReadOnly = true,
-                AllowUserToAddRows = false,
-                AllowUserToDeleteRows = false,
-                AllowUserToResizeRows = false,
-                AutoGenerateColumns = false,
-                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                RowHeadersVisible = false,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                EnableHeadersVisualStyles = false,
-                Font = new Font("Ebrima", 9.5F),
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom
+                Dock = DockStyle.Fill,
+                BackgroundColor = Theme.Surface
             };
-            grid.ColumnHeadersDefaultCellStyle.BackColor = Theme.BgTitleBar;
-            grid.ColumnHeadersDefaultCellStyle.ForeColor = Theme.TextOnDark;
-            grid.ColumnHeadersDefaultCellStyle.Font = new Font("Ebrima", 9.5F, FontStyle.Bold);
-            grid.ColumnHeadersHeight = 30;
-            grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(240, 240, 240);
+            UiGrid.Style(_grid);
 
-            grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Fecha",    DataPropertyName = "Fecha",         FillWeight = 80, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" } });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Usuario",  DataPropertyName = "Usuario",       FillWeight = 55 });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Campo",    DataPropertyName = "NombreCampo",   FillWeight = 60 });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Anterior", DataPropertyName = "ValorAnterior", FillWeight = 70 });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Nuevo",    DataPropertyName = "ValorNuevo",    FillWeight = 70 });
+            _colFecha = new DataGridViewTextBoxColumn
+            {
+                Name = "Fecha",
+                DataPropertyName = "Fecha",
+                FillWeight = 80,
+                DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" }
+            };
+            _colUsuario  = new DataGridViewTextBoxColumn { Name = "Usuario",       DataPropertyName = "Usuario",       FillWeight = 55 };
+            _colCampo    = new DataGridViewTextBoxColumn { Name = "NombreCampo",   DataPropertyName = "NombreCampo",   FillWeight = 60 };
+            _colAnterior = new DataGridViewTextBoxColumn { Name = "ValorAnterior", DataPropertyName = "ValorAnterior", FillWeight = 70 };
+            _colNuevo    = new DataGridViewTextBoxColumn { Name = "ValorNuevo",    DataPropertyName = "ValorNuevo",    FillWeight = 70 };
+            _grid.Columns.AddRange(_colFecha, _colUsuario, _colCampo, _colAnterior, _colNuevo);
 
-            Controls.Add(grid);
+            // Estado vacio: centrado sobre la grilla, visible solo si no hay filas.
+            _lblVacio = new Label
+            {
+                Dock = DockStyle.Fill,
+                Font = Theme.FontBody,
+                ForeColor = Theme.TextMuted,
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Theme.Surface,
+                Visible = false
+            };
+
+            // El label de estado vacio se agrega despues del grid para quedar al
+            // frente cuando se muestra (oculta la grilla sin filas).
+            card.Controls.Add(_lblVacio);
+            card.Controls.Add(_grid);
+
+            pnlContent.Controls.Add(card);
+
+            Controls.Add(pnlContent);
             Controls.Add(pnlTop);
         }
 
         private void CargarHistorial()
         {
-            var grid = (DataGridView)Controls["grid"];
             try
             {
                 List<BE_CambioEntry> data = RegistradorDeCambios.GetHistorial("Reserva", _reservaId);
-                grid.DataSource = data;
+                _grid.DataSource = data;
+                ActualizarEstadoVacio(data == null || data.Count == 0);
             }
             catch (Exception ex)
             {
+                BLL_Bitacora.RegistrarExcepcion(ex, "HistorialReserva", "Cargar historial de cambios");
+                ActualizarEstadoVacio(true);
                 MessageBox.Show("No se pudo cargar el historial: " + ex.Message, "Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
-        private void Drag(object sender, MouseEventArgs e)
+        // Alterna el estado vacio: muestra el mensaje y oculta la grilla cuando no
+        // hay registros de cambios para la reserva.
+        private void ActualizarEstadoVacio(bool vacio)
         {
-            if (e.Button == MouseButtons.Left)
+            _lblVacio.Visible = vacio;
+            _grid.Visible = !vacio;
+        }
+
+        // Devuelve la traduccion de 'clave' o, si falta, el texto por defecto dado.
+        private static string T(string clave, string defecto)
+        {
+            string t = Tr.T(clave);
+            return t == clave ? defecto : t;
+        }
+
+        // Observador (patron Observer): re-traduce titulo, encabezados y estado vacio.
+        public void ActualizarTextos()
+        {
+            if (_lblTitle != null) _lblTitle.Text = Tr.T("HIST_TITULO") + " #" + _reservaId;
+            if (_colFecha != null)
             {
-                ReleaseCapture();
-                SendMessage(Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
+                _colFecha.HeaderText    = Tr.T("COL_FECHA");
+                _colUsuario.HeaderText  = Tr.T("COL_USUARIO");
+                _colCampo.HeaderText    = Tr.T("COL_CAMPO");
+                _colAnterior.HeaderText = Tr.T("COL_ANTERIOR");
+                _colNuevo.HeaderText    = Tr.T("COL_NUEVO");
             }
+            if (_lblVacio != null) _lblVacio.Text = T("HIST_VACIO", "Sin cambios registrados.");
         }
     }
 }

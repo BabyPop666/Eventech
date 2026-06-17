@@ -4,22 +4,22 @@ using System.Drawing;
 using System.Windows.Forms;
 using EvenTech.BE;
 using EvenTech.BLL;
+using EvenTech.Services;
 
 namespace EvenTech.UI
 {
-    // UserControl de gestion de reservas: grilla + panel de alta/edicion.
-    //   - Columnas explicitas (AutoGenerateColumns=false), igual que la auditoria.
-    //   - El panel derecho carga la fila seleccionada para editar, o queda vacio
-    //     para dar de alta una nueva reserva.
-    //   - Los errores van a un label, no a MessageBox, para no ocultar la causa.
-    public class ucReservas : UserControl
+    // UserControl de gestion de reservas: grilla + ficha de alta/edicion.
+    // Layout por TableLayoutPanel/Dock (DPI-aware, sin coordenadas magicas):
+    // fila 0 = barra de titulo, fila 1 = cuerpo en dos columnas (grilla / ficha).
+    // Observa el cambio de idioma (patron Observer) para traducir sus textos.
+    public class ucReservas : UserControl, IObservadorIdioma
     {
         private DataGridView _grid;
         private Label _lblCount, _lblError, _lblFormTitle;
         private TextBox _txtCliente, _txtMonto;
         private ComboBox _cboSalon, _cboEstado;
         private DateTimePicker _dtFecha;
-        private Button _btnNuevo, _btnGuardar;
+        private AppButton _btnNuevo, _btnGuardar, _btnHistorial;
 
         private int _editId; // 0 = alta, >0 = edicion
 
@@ -27,187 +27,274 @@ namespace EvenTech.UI
         {
             BackColor = Theme.BgContent;
             BuildUi();
-            Load += (s, e) => { CargarSalones(); LimpiarForm(); SafeLoadData(); };
+            ActualizarTextos();
+            Load += (s, e) => { CargarSalones(); LimpiarForm(); SafeLoadData(); GestorDeIdioma.GetInstance.Suscribir(this); };
+            Disposed += (s, e) => GestorDeIdioma.GetInstance.Desuscribir(this);
         }
 
         private void BuildUi()
         {
-            var lblTitle = new Label
+            // ---------------- Estructura raiz ----------------
+            var root = new TableLayoutPanel
             {
-                Text = "Gestion de Reservas",
-                Font = new Font("Ebrima", 18F, FontStyle.Bold),
-                ForeColor = Theme.TextOnLight,
-                AutoSize = true,
-                Location = new Point(10, 10)
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = Theme.BgContent
             };
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // barra de titulo
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // cuerpo
 
-            _btnNuevo = MakeButton("Nueva", 10, 50, Theme.AccentButton);
+            root.Controls.Add(BuildHeader(), 0, 0);
+            root.Controls.Add(BuildBody(), 0, 1);
+
+            Controls.Add(root);
+        }
+
+        // Barra superior: titulo de pagina, boton "Nueva", conteo y error.
+        private Control BuildHeader()
+        {
+            var header = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 4,
+                RowCount = 2,
+                BackColor = Theme.BgContent,
+                Margin = new Padding(0),
+                Padding = new Padding(0, 0, 0, Theme.SpaceMd)
+            };
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));  // titulo
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));  // boton nueva
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));  // conteo
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); // relleno
+            header.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            header.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            var lblTitle = Ui.H1("Gestion de Reservas");
+            lblTitle.Tag = "T:RES_TITULO";
+            lblTitle.Anchor = AnchorStyles.Left;
+            lblTitle.Margin = new Padding(0, 0, Theme.SpaceLg, 0);
+
+            _btnNuevo = Ui.Primary("Nueva", Theme.IcoAdd);
+            _btnNuevo.Tag = "T:BTN_NUEVA";
+            _btnNuevo.Size = new Size(120, 36);
+            _btnNuevo.BehindColor = Theme.BgContent; // vive sobre el area de contenido
+            _btnNuevo.Anchor = AnchorStyles.Left;
+            _btnNuevo.Margin = new Padding(0, 0, Theme.SpaceMd, 0);
             _btnNuevo.Click += (s, e) => LimpiarForm();
 
-            _lblCount = new Label
+            _lblCount = Ui.Body();
+            _lblCount.ForeColor = Theme.TextMuted;
+            _lblCount.Anchor = AnchorStyles.Left;
+            _lblCount.Margin = new Padding(0, 0, 0, 0);
+
+            _lblError = Ui.Body();
+            _lblError.Font = Theme.FontBodyBold;
+            _lblError.ForeColor = Theme.Error;
+            _lblError.Visible = false;
+            _lblError.AutoSize = true;
+            _lblError.MaximumSize = new Size(900, 0);
+            _lblError.Anchor = AnchorStyles.Left;
+            _lblError.Margin = new Padding(0, Theme.SpaceXs, 0, 0);
+
+            header.Controls.Add(lblTitle, 0, 0);
+            header.Controls.Add(_btnNuevo, 1, 0);
+            header.Controls.Add(_lblCount, 2, 0);
+            // El error ocupa toda la fila inferior (debajo del titulo y acciones).
+            header.Controls.Add(_lblError, 0, 1);
+            header.SetColumnSpan(_lblError, 4);
+
+            return header;
+        }
+
+        // Cuerpo: dos columnas (grilla a la izquierda, ficha a la derecha).
+        private Control BuildBody()
+        {
+            var body = new TableLayoutPanel
             {
-                AutoSize = true,
-                Font = new Font("Ebrima", 10F),
-                ForeColor = Color.DimGray,
-                Location = new Point(95, 58)
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1,
+                BackColor = Theme.BgContent,
+                Margin = new Padding(0)
+            };
+            body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62));
+            body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
+            body.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+            body.Controls.Add(BuildGridCard(), 0, 0);
+            body.Controls.Add(BuildFormCard(), 1, 0);
+
+            return body;
+        }
+
+        // Tarjeta con la grilla de reservas.
+        private Control BuildGridCard()
+        {
+            var card = new CardPanel
+            {
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, 0, Theme.SpaceLg, 0),
+                Padding = new Padding(Theme.SpaceSm)
             };
 
-            _lblError = new Label
-            {
-                AutoSize = true,
-                Font = new Font("Ebrima", 10F, FontStyle.Bold),
-                ForeColor = Color.Firebrick,
-                Location = new Point(10, 88),
-                Visible = false,
-                MaximumSize = new Size(560, 0)
-            };
+            _grid = new DataGridView { Dock = DockStyle.Fill };
+            UiGrid.Style(_grid);
 
-            _grid = new DataGridView
-            {
-                Location = new Point(10, 110),
-                Size = new Size(560, 460),
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Bottom,
-                BackgroundColor = Color.White,
-                BorderStyle = BorderStyle.FixedSingle,
-                ReadOnly = true,
-                AllowUserToAddRows = false,
-                AllowUserToDeleteRows = false,
-                AllowUserToResizeRows = false,
-                AutoGenerateColumns = false,
-                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                RowHeadersVisible = false,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                MultiSelect = false,
-                EnableHeadersVisualStyles = false,
-                Font = new Font("Ebrima", 9.5F)
-            };
-            _grid.ColumnHeadersDefaultCellStyle.BackColor = Theme.BgTitleBar;
-            _grid.ColumnHeadersDefaultCellStyle.ForeColor = Theme.TextOnDark;
-            _grid.ColumnHeadersDefaultCellStyle.Font = new Font("Ebrima", 10F, FontStyle.Bold);
-            _grid.ColumnHeadersHeight = 32;
-            _grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(240, 240, 240);
-
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Id",      DataPropertyName = "Id",            FillWeight = 20 });
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Cliente", DataPropertyName = "ClienteNombre", FillWeight = 90 });
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Salon",   DataPropertyName = "SalonNombre",   FillWeight = 70 });
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Fecha",   DataPropertyName = "FechaEvento",   FillWeight = 60, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd" } });
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Estado",  DataPropertyName = "Estado",        FillWeight = 55 });
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Monto",   DataPropertyName = "Monto",         FillWeight = 55, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "cId",      HeaderText = "Id",      DataPropertyName = "Id",            FillWeight = 20 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "cCliente", HeaderText = "Cliente", DataPropertyName = "ClienteNombre", FillWeight = 90 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "cSalon",   HeaderText = "Salon",   DataPropertyName = "SalonNombre",   FillWeight = 70 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "cFecha",   HeaderText = "Fecha",   DataPropertyName = "FechaEvento",   FillWeight = 60, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd" } });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "cEstado",  HeaderText = "Estado",  DataPropertyName = "Estado",        FillWeight = 55 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "cMonto",   HeaderText = "Monto",   DataPropertyName = "Monto",         FillWeight = 55, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
             _grid.SelectionChanged += Grid_SelectionChanged;
 
-            Controls.Add(lblTitle);
-            Controls.Add(_btnNuevo);
-            Controls.Add(_lblCount);
-            Controls.Add(_lblError);
-            Controls.Add(_grid);
-
-            BuildForm();
+            card.Controls.Add(_grid);
+            return card;
         }
 
-        // Panel derecho de alta/edicion.
-        private void BuildForm()
+        // Tarjeta con la ficha de alta/edicion.
+        private Control BuildFormCard()
         {
-            var pnl = new Panel
+            var card = new CardPanel
             {
-                Location = new Point(585, 110),
-                Size = new Size(330, 460),
-                Anchor = AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom,
-                BackColor = Color.White,
-                BorderStyle = BorderStyle.FixedSingle,
-                Padding = new Padding(15)
+                Dock = DockStyle.Fill,
+                MinimumSize = new Size(300, 0),
+                Margin = new Padding(0),
+                Padding = new Padding(Theme.SpaceLg)
             };
 
-            _lblFormTitle = new Label
+            // Layout interno de la ficha: titulo, campos (scrollables) y botones.
+            var layout = new TableLayoutPanel
             {
-                Text = "Nueva reserva",
-                Font = new Font("Ebrima", 13F, FontStyle.Bold),
-                ForeColor = Theme.TextOnLight,
-                AutoSize = true,
-                Location = new Point(15, 12)
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 3,
+                BackColor = Color.Transparent
             };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));    // titulo ficha
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // campos
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));    // botones
 
-            _txtCliente = MakeInput("Cliente", 55, out var lblCli);
-            _cboSalon = new ComboBox
-            {
-                Location = new Point(15, 128),
-                Size = new Size(295, 28),
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Font = new Font("Ebrima", 11F)
-            };
-            var lblSal = MakeFieldLabel("Salon", 105);
+            _lblFormTitle = Ui.Title("Nueva reserva");
+            _lblFormTitle.Margin = new Padding(0, 0, 0, Theme.SpaceMd);
 
-            var lblFecha = MakeFieldLabel("Fecha del evento", 168);
-            _dtFecha = new DateTimePicker
+            // Pila vertical de campos etiquetados (caption arriba, input abajo).
+            // TableLayoutPanel: cada campo Dock=Fill -> ocupa todo el ancho de la
+            // ficha y se ajusta solo al redimensionar (sin calculos manuales).
+            var fields = new TableLayoutPanel
             {
-                Location = new Point(15, 191),
-                Size = new Size(295, 28),
-                Format = DateTimePickerFormat.Short,
-                Font = new Font("Ebrima", 11F),
-                MinDate = DateTime.Today
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 6,
+                AutoScroll = true,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0)
             };
+            fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            for (int i = 0; i < 5; i++) fields.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            fields.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // empuja los campos hacia arriba
 
-            var lblEstado = MakeFieldLabel("Estado", 231);
-            _cboEstado = new ComboBox
-            {
-                Location = new Point(15, 254),
-                Size = new Size(295, 28),
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Font = new Font("Ebrima", 11F)
-            };
+            _txtCliente = Ui.Input();
+            var fldCliente = Ui.Field("Cliente", _txtCliente);
+            ((Label)fldCliente.GetControlFromPosition(0, 0)).Tag = "T:COL_CLIENTE";
+
+            _cboSalon = Ui.Combo();
+            var fldSalon = Ui.Field("Salon", _cboSalon);
+            ((Label)fldSalon.GetControlFromPosition(0, 0)).Tag = "T:COL_SALON";
+
+            _dtFecha = Ui.DatePicker();
+            _dtFecha.MinDate = DateTime.Today;
+            var fldFecha = Ui.Field("Fecha", _dtFecha);
+            ((Label)fldFecha.GetControlFromPosition(0, 0)).Tag = "T:RES_LBL_FECHA";
+
+            _cboEstado = Ui.Combo();
             _cboEstado.Items.AddRange(new object[] { EstadoReserva.PENDIENTE, EstadoReserva.CONFIRMADA, EstadoReserva.CANCELADA });
+            var fldEstado = Ui.Field("Estado", _cboEstado);
+            ((Label)fldEstado.GetControlFromPosition(0, 0)).Tag = "T:COL_ESTADO";
 
-            _txtMonto = MakeInput("Monto", 294, out var lblMonto);
+            _txtMonto = Ui.Input();
+            var fldMonto = Ui.Field("Monto", _txtMonto);
+            ((Label)fldMonto.GetControlFromPosition(0, 0)).Tag = "T:COL_MONTO";
 
-            _btnGuardar = MakeButton("Guardar", 15, 370, Theme.AccentButton);
-            _btnGuardar.Size = new Size(295, 38);
+            int row = 0;
+            foreach (var fld in new[] { fldCliente, fldSalon, fldFecha, fldEstado, fldMonto })
+            {
+                fld.Dock = DockStyle.Fill;
+                fld.Margin = new Padding(0, 0, 0, Theme.SpaceMd);
+                fields.Controls.Add(fld, 0, row++);
+            }
+
+            // Botones de accion apilados al pie de la ficha.
+            var actions = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0, Theme.SpaceSm, 0, 0)
+            };
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+            actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+
+            _btnGuardar = Ui.Primary("Guardar", Theme.IcoSave);
+            _btnGuardar.Tag = "T:BTN_GUARDAR";
+            _btnGuardar.Dock = DockStyle.Fill;
+            _btnGuardar.Margin = new Padding(0, 0, 0, Theme.SpaceSm);
             _btnGuardar.Click += (s, e) => Guardar();
 
-            pnl.Controls.Add(_lblFormTitle);
-            pnl.Controls.Add(lblCli);    pnl.Controls.Add(_txtCliente);
-            pnl.Controls.Add(lblSal);    pnl.Controls.Add(_cboSalon);
-            pnl.Controls.Add(lblFecha);  pnl.Controls.Add(_dtFecha);
-            pnl.Controls.Add(lblEstado); pnl.Controls.Add(_cboEstado);
-            pnl.Controls.Add(lblMonto);  pnl.Controls.Add(_txtMonto);
-            pnl.Controls.Add(_btnGuardar);
+            _btnHistorial = Ui.Secondary("Ver historial de cambios");
+            _btnHistorial.Tag = "T:RES_HISTORIAL";
+            _btnHistorial.Dock = DockStyle.Fill;
+            _btnHistorial.Margin = new Padding(0);
+            _btnHistorial.Click += (s, e) => VerHistorial();
 
-            Controls.Add(pnl);
+            actions.Controls.Add(_btnGuardar, 0, 0);
+            actions.Controls.Add(_btnHistorial, 0, 1);
+
+            layout.Controls.Add(_lblFormTitle, 0, 0);
+            layout.Controls.Add(fields, 0, 1);
+            layout.Controls.Add(actions, 0, 2);
+
+            card.Controls.Add(layout);
+            return card;
         }
 
-        private TextBox MakeInput(string label, int y, out Label lbl)
+        // Observer: re-traduce textos estaticos, encabezados de grilla y etiquetas dinamicas.
+        public void ActualizarTextos()
         {
-            lbl = MakeFieldLabel(label, y - 23);
-            return new TextBox
+            Tr.AplicarTags(this);
+            if (_grid.Columns.Count >= 6)
             {
-                Location = new Point(15, y),
-                Size = new Size(295, 28),
-                Font = new Font("Ebrima", 11F)
-            };
+                _grid.Columns["cId"].HeaderText      = Tr.T("COL_ID");
+                _grid.Columns["cCliente"].HeaderText = Tr.T("COL_CLIENTE");
+                _grid.Columns["cSalon"].HeaderText   = Tr.T("COL_SALON");
+                _grid.Columns["cFecha"].HeaderText   = Tr.T("COL_FECHA");
+                _grid.Columns["cEstado"].HeaderText  = Tr.T("COL_ESTADO");
+                _grid.Columns["cMonto"].HeaderText   = Tr.T("COL_MONTO");
+            }
+            ActualizarTituloForm();
+            ActualizarCount();
         }
 
-        private Label MakeFieldLabel(string text, int y) => new Label
+        private void ActualizarTituloForm()
         {
-            Text = text,
-            Font = new Font("Ebrima", 9.5F),
-            ForeColor = Color.DimGray,
-            AutoSize = true,
-            Location = new Point(15, y)
-        };
+            _lblFormTitle.Text = _editId == 0
+                ? Tr.T("RES_FORM_NUEVA")
+                : Tr.T("RES_FORM_EDITAR") + " #" + _editId;
+        }
 
-        private Button MakeButton(string text, int x, int y, Color back)
+        private void ActualizarCount()
         {
-            var b = new Button
-            {
-                Text = text,
-                Font = Theme.FontButton,
-                BackColor = back,
-                ForeColor = Theme.TextOnDark,
-                FlatStyle = FlatStyle.Flat,
-                Size = new Size(80, 32),
-                Location = new Point(x, y),
-                Cursor = Cursors.Hand
-            };
-            b.FlatAppearance.BorderSize = 0;
-            return b;
+            if (_grid.DataSource is List<BE_Reserva> data)
+                _lblCount.Text = data.Count + " " + Tr.T("RES_COUNT");
         }
 
         private void CargarSalones()
@@ -219,7 +306,11 @@ namespace EvenTech.UI
                 _cboSalon.ValueMember = "Id";
                 _cboSalon.SelectedIndex = _cboSalon.Items.Count > 0 ? 0 : -1;
             }
-            catch (Exception ex) { ShowError("Error cargando salones: " + ex.Message); }
+            catch (Exception ex)
+            {
+                BLL_Bitacora.RegistrarExcepcion(ex, "Reservas", "Cargar salones");
+                ShowError("Error cargando salones: " + ex.Message);
+            }
         }
 
         private void SafeLoadData()
@@ -229,10 +320,11 @@ namespace EvenTech.UI
                 _lblError.Visible = false;
                 List<BE_Reserva> data = BLL_Reserva.GetAll();
                 _grid.DataSource = data;
-                _lblCount.Text = $"{data.Count} reservas";
+                ActualizarCount();
             }
             catch (Exception ex)
             {
+                BLL_Bitacora.RegistrarExcepcion(ex, "Reservas", "Cargar reservas");
                 ShowError("Error cargando reservas: " + ex.GetType().Name + " - " + ex.Message);
                 _lblCount.Text = "";
             }
@@ -246,7 +338,7 @@ namespace EvenTech.UI
         private void CargarEnForm(BE_Reserva r)
         {
             _editId = r.Id;
-            _lblFormTitle.Text = "Editar reserva #" + r.Id;
+            ActualizarTituloForm();
             _txtCliente.Text = r.ClienteNombre;
             _cboSalon.SelectedValue = r.SalonId;
             _dtFecha.Value = r.FechaEvento < _dtFecha.MinDate ? _dtFecha.MinDate : r.FechaEvento;
@@ -257,7 +349,7 @@ namespace EvenTech.UI
         private void LimpiarForm()
         {
             _editId = 0;
-            _lblFormTitle.Text = "Nueva reserva";
+            ActualizarTituloForm();
             _txtCliente.Text = "";
             if (_cboSalon.Items.Count > 0) _cboSalon.SelectedIndex = 0;
             _dtFecha.Value = DateTime.Today;
@@ -272,7 +364,7 @@ namespace EvenTech.UI
 
             if (!decimal.TryParse(_txtMonto.Text, out decimal monto))
             {
-                ShowError("El monto no es un numero valido.");
+                ShowError(Tr.T("MSG_MONTO_INVALIDO"));
                 return;
             }
 
@@ -305,12 +397,25 @@ namespace EvenTech.UI
         {
             switch (r)
             {
-                case ReservaResult.InvalidCliente: return "Ingrese el nombre del cliente.";
-                case ReservaResult.InvalidSalon:   return "Seleccione un salon valido.";
-                case ReservaResult.InvalidFecha:   return "La fecha del evento no puede ser anterior a hoy.";
-                case ReservaResult.InvalidMonto:   return "El monto no puede ser negativo.";
-                case ReservaResult.NotFound:       return "La reserva ya no existe.";
-                default:                           return "No se pudo guardar la reserva.";
+                case ReservaResult.InvalidCliente: return Tr.T("MSG_RES_CLIENTE");
+                case ReservaResult.InvalidSalon:   return Tr.T("MSG_RES_SALON");
+                case ReservaResult.InvalidFecha:   return Tr.T("MSG_RES_FECHA");
+                case ReservaResult.InvalidMonto:   return Tr.T("MSG_RES_MONTO");
+                case ReservaResult.NotFound:       return Tr.T("MSG_RES_NOTFOUND");
+                default:                           return Tr.T("MSG_RES_ERROR");
+            }
+        }
+
+        private void VerHistorial()
+        {
+            if (_editId == 0)
+            {
+                ShowError(Tr.T("MSG_RES_SELECCIONE"));
+                return;
+            }
+            using (var frm = new frmHistorialReserva(_editId))
+            {
+                frm.ShowDialog(FindForm());
             }
         }
 

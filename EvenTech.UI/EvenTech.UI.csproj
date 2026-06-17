@@ -8,6 +8,8 @@
     <Nullable>disable</Nullable>
     <LangVersion>latest</LangVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- DPI por monitor v2 (escalado nitido en pantallas de alta densidad). -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\EvenTech.BE\EvenTech.BE.csproj" />

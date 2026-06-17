@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using EvenTech.BE;
 using EvenTech.DAL;
+using EvenTech.Services;
 
 namespace EvenTech.BLL
 {
@@ -24,25 +25,43 @@ namespace EvenTech.BLL
 
         public static BE_Reserva GetById(int id) => DAL_Reserva.GetById(id);
 
+        // Campos auditados por el control de cambios (T06b).
+        private static readonly string[] CamposAuditados =
+            { "ClienteNombre", "SalonId", "FechaEvento", "Estado", "Monto" };
+
         public static ReservaResult Crear(BE_Reserva reserva, out int nuevoId)
         {
             nuevoId = 0;
             var validacion = Validar(reserva);
             if (validacion != ReservaResult.Success) return validacion;
 
+            // DV horizontal: se calcula sobre los campos de negocio antes de persistir.
+            reserva.Dvh = ValidadorDeIntegridad.CalcularDVH(reserva);
             nuevoId = DAL_Reserva.Insert(reserva);
+            BLL_Integridad.RecalcularDVVerticalReservas();
+
+            BLL_Bitacora.Registrar("Reservas", "Alta de reserva", CriticidadBitacora.Info,
+                $"Reserva #{nuevoId} - cliente '{reserva.ClienteNombre}', monto {reserva.Monto:0.00}");
             return ReservaResult.Success;
         }
 
         public static ReservaResult Actualizar(BE_Reserva reserva)
         {
-            if (reserva.Id <= 0 || DAL_Reserva.GetById(reserva.Id) == null)
-                return ReservaResult.NotFound;
+            BE_Reserva antes = reserva.Id > 0 ? DAL_Reserva.GetById(reserva.Id) : null;
+            if (antes == null) return ReservaResult.NotFound;
 
             var validacion = Validar(reserva);
             if (validacion != ReservaResult.Success) return validacion;
 
+            // Recalcular DV horizontal con los nuevos valores antes de persistir.
+            reserva.Dvh = ValidadorDeIntegridad.CalcularDVH(reserva);
             DAL_Reserva.Update(reserva);
+            BLL_Integridad.RecalcularDVVerticalReservas();
+
+            // Control de cambios: registra campo por campo lo que cambio.
+            int cambios = RegistradorDeCambios.RegistrarCambios("Reserva", reserva.Id, antes, reserva, CamposAuditados);
+            BLL_Bitacora.Registrar("Reservas", "Modificacion de reserva", CriticidadBitacora.Info,
+                $"Reserva #{reserva.Id} - {cambios} campo(s) modificado(s)");
             return ReservaResult.Success;
         }
 

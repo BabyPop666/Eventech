@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using EvenTech.BE;
 using EvenTech.DAL;
 using EvenTech.Services;
 
@@ -32,6 +34,17 @@ namespace EvenTech.BLL
 
             DAL_User.Insert(username, hashedPassword);
             return CreateUserResult.Success;
+        }
+
+        // --- Asignacion de perfiles (T04) ---
+
+        public static List<BE_User> GetAll() => DAL_User.GetAll();
+
+        public static void AsignarPerfil(int userId, int? perfilId)
+        {
+            DAL_User.SetPerfil(userId, perfilId);
+            BLL_Bitacora.Registrar("Perfiles", "Asignacion de perfil", CriticidadBitacora.Info,
+                $"Usuario #{userId} -> perfil {(perfilId.HasValue ? "#" + perfilId.Value : "(ninguno)")}");
         }
     }
 }

@@ -1,241 +1,189 @@
 using System;
 using System.Drawing;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using EvenTech.BLL;
 using EvenTech.Services;
 
 namespace EvenTech.UI
 {
-    // Pantalla de login.
-    //
-    // Layout:
-    //   - Borderless 414x641, BG azul (Theme.BgLogin), Opacity 0.95
-    //   - Panel titulo arriba (Theme.BgTitleBar) con botones minimize y close
-    //   - Logo de texto centrado
-    //   - Label "Usuario" + TextBox (sin border, BG Theme.BgInput, FG Silver)
-    //   - Label "Contrasena" + TextBox password (idem)
-    //   - Checkbox "Recordar cuenta" (decorativo, no persistimos)
-    //   - Boton "Ingresar" grande, naranja (Theme.AccentButton)
-    //   - Link "¿No tenes cuenta? Crear" abajo
-    public class frmLogin : Form
+    // Pantalla de login. Borderless con identidad de marca (azul oscuro + dorado).
+    // Layout 100% por TableLayoutPanel/Dock (DPI-aware, sin coordenadas magicas).
+    // El loop principal vive aca: al validar credenciales abre frmMain modal y al
+    // volver del logout queda esperando otro login. El boton cerrar termina la app.
+    // El selector de idioma (+ alta rapida) vive en el pie, abajo a la derecha.
+    public class frmLogin : FormBase, IObservadorIdioma
     {
-        // Win32 drag para mover la ventana borderless tomandola del title bar.
-        [DllImport("user32.dll")]
-        private static extern bool ReleaseCapture();
-        [DllImport("user32.dll")]
-        private static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
-        private const int WM_NCLBUTTONDOWN = 0xA1;
-        private const int HT_CAPTION = 0x2;
-
-        private TextBox _txtUser;
-        private TextBox _txtPass;
-        private Button _btnLogin;
-        private Label _lblStatus;
-        private Label _lblCrearCuenta;
+        private TextBox _txtUser, _txtPass;
+        private Label _lblUser, _lblPass, _lblTagline, _lblStatus, _lblCrearCuenta;
+        private CheckBox _chkRemember;
+        private AppButton _btnLogin;
 
         public frmLogin()
         {
             BuildUi();
+            ActualizarTextos();
+            GestorDeIdioma.GetInstance.Suscribir(this);
+            FormClosed += (s, e) => GestorDeIdioma.GetInstance.Desuscribir(this);
+
+            // "Recordar cuenta": precarga el usuario guardado (nunca la contrasena).
+            LoginPrefs.Load();
+            if (LoginPrefs.Remember)
+            {
+                _txtUser.Text = LoginPrefs.Username;
+                _chkRemember.Checked = true;
+            }
+            Shown += (s, e) =>
+            {
+                if (string.IsNullOrEmpty(_txtUser.Text)) _txtUser.Focus();
+                else _txtPass.Focus();
+            };
         }
 
         private void BuildUi()
         {
             Text = "EvenTech";
-            FormBorderStyle = FormBorderStyle.None;
-            StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(414, 641);
+            ClientSize = new Size(420, 660);
             BackColor = Theme.BgLogin;
-            Opacity = 0.95;
             KeyPreview = true;
 
-            // --- Title bar ---
-            var pnlTitle = new Panel
-            {
-                Dock = DockStyle.Top,
-                Height = 50,
-                BackColor = Theme.BgTitleBar
-            };
-            pnlTitle.MouseDown += DragWindow;
+            // ---------------- Barra de titulo (minimizar / cerrar) ----------------
+            var pnlTitle = new Panel { Dock = DockStyle.Top, Height = 44, BackColor = Theme.BgTitleBar };
+            EnableDrag(pnlTitle);
 
-            var btnClose = new Label
-            {
-                Text = "✕",
-                ForeColor = Theme.TextLight,
-                Font = new Font("Segoe UI", 12F, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleCenter,
-                Size = new Size(35, 30),
-                Location = new Point(371, 10),
-                Cursor = Cursors.Hand
-            };
-            btnClose.Click += (s, e) => { Application.Exit(); };
-
-            var btnMin = new Label
-            {
-                Text = "—",
-                ForeColor = Theme.TextLight,
-                Font = new Font("Segoe UI", 12F, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleCenter,
-                Size = new Size(35, 30),
-                Location = new Point(330, 10),
-                Cursor = Cursors.Hand
-            };
-            btnMin.Click += (s, e) => { WindowState = FormWindowState.Minimized; };
-
-            pnlTitle.Controls.Add(btnClose);
+            var btnClose = WindowButton(Theme.IcoClose, (s, e) => Application.Exit(), danger: true);
+            btnClose.Dock = DockStyle.Right;
+            var btnMin = WindowButton(Theme.IcoMinimize, (s, e) => WindowState = FormWindowState.Minimized);
+            btnMin.Dock = DockStyle.Right;
             pnlTitle.Controls.Add(btnMin);
+            pnlTitle.Controls.Add(btnClose);
 
-            // --- Logo: texto dorado centrado ---
-            var lblLogo = new Label
+            // ---------------- Pie: link "crear" (izq) + selector de idioma (der) ----------------
+            var footer = new Panel
             {
-                Text = "EvenTech",
-                Font = new Font("Ebrima", 22F, FontStyle.Bold),
-                ForeColor = Theme.Accent,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Location = new Point(0, 90),
-                Size = new Size(414, 80),
+                Dock = DockStyle.Bottom,
+                Height = 50,
+                BackColor = Theme.BgLogin,
+                Padding = new Padding(Theme.SpaceXl, 0, Theme.SpaceLg, Theme.SpaceSm)
+            };
+            var footerGrid = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1,
                 BackColor = Color.Transparent
             };
+            footerGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            footerGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            footerGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-            // --- Campo Usuario ---
-            var lblUser = new Label
-            {
-                Text = "Usuario",
-                Font = Theme.FontLabel,
-                ForeColor = Theme.TextLight,
-                Location = new Point(28, 211),
-                AutoSize = true,
-                BackColor = Color.Transparent
-            };
-            _txtUser = new TextBox
-            {
-                BorderStyle = BorderStyle.None,
-                Font = Theme.FontInput,
-                BackColor = Theme.BgInput,
-                ForeColor = Theme.TextLight,
-                Location = new Point(32, 245),
-                Size = new Size(350, 22)
-            };
-            var pnlUserLine = new Panel
-            {
-                BackColor = Theme.Accent,
-                Location = new Point(32, 270),
-                Size = new Size(350, 1)
-            };
-
-            // --- Campo Contrasena ---
-            var lblPass = new Label
-            {
-                Text = "Contraseña",
-                Font = Theme.FontLabel,
-                ForeColor = Theme.TextLight,
-                Location = new Point(28, 294),
-                AutoSize = true,
-                BackColor = Color.Transparent
-            };
-            _txtPass = new TextBox
-            {
-                BorderStyle = BorderStyle.None,
-                Font = Theme.FontInput,
-                BackColor = Theme.BgInput,
-                ForeColor = Theme.TextLight,
-                Location = new Point(32, 327),
-                Size = new Size(350, 22),
-                UseSystemPasswordChar = true
-            };
-            var pnlPassLine = new Panel
-            {
-                BackColor = Theme.Accent,
-                Location = new Point(32, 352),
-                Size = new Size(350, 1)
-            };
-
-            // --- Checkbox "Recordar cuenta" (decorativo) ---
-            var chbRemember = new CheckBox
-            {
-                Text = "Recordar cuenta",
-                Font = new Font("Ebrima", 11.25F, FontStyle.Regular),
-                ForeColor = Color.FromArgb(231, 218, 139),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.Transparent,
-                AutoSize = true,
-                Location = new Point(32, 373)
-            };
-
-            // --- Boton Ingresar ---
-            _btnLogin = new Button
-            {
-                Text = "Ingresar",
-                Font = Theme.FontButton,
-                ForeColor = Theme.TextOnDark,
-                BackColor = Theme.AccentButton,
-                FlatStyle = FlatStyle.Flat,
-                Location = new Point(32, 421),
-                Size = new Size(350, 50),
-                Cursor = Cursors.Hand
-            };
-            _btnLogin.FlatAppearance.BorderSize = 0;
-            _btnLogin.FlatAppearance.MouseOverBackColor = Color.FromArgb(16, 103, 242);
-            _btnLogin.FlatAppearance.MouseDownBackColor = Color.DarkBlue;
-            _btnLogin.Click += BtnLogin_Click;
-
-            // --- Status (mensajes de error/exito) ---
-            _lblStatus = new Label
-            {
-                Location = new Point(32, 481),
-                Size = new Size(350, 50),
-                ForeColor = Color.FromArgb(255, 180, 180),
-                Font = new Font("Ebrima", 10F, FontStyle.Regular),
-                TextAlign = ContentAlignment.MiddleCenter,
-                BackColor = Color.Transparent,
-                Text = ""
-            };
-
-            // --- Link "Crear cuenta" (auto-registro) ---
             _lblCrearCuenta = new Label
             {
-                Text = "¿No tenes cuenta? Crear",
-                Font = Theme.FontLabel,
+                Font = Theme.FontBody,
                 ForeColor = Theme.TextLight,
                 AutoSize = true,
-                Location = new Point(120, 580),
+                Anchor = AnchorStyles.Left,
                 Cursor = Cursors.Hand,
                 BackColor = Color.Transparent
             };
             _lblCrearCuenta.Click += LblCrearCuenta_Click;
+            _lblCrearCuenta.MouseEnter += (s, e) => _lblCrearCuenta.ForeColor = Theme.Accent;
+            _lblCrearCuenta.MouseLeave += (s, e) => _lblCrearCuenta.ForeColor = Theme.TextLight;
 
-            var pnlFooter = new Panel
+            var lang = new LangSelector(dark: true, allowManage: false) { Anchor = AnchorStyles.Right };
+
+            footerGrid.Controls.Add(_lblCrearCuenta, 0, 0);
+            footerGrid.Controls.Add(lang, 1, 0);
+            footer.Controls.Add(footerGrid);
+
+            // ---------------- Cuerpo ----------------
+            var body = new Panel
             {
-                Dock = DockStyle.Bottom,
-                Height = 10,
-                BackColor = Theme.BgTitleBar
+                Dock = DockStyle.Fill,
+                BackColor = Theme.BgLogin,
+                Padding = new Padding(44, 26, 44, 12)
             };
 
+            var tbl = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 10,
+                BackColor = Color.Transparent
+            };
+            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            int[] heights = { 64, 22, 22, 60, 60, 30, 8, 50, 42, /*fill*/ 0 };
+            for (int i = 0; i < heights.Length; i++)
+                tbl.RowStyles.Add(i == 9
+                    ? new RowStyle(SizeType.Percent, 100)
+                    : new RowStyle(SizeType.Absolute, heights[i]));
+
+            var lblLogo = new Label
+            {
+                Text = "EvenTech",
+                Font = Theme.FontDisplay,
+                ForeColor = Theme.Accent,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent
+            };
+            _lblTagline = new Label
+            {
+                Font = Theme.FontSmall,
+                ForeColor = Theme.TextLight,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent
+            };
+
+            var userField = Ui.DarkField("Usuario", false, out _txtUser, out _lblUser);
+            var passField = Ui.DarkField("Contraseña", true, out _txtPass, out _lblPass);
+
+            // BackColor solido (no Transparent) + FlatStyle.Standard: evita el
+            // artefacto por el que el check "desaparecia" al marcarlo sobre el panel.
+            _chkRemember = new CheckBox
+            {
+                Text = "Recordar cuenta",
+                Font = Theme.FontSmall,
+                ForeColor = Theme.TextLight,
+                FlatStyle = FlatStyle.Standard,
+                BackColor = Theme.BgLogin,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+
+            _btnLogin = Ui.Primary("Ingresar");
+            _btnLogin.Dock = DockStyle.Fill;
+            _btnLogin.BehindColor = Theme.BgLogin;
+            _btnLogin.Margin = new Padding(0);
+            _btnLogin.Click += BtnLogin_Click;
+
+            _lblStatus = new Label
+            {
+                Dock = DockStyle.Fill,
+                ForeColor = Color.FromArgb(255, 170, 170),
+                Font = Theme.FontSmall,
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent
+            };
+
+            tbl.Controls.Add(lblLogo, 0, 0);
+            tbl.Controls.Add(_lblTagline, 0, 1);
+            tbl.Controls.Add(new Panel { BackColor = Color.Transparent }, 0, 2); // spacer
+            tbl.Controls.Add(userField, 0, 3);
+            tbl.Controls.Add(passField, 0, 4);
+            tbl.Controls.Add(_chkRemember, 0, 5);
+            tbl.Controls.Add(new Panel { BackColor = Color.Transparent }, 0, 6); // spacer
+            tbl.Controls.Add(_btnLogin, 0, 7);
+            tbl.Controls.Add(_lblStatus, 0, 8);
+            tbl.Controls.Add(new Panel { BackColor = Color.Transparent }, 0, 9); // fill
+
+            body.Controls.Add(tbl);
+
+            Controls.Add(body);
+            Controls.Add(footer);
             Controls.Add(pnlTitle);
-            Controls.Add(lblLogo);
-            Controls.Add(lblUser);
-            Controls.Add(_txtUser);
-            Controls.Add(pnlUserLine);
-            Controls.Add(lblPass);
-            Controls.Add(_txtPass);
-            Controls.Add(pnlPassLine);
-            Controls.Add(chbRemember);
-            Controls.Add(_btnLogin);
-            Controls.Add(_lblStatus);
-            Controls.Add(_lblCrearCuenta);
-            Controls.Add(pnlFooter);
 
             AcceptButton = _btnLogin;
-            _txtUser.Focus();
-        }
-
-        private void DragWindow(object sender, MouseEventArgs e)
-        {
-            if (e.Button == MouseButtons.Left)
-            {
-                ReleaseCapture();
-                SendMessage(Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
-            }
         }
 
         private void BtnLogin_Click(object sender, EventArgs e)
@@ -245,7 +193,7 @@ namespace EvenTech.UI
 
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(plain))
             {
-                SetError("Completar usuario y contraseña.");
+                SetError(T("LOGIN_COMPLETAR", "Completar usuario y contraseña."));
                 return;
             }
 
@@ -259,21 +207,17 @@ namespace EvenTech.UI
             }
             catch (Exception ex)
             {
-                SetError("Error de conexion: " + ex.Message);
+                BLL_Bitacora.RegistrarExcepcion(ex, "Login", "Autenticacion");
+                SetError(T("LOGIN_ERR_CONEXION", "Error de conexión:") + " " + ex.Message);
                 return;
             }
 
             switch (result)
             {
                 case LoginResult.Success:
-                    // Ocultamos el login y mostramos frmMain modal. Cuando
-                    // frmMain se cierra (logout), volvemos al login.
+                    LoginPrefs.Save(_chkRemember.Checked, username);
                     Hide();
-                    using (var main = new frmMain())
-                    {
-                        main.ShowDialog();
-                    }
-                    // Reset visual y volver al estado inicial
+                    using (var main = new frmMain()) main.ShowDialog();
                     _txtUser.Clear();
                     _txtPass.Clear();
                     _lblStatus.Text = "";
@@ -281,27 +225,42 @@ namespace EvenTech.UI
                     Show();
                     break;
                 case LoginResult.UserNotFound:
-                    SetError("Usuario no encontrado.");
+                    SetError(T("LOGIN_ERR_USUARIO", "Usuario no encontrado."));
                     break;
                 case LoginResult.IncorrectPassword:
-                    SetError("Contraseña incorrecta.");
+                    SetError(T("LOGIN_ERR_PASS", "Contraseña incorrecta."));
                     break;
             }
         }
 
         private void LblCrearCuenta_Click(object sender, EventArgs e)
         {
-            using (var alta = new frmCrearCuenta())
-            {
-                alta.ShowDialog();
-            }
+            using (var alta = new frmCrearCuenta()) alta.ShowDialog();
             _txtUser.Focus();
         }
 
         private void SetError(string msg)
         {
-            _lblStatus.ForeColor = Color.FromArgb(255, 180, 180);
+            _lblStatus.ForeColor = Color.FromArgb(255, 170, 170);
             _lblStatus.Text = msg;
+        }
+
+        // Devuelve la traduccion de 'clave' o, si falta, el texto por defecto dado.
+        private static string T(string clave, string defecto)
+        {
+            string t = Tr.T(clave);
+            return t == clave ? defecto : t;
+        }
+
+        // Observador del patron Observer: traduce las leyendas del login.
+        public void ActualizarTextos()
+        {
+            if (_lblUser != null)        _lblUser.Text        = Tr.T("LOGIN_USER");
+            if (_lblPass != null)        _lblPass.Text        = Tr.T("LOGIN_PASS");
+            if (_btnLogin != null)       _btnLogin.Text       = Tr.T("LOGIN_ENTER");
+            if (_lblCrearCuenta != null) _lblCrearCuenta.Text = Tr.T("LOGIN_CREATE");
+            if (_lblTagline != null)     _lblTagline.Text     = T("LOGIN_TAGLINE", "Gestión de eventos y reservas");
+            if (_chkRemember != null)    _chkRemember.Text    = T("LOGIN_REMEMBER", "Recordar cuenta");
         }
     }
 }

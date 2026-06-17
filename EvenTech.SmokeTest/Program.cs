@@ -38,4 +38,106 @@ foreach (var e in BLL_LoginAudit.GetAll(5))
     Console.WriteLine($"  #{e.Id} {e.Timestamp:HH:mm:ss} {e.Username,-20} {e.Action,-12} {e.Details}");
 }
 
+// [7] Reservas: alta valida
+Console.WriteLine("[7] Crear reserva valida:");
+var salones = BLL_Salon.GetAll();
+if (salones.Count == 0)
+{
+    Console.WriteLine("  (no hay salones seed; corre db/schema.sql)");
+}
+else
+{
+    var nueva = new EvenTech.BE.BE_Reserva
+    {
+        ClienteNombre = "Cliente " + DateTime.Now.ToString("HHmmss"),
+        SalonId = salones[0].Id,
+        FechaEvento = DateTime.Today.AddDays(30),
+        Estado = EvenTech.BE.EstadoReserva.PENDIENTE,
+        Monto = 150000m
+    };
+    var rr1 = BLL_Reserva.Crear(nueva, out int nuevoId);
+    Console.WriteLine($"  result={rr1}, nuevoId={nuevoId}");
+
+    // [8] Reserva con fecha pasada (debe fallar)
+    Console.WriteLine("[8] Crear reserva con fecha pasada (invalida):");
+    var pasada = new EvenTech.BE.BE_Reserva
+    {
+        ClienteNombre = "X",
+        SalonId = salones[0].Id,
+        FechaEvento = DateTime.Today.AddDays(-1),
+        Estado = EvenTech.BE.EstadoReserva.PENDIENTE,
+        Monto = 1000m
+    };
+    var rr2 = BLL_Reserva.Crear(pasada, out _);
+    Console.WriteLine($"  result={rr2}");
+
+    // [9] Listado
+    Console.WriteLine("[9] Total de reservas:");
+    Console.WriteLine($"  {BLL_Reserva.GetAll().Count} reservas");
+
+    // [10] Control de cambios: modificar la reserva recien creada
+    if (rr1 == ReservaResult.Success)
+    {
+        Console.WriteLine($"[10] Modificar reserva #{nuevoId} (estado + monto):");
+        var editada = BLL_Reserva.GetById(nuevoId);
+        editada.Estado = EvenTech.BE.EstadoReserva.CONFIRMADA;
+        editada.Monto = 175000m;
+        var ru = BLL_Reserva.Actualizar(editada);
+        Console.WriteLine($"  result={ru}");
+
+        Console.WriteLine($"[11] Historial de cambios de la reserva #{nuevoId}:");
+        foreach (var c in EvenTech.BLL.RegistradorDeCambios.GetHistorial("Reserva", nuevoId))
+            Console.WriteLine($"  {c.Fecha:HH:mm:ss} {c.NombreCampo,-14} '{c.ValorAnterior}' -> '{c.ValorNuevo}'");
+    }
+
+    // [12] Bitacora general (ultimas 5)
+    Console.WriteLine("[12] Ultimas 5 entradas de bitacora:");
+    int mostradas = 0;
+    foreach (var b in EvenTech.BLL.BLL_Bitacora.Buscar(new EvenTech.BE.BitacoraFiltros()))
+    {
+        Console.WriteLine($"  #{b.Id} {b.Fecha:HH:mm:ss} {b.Modulo,-10} {b.Accion,-26} {b.Criticidad}");
+        if (++mostradas >= 5) break;
+    }
+}
+
+// [13] Composite de perfiles: recorrer arbol y permisos efectivos
+Console.WriteLine("[13] Arbol de permisos (Composite):");
+var arbol = BLL_Perfil.GetArbolPermisos();
+void Imprimir(EvenTech.BE.BE_IComponentePermiso n, int nivel)
+{
+    Console.WriteLine($"  {new string(' ', nivel * 2)}{(n.EsGrupo ? "[G]" : "[P]")} {n.Nombre}");
+    if (n is EvenTech.BE.BE_GrupoPermisos g)
+        foreach (var h in g.Hijos) Imprimir(h, nivel + 1);
+}
+foreach (var raiz in arbol) Imprimir(raiz, 0);
+
+var perfiles = BLL_Perfil.GetPerfiles();
+if (perfiles.Count > 0)
+{
+    var asignados = BLL_Perfil.GetPermisosAsignados(perfiles[0].Id);
+    var efectivos = BLL_Perfil.CalcularPermisosEfectivos(arbol, asignados);
+    Console.WriteLine($"[14] Perfil '{perfiles[0].Nombre}': {efectivos.Count} permisos efectivos (hojas).");
+}
+
+// [15] Idiomas (Observer): cambio dinamico de traducciones
+Console.WriteLine("[15] Idiomas (Observer):");
+EvenTech.BLL.BLL_Idioma.Inicializar();
+var gi = EvenTech.Services.GestorDeIdioma.GetInstance;
+Console.WriteLine($"  idioma={gi.IdiomaActual}, MENU_RESERVAS='{gi.Traducir("MENU_RESERVAS")}'");
+gi.CambiarIdioma("EN");
+Console.WriteLine($"  idioma={gi.IdiomaActual}, MENU_RESERVAS='{gi.Traducir("MENU_RESERVAS")}'");
+gi.CambiarIdioma("ES");
+
+// [16] Digitos verificadores (T07/T08)
+Console.WriteLine("[16] Integridad (digitos verificadores):");
+var resInt = EvenTech.BLL.BLL_Integridad.Verificar();
+Console.WriteLine($"  Ok={resInt.Ok}, inconsistencias={resInt.Inconsistencias.Count}");
+foreach (var i in resInt.Inconsistencias) Console.WriteLine("   - " + i);
+
+// [17] Alta de idioma desde la capa de negocio (admin agrega idioma)
+Console.WriteLine("[17] Crear idioma 'PT':");
+var rIdioma = EvenTech.BLL.BLL_Idioma.CrearIdioma("PT", "Portugues", out int idPt);
+Console.WriteLine($"  result={rIdioma}");
+Console.WriteLine($"  idiomas disponibles: {EvenTech.Services.GestorDeIdioma.GetInstance.IdiomasDisponibles.Count}");
+
 Console.WriteLine("== fin ==");
