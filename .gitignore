@@ -39,3 +39,7 @@ Thumbs.db
 .DS_Store
 desktop.ini
 .sandbox_trash/
+
+# Material provisto por la catedra (no versionar)
+*.docx
+*.xlsx
