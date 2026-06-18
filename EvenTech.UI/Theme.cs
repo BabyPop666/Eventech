@@ -107,5 +107,6 @@ namespace EvenTech.UI
         public static readonly string IcoEye      = Glyph(0xE7B3); // RedEye (ver contrasena)
         public static readonly string IcoEyeOff   = Glyph(0xED1A); // Hide
         public static readonly string IcoUnlock   = Glyph(0xE785); // Unlock (desbloquear)
+        public static readonly string IcoPago     = Glyph(0xE8C7); // PaymentCard (pagos)
     }
 }

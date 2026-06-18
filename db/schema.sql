@@ -200,6 +200,37 @@ BEGIN
 END
 GO
 
+-- ===========================================================================
+-- Pagos de reservas (Proceso 1, paso 5) + metodos de pago
+-- ===========================================================================
+IF OBJECT_ID('dbo.MetodosPago','U') IS NULL
+BEGIN
+    CREATE TABLE dbo.MetodosPago (
+        Id     INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_MetodosPago PRIMARY KEY,
+        Nombre NVARCHAR(50)      NOT NULL,
+        CONSTRAINT UQ_MetodosPago_Nombre UNIQUE (Nombre)
+    );
+    INSERT INTO dbo.MetodosPago (Nombre) VALUES
+        (N'Efectivo'), (N'Tarjeta de credito'), (N'Tarjeta de debito'), (N'Transferencia'), (N'MercadoPago');
+END
+GO
+
+IF OBJECT_ID('dbo.Pagos','U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Pagos (
+        Id           INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Pagos PRIMARY KEY,
+        ReservaId    INT NOT NULL,
+        MetodoPagoId INT NOT NULL,
+        Monto        DECIMAL(12,2) NOT NULL,
+        Fecha        DATETIME NOT NULL CONSTRAINT DF_Pagos_Fecha DEFAULT GETDATE(),
+        Observacion  NVARCHAR(200) NULL,
+        CONSTRAINT FK_Pagos_Reserva FOREIGN KEY (ReservaId)    REFERENCES dbo.Reservas(Id),
+        CONSTRAINT FK_Pagos_Metodo  FOREIGN KEY (MetodoPagoId) REFERENCES dbo.MetodosPago(Id)
+    );
+    CREATE INDEX IX_Pagos_Reserva ON dbo.Pagos(ReservaId);
+END
+GO
+
 -- Seed de salones de ejemplo para poder operar.
 IF NOT EXISTS (SELECT 1 FROM dbo.Salones)
 BEGIN
@@ -493,7 +524,7 @@ GO
         (N'ES', N'BTN_REFRESCAR',  N'Refrescar'), (N'EN', N'BTN_REFRESCAR',  N'Refresh'),   (N'PT', N'BTN_REFRESCAR',  N'Atualizar'),
         -- Reservas
         (N'ES', N'RES_TITULO',     N'Gestion de Reservas'),       (N'EN', N'RES_TITULO',     N'Reservations Management'),  (N'PT', N'RES_TITULO',     N'Gestao de Reservas'),
-        (N'ES', N'RES_HISTORIAL',  N'Ver historial de cambios'),  (N'EN', N'RES_HISTORIAL',  N'View change history'),      (N'PT', N'RES_HISTORIAL',  N'Ver historico de alteracoes'),
+        (N'ES', N'RES_HISTORIAL',  N'Historial'),                 (N'EN', N'RES_HISTORIAL',  N'History'),                  (N'PT', N'RES_HISTORIAL',  N'Historico'),
         (N'ES', N'RES_FORM_NUEVA', N'Nueva reserva'),             (N'EN', N'RES_FORM_NUEVA', N'New reservation'),          (N'PT', N'RES_FORM_NUEVA', N'Nova reserva'),
         (N'ES', N'RES_FORM_EDITAR',N'Editar reserva'),            (N'EN', N'RES_FORM_EDITAR',N'Edit reservation'),         (N'PT', N'RES_FORM_EDITAR',N'Editar reserva'),
         (N'ES', N'RES_LBL_FECHA',  N'Fecha del evento'),          (N'EN', N'RES_LBL_FECHA',  N'Event date'),               (N'PT', N'RES_LBL_FECHA',  N'Data do evento'),
@@ -631,6 +662,20 @@ GO
         (N'ES', N'BTN_AGREGAR', N'Agregar'), (N'EN', N'BTN_AGREGAR', N'Add'), (N'PT', N'BTN_AGREGAR', N'Adicionar'),
         (N'ES', N'BTN_QUITAR', N'Quitar'), (N'EN', N'BTN_QUITAR', N'Remove'), (N'PT', N'BTN_QUITAR', N'Remover'),
         (N'ES', N'BTN_ACEPTAR', N'Aceptar'), (N'EN', N'BTN_ACEPTAR', N'OK'), (N'PT', N'BTN_ACEPTAR', N'OK'),
+        -- Pagos de la reserva (Proceso 1, paso 5)
+        (N'ES', N'RES_PAGOS', N'Pagos de la reserva'), (N'EN', N'RES_PAGOS', N'Reservation payments'), (N'PT', N'RES_PAGOS', N'Pagamentos da reserva'),
+        (N'ES', N'RES_PAGOS_BTN', N'Pagos'), (N'EN', N'RES_PAGOS_BTN', N'Payments'), (N'PT', N'RES_PAGOS_BTN', N'Pagamentos'),
+        (N'ES', N'COL_METODO', N'Metodo'), (N'EN', N'COL_METODO', N'Method'), (N'PT', N'COL_METODO', N'Metodo'),
+        (N'ES', N'COL_OBSERVACION', N'Observacion'), (N'EN', N'COL_OBSERVACION', N'Note'), (N'PT', N'COL_OBSERVACION', N'Observacao'),
+        (N'ES', N'LBL_PAGADO', N'Pagado'), (N'EN', N'LBL_PAGADO', N'Paid'), (N'PT', N'LBL_PAGADO', N'Pago'),
+        (N'ES', N'LBL_SALDO', N'Saldo'), (N'EN', N'LBL_SALDO', N'Balance'), (N'PT', N'LBL_SALDO', N'Saldo'),
+        (N'ES', N'BTN_REGISTRAR', N'Registrar'), (N'EN', N'BTN_REGISTRAR', N'Add payment'), (N'PT', N'BTN_REGISTRAR', N'Registrar'),
+        (N'ES', N'BTN_CERRAR', N'Cerrar'), (N'EN', N'BTN_CERRAR', N'Close'), (N'PT', N'BTN_CERRAR', N'Fechar'),
+        (N'ES', N'MSG_PAGO_MONTO', N'Ingrese un monto valido.'), (N'EN', N'MSG_PAGO_MONTO', N'Enter a valid amount.'), (N'PT', N'MSG_PAGO_MONTO', N'Informe um valor valido.'),
+        (N'ES', N'MSG_PAGO_METODO', N'Seleccione un metodo de pago.'), (N'EN', N'MSG_PAGO_METODO', N'Select a payment method.'), (N'PT', N'MSG_PAGO_METODO', N'Selecione um metodo de pagamento.'),
+        (N'ES', N'MSG_PAGO_EXCEDE', N'El pago supera el saldo pendiente.'), (N'EN', N'MSG_PAGO_EXCEDE', N'The payment exceeds the pending balance.'), (N'PT', N'MSG_PAGO_EXCEDE', N'O pagamento excede o saldo pendente.'),
+        (N'ES', N'MSG_PAGO_RESERVA', N'Reserva invalida.'), (N'EN', N'MSG_PAGO_RESERVA', N'Invalid reservation.'), (N'PT', N'MSG_PAGO_RESERVA', N'Reserva invalida.'),
+        (N'ES', N'MSG_PAGO_GUARDAR_RESERVA', N'Guarde la reserva antes de registrar pagos.'), (N'EN', N'MSG_PAGO_GUARDAR_RESERVA', N'Save the reservation before adding payments.'), (N'PT', N'MSG_PAGO_GUARDAR_RESERVA', N'Salve a reserva antes de registrar pagamentos.'),
         -- Auditoria unificada (tabs)
         (N'ES', N'AUD_TAB_BITACORA', N'Bitacora general'),            (N'EN', N'AUD_TAB_BITACORA', N'General audit log'),           (N'PT', N'AUD_TAB_BITACORA', N'Registro geral'),
         (N'ES', N'AUD_TAB_LOGIN', N'Auditoria de login'),             (N'EN', N'AUD_TAB_LOGIN', N'Login audit'),                    (N'PT', N'AUD_TAB_LOGIN', N'Auditoria de login')
@@ -651,4 +696,12 @@ UPDATE t SET Texto = CASE i.Codigo WHEN N'EN' THEN N'Audit' ELSE N'Auditoria' EN
 FROM dbo.Traducciones t
 JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
 WHERE t.Clave = N'MENU_AUDITORIA';
+GO
+
+-- El boton de historial comparte fila con "Pagos" en la ficha de reserva:
+-- se acorta para no truncarse a media anchura.
+UPDATE t SET Texto = CASE i.Codigo WHEN N'EN' THEN N'History' WHEN N'PT' THEN N'Historico' ELSE N'Historial' END
+FROM dbo.Traducciones t
+JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
+WHERE t.Clave = N'RES_HISTORIAL';
 GO
