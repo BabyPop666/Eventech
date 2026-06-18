@@ -16,10 +16,11 @@ namespace EvenTech.UI
     {
         private DataGridView _grid;
         private Label _lblCount, _lblError, _lblFormTitle;
-        private TextBox _txtMonto;
+        private TextBox _txtMonto;   // solo lectura: total = suma de los servicios contratados
         private ComboBox _cboCliente, _cboSalon, _cboEstado;
         private DateTimePicker _dtFecha;
-        private AppButton _btnNuevo, _btnGuardar, _btnHistorial, _btnNuevoCliente;
+        private AppButton _btnNuevo, _btnGuardar, _btnHistorial, _btnNuevoCliente, _btnServicios;
+        private List<BE_ReservaServicio> _serviciosReserva = new List<BE_ReservaServicio>();
 
         private int _editId; // 0 = alta, >0 = edicion
 
@@ -190,13 +191,13 @@ namespace EvenTech.UI
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 6,
+                RowCount = 7,
                 AutoScroll = true,
                 BackColor = Color.Transparent,
                 Margin = new Padding(0)
             };
             fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            for (int i = 0; i < 5; i++) fields.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            for (int i = 0; i < 6; i++) fields.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             fields.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // empuja los campos hacia arriba
 
             // Cliente: combo para elegir uno existente + boton de alta rapida.
@@ -230,12 +231,21 @@ namespace EvenTech.UI
             var fldEstado = Ui.Field("Estado", _cboEstado);
             ((Label)fldEstado.GetControlFromPosition(0, 0)).Tag = "T:COL_ESTADO";
 
+            // Servicios contratados: boton que abre el dialogo de carga.
+            _btnServicios = Ui.Secondary("Servicios", Theme.IcoServicio);
+            _btnServicios.Click += (s, e) => EditarServicios();
+            var fldServicios = Ui.Field("Servicios", _btnServicios);
+            ((Label)fldServicios.GetControlFromPosition(0, 0)).Tag = "T:MENU_SERVICIOS";
+
+            // Monto = total (suma de servicios), de solo lectura.
             _txtMonto = Ui.Input();
+            _txtMonto.ReadOnly = true;
+            _txtMonto.BackColor = Theme.SurfaceAlt;
             var fldMonto = Ui.Field("Monto", _txtMonto);
             ((Label)fldMonto.GetControlFromPosition(0, 0)).Tag = "T:COL_MONTO";
 
             int row = 0;
-            foreach (var fld in new[] { fldCliente, fldSalon, fldFecha, fldEstado, fldMonto })
+            foreach (var fld in new[] { fldCliente, fldSalon, fldFecha, fldEstado, fldServicios, fldMonto })
             {
                 fld.Dock = DockStyle.Fill;
                 fld.Margin = new Padding(0, 0, 0, Theme.SpaceMd);
@@ -295,6 +305,7 @@ namespace EvenTech.UI
             }
             ActualizarTituloForm();
             ActualizarCount();
+            ActualizarMonto();
         }
 
         private void ActualizarTituloForm()
@@ -385,7 +396,9 @@ namespace EvenTech.UI
             _cboSalon.SelectedValue = r.SalonId;
             _dtFecha.Value = r.FechaEvento < _dtFecha.MinDate ? _dtFecha.MinDate : r.FechaEvento;
             _cboEstado.SelectedItem = r.Estado;
-            _txtMonto.Text = r.Monto.ToString("0.##");
+            try { _serviciosReserva = BLL_ReservaServicio.GetByReserva(r.Id); }
+            catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Reservas", "Cargar servicios de reserva"); _serviciosReserva = new List<BE_ReservaServicio>(); }
+            ActualizarMonto();
         }
 
         private void LimpiarForm()
@@ -396,19 +409,37 @@ namespace EvenTech.UI
             if (_cboSalon.Items.Count > 0) _cboSalon.SelectedIndex = 0;
             _dtFecha.Value = DateTime.Today;
             _cboEstado.SelectedItem = EstadoReserva.PENDIENTE;
-            _txtMonto.Text = "0";
+            _serviciosReserva = new List<BE_ReservaServicio>();
+            ActualizarMonto();
             _grid.ClearSelection();
+        }
+
+        // Refleja el total (suma de servicios) en el campo Monto y el conteo en el boton.
+        private void ActualizarMonto()
+        {
+            _txtMonto.Text = BLL_ReservaServicio.Total(_serviciosReserva).ToString("0.##");
+            if (_btnServicios != null)
+                _btnServicios.Text = Tr.T("MENU_SERVICIOS") + " (" + _serviciosReserva.Count + ")";
+        }
+
+        private void EditarServicios()
+        {
+            using (var dlg = new frmReservaServicios(_serviciosReserva, BLL_Servicio.GetActivos()))
+            {
+                if (dlg.ShowDialog(FindForm()) == DialogResult.OK)
+                {
+                    _serviciosReserva = dlg.Items;
+                    ActualizarMonto();
+                }
+            }
         }
 
         private void Guardar()
         {
             _lblError.Visible = false;
 
-            if (!decimal.TryParse(_txtMonto.Text, out decimal monto))
-            {
-                ShowError(Tr.T("MSG_MONTO_INVALIDO"));
-                return;
-            }
+            // El monto es la suma de los servicios contratados (no se ingresa a mano).
+            decimal monto = BLL_ReservaServicio.Total(_serviciosReserva);
 
             var reserva = new BE_Reserva
             {
@@ -420,12 +451,15 @@ namespace EvenTech.UI
                 Monto = monto
             };
 
+            int idReserva = _editId;
             ReservaResult result = _editId == 0
-                ? BLL_Reserva.Crear(reserva, out _)
+                ? BLL_Reserva.Crear(reserva, out idReserva)
                 : BLL_Reserva.Actualizar(reserva);
 
             if (result == ReservaResult.Success)
             {
+                try { BLL_ReservaServicio.Guardar(idReserva, _serviciosReserva); }
+                catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Reservas", "Guardar servicios de reserva"); }
                 LimpiarForm();
                 SafeLoadData();
             }

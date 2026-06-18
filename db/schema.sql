@@ -624,6 +624,13 @@ GO
         (N'ES', N'MSG_SRV_PRECIO', N'El precio no puede ser negativo.'), (N'EN', N'MSG_SRV_PRECIO', N'The price cannot be negative.'), (N'PT', N'MSG_SRV_PRECIO', N'O preco nao pode ser negativo.'),
         (N'ES', N'MSG_SRV_DUP', N'Ya existe un servicio con ese nombre.'), (N'EN', N'MSG_SRV_DUP', N'A service with that name already exists.'), (N'PT', N'MSG_SRV_DUP', N'Ja existe um servico com esse nome.'),
         (N'ES', N'MSG_SRV_OK', N'Servicio guardado.'), (N'EN', N'MSG_SRV_OK', N'Service saved.'), (N'PT', N'MSG_SRV_OK', N'Servico salvo.'),
+        -- Servicios contratados en una reserva (M:N)
+        (N'ES', N'RES_SERVICIOS', N'Servicios de la reserva'), (N'EN', N'RES_SERVICIOS', N'Reservation services'), (N'PT', N'RES_SERVICIOS', N'Servicos da reserva'),
+        (N'ES', N'COL_SERVICIO', N'Servicio'), (N'EN', N'COL_SERVICIO', N'Service'), (N'PT', N'COL_SERVICIO', N'Servico'),
+        (N'ES', N'LBL_TOTAL', N'Total'), (N'EN', N'LBL_TOTAL', N'Total'), (N'PT', N'LBL_TOTAL', N'Total'),
+        (N'ES', N'BTN_AGREGAR', N'Agregar'), (N'EN', N'BTN_AGREGAR', N'Add'), (N'PT', N'BTN_AGREGAR', N'Adicionar'),
+        (N'ES', N'BTN_QUITAR', N'Quitar'), (N'EN', N'BTN_QUITAR', N'Remove'), (N'PT', N'BTN_QUITAR', N'Remover'),
+        (N'ES', N'BTN_ACEPTAR', N'Aceptar'), (N'EN', N'BTN_ACEPTAR', N'OK'), (N'PT', N'BTN_ACEPTAR', N'OK'),
         -- Auditoria unificada (tabs)
         (N'ES', N'AUD_TAB_BITACORA', N'Bitacora general'),            (N'EN', N'AUD_TAB_BITACORA', N'General audit log'),           (N'PT', N'AUD_TAB_BITACORA', N'Registro geral'),
         (N'ES', N'AUD_TAB_LOGIN', N'Auditoria de login'),             (N'EN', N'AUD_TAB_LOGIN', N'Login audit'),                    (N'PT', N'AUD_TAB_LOGIN', N'Auditoria de login')
