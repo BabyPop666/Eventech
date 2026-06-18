@@ -91,14 +91,14 @@ namespace EvenTech.UI
             sb.Append("<div class=\"row\">").Append(E(cliente != null ? cliente.NombreCompleto : reserva.ClienteNombre ?? "-")).Append("</div>");
             if (cliente != null)
             {
-                if (!string.IsNullOrWhiteSpace(cliente.Dni)) sb.Append("<div class=\"row\"><span>DNI:</span>").Append(E(cliente.Dni)).Append("</div>");
-                if (!string.IsNullOrWhiteSpace(cliente.Email)) sb.Append("<div class=\"row\"><span>Email:</span>").Append(E(cliente.Email)).Append("</div>");
-                if (!string.IsNullOrWhiteSpace(cliente.Telefono)) sb.Append("<div class=\"row\"><span>Tel:</span>").Append(E(cliente.Telefono)).Append("</div>");
+                if (!string.IsNullOrWhiteSpace(cliente.Dni)) sb.Append("<div class=\"row\"><span>").Append(E(T("LBL_DNI", "DNI"))).Append(":</span>").Append(E(cliente.Dni)).Append("</div>");
+                if (!string.IsNullOrWhiteSpace(cliente.Email)) sb.Append("<div class=\"row\"><span>").Append(E(T("LBL_EMAIL", "Email"))).Append(":</span>").Append(E(cliente.Email)).Append("</div>");
+                if (!string.IsNullOrWhiteSpace(cliente.Telefono)) sb.Append("<div class=\"row\"><span>").Append(E(T("LBL_TELEFONO", "Tel"))).Append(":</span>").Append(E(cliente.Telefono)).Append("</div>");
             }
             sb.Append("</div><div class=\"col\"><h2>").Append(E(T("CMP_EVENTO", "Evento"))).Append("</h2>");
             sb.Append("<div class=\"row\"><span>").Append(E(T("COL_SALON", "Salon"))).Append(":</span>").Append(E(reserva.SalonNombre ?? "-")).Append("</div>");
             sb.Append("<div class=\"row\"><span>").Append(E(T("RES_LBL_FECHA", "Fecha del evento"))).Append(":</span>").Append(reserva.FechaEvento.ToString("yyyy-MM-dd")).Append("</div>");
-            sb.Append("<div class=\"row\"><span>").Append(E(T("COL_ESTADO", "Estado"))).Append(":</span>").Append(E(reserva.Estado.ToString())).Append("</div>");
+            sb.Append("<div class=\"row\"><span>").Append(E(T("COL_ESTADO", "Estado"))).Append(":</span>").Append(E(Tr.Estado(reserva.Estado))).Append("</div>");
             sb.Append("</div></div>");
 
             // ---- Servicios ----

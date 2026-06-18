@@ -65,10 +65,11 @@ namespace EvenTech.UI
             _dtHasta = Ui.DatePicker(); _dtHasta.Width = 130; _dtHasta.ShowCheckBox = true; _dtHasta.Checked = false;
             _cboAccion = Ui.Combo(); _cboAccion.Width = 150;
             _cboAccion.Items.Add(Tr.T("OPT_TODAS"));
-            _cboAccion.Items.Add("LOGIN_OK");
-            _cboAccion.Items.Add("LOGIN_FAIL");
-            _cboAccion.Items.Add("LOGOUT");
+            _cboAccion.Items.Add(new AccionItem("LOGIN_OK"));
+            _cboAccion.Items.Add(new AccionItem("LOGIN_FAIL"));
+            _cboAccion.Items.Add(new AccionItem("LOGOUT"));
             _cboAccion.SelectedIndex = 0;
+            Ui.DibujarEnum(_cboAccion, o => o?.ToString());
 
             var fUsuario = Ui.Field("Usuario", _txtUsuario); fUsuario.Tag = "FIELD:COL_USUARIO";
             var fDesde = Ui.Field("Desde", _dtDesde); fDesde.Tag = "FIELD:BIT_DESDE";
@@ -131,7 +132,10 @@ namespace EvenTech.UI
                 int sel = _cboAccion.SelectedIndex;
                 _cboAccion.Items[0] = Tr.T("OPT_TODAS");
                 _cboAccion.SelectedIndex = sel;
+                _cboAccion.Invalidate();
             }
+            if (_grid.DataSource != null && _lblCount.Visible) _lblCount.Text = _grid.Rows.Count + " " + Tr.T("AUD_COUNT");
+            _grid.Invalidate(); // re-traduce los valores de accion en las celdas
         }
 
         private void LimpiarFiltros()
@@ -155,7 +159,7 @@ namespace EvenTech.UI
             {
                 BLL_Bitacora.RegistrarExcepcion(ex, "Auditoria", "Cargar auditoria de login");
                 _lblCount.Visible = false;
-                _lblError.Text = "Error: " + ex.GetType().Name + " - " + ex.Message;
+                _lblError.Text = Tr.T("MSG_ERROR_PREFIJO") + ex.GetType().Name + " - " + ex.Message;
                 _lblError.Visible = true;
             }
         }
@@ -172,8 +176,8 @@ namespace EvenTech.UI
                 q = q.Where(x => x.Timestamp >= _dtDesde.Value.Date);
             if (_dtHasta.Checked)
                 q = q.Where(x => x.Timestamp < _dtHasta.Value.Date.AddDays(1));
-            if (_cboAccion.SelectedIndex > 0)
-                q = q.Where(x => x.Action.ToString() == _cboAccion.SelectedItem.ToString());
+            if (_cboAccion.SelectedItem is AccionItem ai)
+                q = q.Where(x => x.Action.ToString() == ai.Code);
 
             var data = q.ToList();
             _grid.DataSource = data;
@@ -201,6 +205,17 @@ namespace EvenTech.UI
             {
                 e.CellStyle.ForeColor = Theme.TextMuted;
             }
+            // Traduce el valor mostrado (el color se calculo arriba con el codigo crudo).
+            if (val == "LOGIN_OK" || val == "LOGIN_FAIL" || val == "LOGOUT") { e.Value = Tr.Accion(val); e.FormattingApplied = true; }
+        }
+
+        // Item del combo de acciones: guarda el codigo (para filtrar) y muestra el
+        // texto traducido (ToString se re-evalua al repintar / cambiar idioma).
+        private sealed class AccionItem
+        {
+            public string Code { get; }
+            public AccionItem(string code) { Code = code; }
+            public override string ToString() => Tr.Accion(Code);
         }
     }
 }

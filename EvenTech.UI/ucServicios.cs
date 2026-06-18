@@ -194,7 +194,7 @@ namespace EvenTech.UI
             catch (Exception ex)
             {
                 BLL_Bitacora.RegistrarExcepcion(ex, "Servicios", "Cargar servicios");
-                _lblError.Text = "Error: " + ex.GetType().Name + " - " + ex.Message;
+                _lblError.Text = Tr.T("MSG_ERROR_PREFIJO") + ex.GetType().Name + " - " + ex.Message;
                 _lblError.Visible = true;
                 _lblCount.Text = "";
             }
@@ -270,7 +270,7 @@ namespace EvenTech.UI
                 case ServicioResult.NombreDuplicado: return Tr.T("MSG_SRV_DUP");
                 case ServicioResult.PrecioInvalido:  return Tr.T("MSG_SRV_PRECIO");
                 case ServicioResult.NotFound:        return Tr.T("MSG_RES_NOTFOUND");
-                default:                             return "Error";
+                default:                             return Tr.T("MSG_ERROR");
             }
         }
 

@@ -181,7 +181,7 @@ namespace EvenTech.UI
             catch (Exception ex)
             {
                 BLL_Bitacora.RegistrarExcepcion(ex, "Clientes", "Cargar clientes");
-                _lblError.Text = "Error: " + ex.GetType().Name + " - " + ex.Message;
+                _lblError.Text = Tr.T("MSG_ERROR_PREFIJO") + ex.GetType().Name + " - " + ex.Message;
                 _lblError.Visible = true;
                 _lblCount.Text = "";
             }
@@ -249,7 +249,7 @@ namespace EvenTech.UI
                 case ClienteResult.DniDuplicado:   return Tr.T("MSG_CLI_DNI_DUP");
                 case ClienteResult.EmailInvalido:  return Tr.T("MSG_CLI_EMAIL");
                 case ClienteResult.NotFound:       return Tr.T("MSG_RES_NOTFOUND");
-                default:                           return "Error";
+                default:                           return Tr.T("MSG_ERROR");
             }
         }
 

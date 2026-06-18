@@ -698,6 +698,28 @@ GO
         (N'ES', N'EMAIL_CIERRE', N'Adjuntamos el comprobante. Saludos, EvenTech.'), (N'EN', N'EMAIL_CIERRE', N'The receipt is attached. Regards, EvenTech.'), (N'PT', N'EMAIL_CIERRE', N'O comprovante esta anexado. Saudacoes, EvenTech.'),
         (N'ES', N'MSG_EMAIL_SIN_CORREO', N'El cliente no tiene email cargado.'), (N'EN', N'MSG_EMAIL_SIN_CORREO', N'The client has no email on file.'), (N'PT', N'MSG_EMAIL_SIN_CORREO', N'O cliente nao tem email cadastrado.'),
         (N'ES', N'MSG_EMAIL_ADJUNTAR', N'Se abrio tu correo con el mensaje listo. Adjunta el comprobante (abrimos su carpeta) y envialo.'), (N'EN', N'MSG_EMAIL_ADJUNTAR', N'Your email client opened with the message. Attach the receipt (we opened its folder) and send it.'), (N'PT', N'MSG_EMAIL_ADJUNTAR', N'Seu cliente de email abriu com a mensagem. Anexe o comprovante (abrimos a pasta) e envie.'),
+        -- Pulido i18n: estados de reserva (mostrados en grilla/combo/comprobante)
+        (N'ES', N'EST_COTIZACION', N'Cotizacion'), (N'EN', N'EST_COTIZACION', N'Quote'), (N'PT', N'EST_COTIZACION', N'Orcamento'),
+        (N'ES', N'EST_PENDIENTE', N'Pendiente'), (N'EN', N'EST_PENDIENTE', N'Pending'), (N'PT', N'EST_PENDIENTE', N'Pendente'),
+        (N'ES', N'EST_CONFIRMADA', N'Confirmada'), (N'EN', N'EST_CONFIRMADA', N'Confirmed'), (N'PT', N'EST_CONFIRMADA', N'Confirmada'),
+        (N'ES', N'EST_CANCELADA', N'Cancelada'), (N'EN', N'EST_CANCELADA', N'Cancelled'), (N'PT', N'EST_CANCELADA', N'Cancelada'),
+        -- Pulido i18n: criticidad de bitacora (combo + grilla)
+        (N'ES', N'CRIT_INFO', N'Informacion'), (N'EN', N'CRIT_INFO', N'Information'), (N'PT', N'CRIT_INFO', N'Informacao'),
+        (N'ES', N'CRIT_ADVERTENCIA', N'Advertencia'), (N'EN', N'CRIT_ADVERTENCIA', N'Warning'), (N'PT', N'CRIT_ADVERTENCIA', N'Aviso'),
+        (N'ES', N'CRIT_ERROR', N'Error'), (N'EN', N'CRIT_ERROR', N'Error'), (N'PT', N'CRIT_ERROR', N'Erro'),
+        -- Pulido i18n: acciones de auditoria de login (combo + grilla)
+        (N'ES', N'ACC_LOGIN_OK', N'Ingreso correcto'), (N'EN', N'ACC_LOGIN_OK', N'Login OK'), (N'PT', N'ACC_LOGIN_OK', N'Login OK'),
+        (N'ES', N'ACC_LOGIN_FAIL', N'Ingreso fallido'), (N'EN', N'ACC_LOGIN_FAIL', N'Login failed'), (N'PT', N'ACC_LOGIN_FAIL', N'Falha no login'),
+        (N'ES', N'ACC_LOGOUT', N'Cierre de sesion'), (N'EN', N'ACC_LOGOUT', N'Logout'), (N'PT', N'ACC_LOGOUT', N'Encerramento de sessao'),
+        -- Pulido i18n: mensajes de error genericos
+        (N'ES', N'MSG_ERROR', N'Error'), (N'EN', N'MSG_ERROR', N'Error'), (N'PT', N'MSG_ERROR', N'Erro'),
+        (N'ES', N'MSG_ERROR_PREFIJO', N'Error: '), (N'EN', N'MSG_ERROR_PREFIJO', N'Error: '), (N'PT', N'MSG_ERROR_PREFIJO', N'Erro: '),
+        -- Pulido i18n: etiquetas del comprobante y dialogo de guardado
+        (N'ES', N'LBL_DNI', N'DNI'), (N'EN', N'LBL_DNI', N'ID'), (N'PT', N'LBL_DNI', N'CPF'),
+        (N'ES', N'LBL_EMAIL', N'Email'), (N'EN', N'LBL_EMAIL', N'Email'), (N'PT', N'LBL_EMAIL', N'E-mail'),
+        (N'ES', N'LBL_TELEFONO', N'Tel'), (N'EN', N'LBL_TELEFONO', N'Phone'), (N'PT', N'LBL_TELEFONO', N'Tel'),
+        (N'ES', N'CMP_FILTER', N'Documento HTML (*.html)|*.html'), (N'EN', N'CMP_FILTER', N'HTML document (*.html)|*.html'), (N'PT', N'CMP_FILTER', N'Documento HTML (*.html)|*.html'),
+        (N'ES', N'CMP_FILENAME', N'Comprobante_Reserva_'), (N'EN', N'CMP_FILENAME', N'Reservation_Receipt_'), (N'PT', N'CMP_FILENAME', N'Comprovante_Reserva_'),
         -- Auditoria unificada (tabs)
         (N'ES', N'AUD_TAB_BITACORA', N'Bitacora general'),            (N'EN', N'AUD_TAB_BITACORA', N'General audit log'),           (N'PT', N'AUD_TAB_BITACORA', N'Registro geral'),
         (N'ES', N'AUD_TAB_LOGIN', N'Auditoria de login'),             (N'EN', N'AUD_TAB_LOGIN', N'Login audit'),                    (N'PT', N'AUD_TAB_LOGIN', N'Auditoria de login')

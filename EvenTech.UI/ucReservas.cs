@@ -152,6 +152,7 @@ namespace EvenTech.UI
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "cEstado",  HeaderText = "Estado",  DataPropertyName = "Estado",        FillWeight = 55 });
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "cMonto",   HeaderText = "Monto",   DataPropertyName = "Monto",         FillWeight = 55, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
             _grid.SelectionChanged += Grid_SelectionChanged;
+            _grid.CellFormatting += Grid_CellFormatting;
 
             card.Controls.Add(_grid);
             return card;
@@ -228,6 +229,7 @@ namespace EvenTech.UI
 
             _cboEstado = Ui.Combo();
             _cboEstado.Items.AddRange(new object[] { EstadoReserva.COTIZACION, EstadoReserva.PENDIENTE, EstadoReserva.CONFIRMADA, EstadoReserva.CANCELADA });
+            Ui.DibujarEnum(_cboEstado, o => o is EstadoReserva est ? Tr.Estado(est) : o?.ToString());
             var fldEstado = Ui.Field("Estado", _cboEstado);
             ((Label)fldEstado.GetControlFromPosition(0, 0)).Tag = "T:COL_ESTADO";
 
@@ -341,6 +343,9 @@ namespace EvenTech.UI
                 _grid.Columns["cEstado"].HeaderText  = Tr.T("COL_ESTADO");
                 _grid.Columns["cMonto"].HeaderText   = Tr.T("COL_MONTO");
             }
+            // Re-traduce los valores de Estado (grilla por celda, combo por display).
+            _grid.Invalidate();
+            _cboEstado.Invalidate();
             ActualizarTituloForm();
             ActualizarCount();
             ActualizarMonto();
@@ -371,7 +376,7 @@ namespace EvenTech.UI
             catch (Exception ex)
             {
                 BLL_Bitacora.RegistrarExcepcion(ex, "Reservas", "Cargar salones");
-                ShowError("Error cargando salones: " + ex.Message);
+                ShowError(Tr.T("MSG_ERROR_PREFIJO") + ex.Message);
             }
         }
 
@@ -387,7 +392,7 @@ namespace EvenTech.UI
             catch (Exception ex)
             {
                 BLL_Bitacora.RegistrarExcepcion(ex, "Reservas", "Cargar clientes");
-                ShowError("Error cargando clientes: " + ex.Message);
+                ShowError(Tr.T("MSG_ERROR_PREFIJO") + ex.Message);
             }
         }
 
@@ -416,7 +421,7 @@ namespace EvenTech.UI
             catch (Exception ex)
             {
                 BLL_Bitacora.RegistrarExcepcion(ex, "Reservas", "Cargar reservas");
-                ShowError("Error cargando reservas: " + ex.GetType().Name + " - " + ex.Message);
+                ShowError(Tr.T("MSG_ERROR_PREFIJO") + ex.GetType().Name + " - " + ex.Message);
                 _lblCount.Text = "";
             }
         }
@@ -424,6 +429,14 @@ namespace EvenTech.UI
         private void Grid_SelectionChanged(object sender, EventArgs e)
         {
             if (_grid.CurrentRow?.DataBoundItem is BE_Reserva r) CargarEnForm(r);
+        }
+
+        // Traduce el valor de la columna Estado (el enum se muestra segun el idioma).
+        private void Grid_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0 || e.ColumnIndex >= _grid.Columns.Count) return;
+            if (_grid.Columns[e.ColumnIndex].Name != "cEstado") return;
+            if (e.Value is EstadoReserva est) { e.Value = Tr.Estado(est); e.FormattingApplied = true; }
         }
 
         private void CargarEnForm(BE_Reserva r)
@@ -502,8 +515,8 @@ namespace EvenTech.UI
                 using (var dlg = new SaveFileDialog
                 {
                     Title = Tr.T("RES_COMPROBANTE_BTN"),
-                    Filter = "HTML (*.html)|*.html",
-                    FileName = "Comprobante_Reserva_" + _editId + ".html",
+                    Filter = Tr.T("CMP_FILTER"),
+                    FileName = Tr.T("CMP_FILENAME") + _editId + ".html",
                     InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
                 })
                 {
@@ -543,7 +556,7 @@ namespace EvenTech.UI
                 string html = ComprobanteService.GenerarHtml(_editId);
                 string path = System.IO.Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                    "Comprobante_Reserva_" + _editId + ".html");
+                    Tr.T("CMP_FILENAME") + _editId + ".html");
                 System.IO.File.WriteAllText(path, html, System.Text.Encoding.UTF8);
 
                 decimal total = reserva.Monto;
