@@ -125,22 +125,23 @@ GO
 
 -- Migracion: crea un Cliente por cada ClienteNombre existente, enlaza la reserva
 -- y luego elimina la columna ClienteNombre (queda normalizado en Clientes / 3FN).
+-- Se usa EXEC (dynamic SQL) para que la referencia a ClienteNombre no se compile
+-- cuando la columna ya no existe (si no, el re-run del script fallaria).
 IF COL_LENGTH('dbo.Reservas','ClienteNombre') IS NOT NULL
 BEGIN
-    INSERT INTO dbo.Clientes (Nombre)
-        SELECT DISTINCT LTRIM(RTRIM(r.ClienteNombre))
-        FROM dbo.Reservas r
-        WHERE r.ClienteNombre IS NOT NULL AND LTRIM(RTRIM(r.ClienteNombre)) <> ''
-          AND NOT EXISTS (
-              SELECT 1 FROM dbo.Clientes c
-              WHERE c.Nombre = LTRIM(RTRIM(r.ClienteNombre)) AND c.Apellido IS NULL AND c.Dni IS NULL);
+    EXEC('INSERT INTO dbo.Clientes (Nombre)
+            SELECT DISTINCT LTRIM(RTRIM(r.ClienteNombre))
+            FROM dbo.Reservas r
+            WHERE r.ClienteNombre IS NOT NULL AND LTRIM(RTRIM(r.ClienteNombre)) <> ''''
+              AND NOT EXISTS (SELECT 1 FROM dbo.Clientes c
+                  WHERE c.Nombre = LTRIM(RTRIM(r.ClienteNombre)) AND c.Apellido IS NULL AND c.Dni IS NULL);');
 
-    UPDATE r SET r.ClienteId = c.Id
-        FROM dbo.Reservas r
-        JOIN dbo.Clientes c ON c.Nombre = LTRIM(RTRIM(r.ClienteNombre)) AND c.Apellido IS NULL AND c.Dni IS NULL
-        WHERE r.ClienteId IS NULL;
+    EXEC('UPDATE r SET r.ClienteId = c.Id
+            FROM dbo.Reservas r
+            JOIN dbo.Clientes c ON c.Nombre = LTRIM(RTRIM(r.ClienteNombre)) AND c.Apellido IS NULL AND c.Dni IS NULL
+            WHERE r.ClienteId IS NULL;');
 
-    ALTER TABLE dbo.Reservas DROP COLUMN ClienteNombre;
+    EXEC('ALTER TABLE dbo.Reservas DROP COLUMN ClienteNombre;');
 END
 GO
 
@@ -150,6 +151,52 @@ BEGIN
     INSERT INTO dbo.Clientes (Nombre, Apellido, Dni, Email, Telefono) VALUES
         (N'Juan',  N'Perez', N'30111222', N'juan.perez@mail.com',  N'11-5555-1111'),
         (N'Maria', N'Gomez', N'28999333', N'maria.gomez@mail.com', N'11-5555-2222');
+END
+GO
+
+-- ===========================================================================
+-- Servicios (catalogo, Proceso 1) + ReservaServicio (M:N reserva <-> servicios)
+-- ===========================================================================
+IF OBJECT_ID('dbo.Servicios','U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Servicios (
+        Id          INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Servicios PRIMARY KEY,
+        Nombre      NVARCHAR(80)      NOT NULL,
+        Descripcion NVARCHAR(250)     NULL,
+        Precio      DECIMAL(12,2)     NOT NULL CONSTRAINT DF_Servicios_Precio DEFAULT 0,
+        Activo      BIT               NOT NULL CONSTRAINT DF_Servicios_Activo DEFAULT 1,
+        CreatedAt   DATETIME          NOT NULL CONSTRAINT DF_Servicios_CreatedAt DEFAULT GETDATE(),
+        CONSTRAINT UQ_Servicios_Nombre UNIQUE (Nombre)
+    );
+END
+GO
+
+-- Servicios contratados por reserva (precio congelado al momento de contratar).
+IF OBJECT_ID('dbo.ReservaServicio','U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ReservaServicio (
+        Id             INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_ReservaServicio PRIMARY KEY,
+        ReservaId      INT NOT NULL,
+        ServicioId     INT NOT NULL,
+        Cantidad       INT NOT NULL CONSTRAINT DF_ReservaServicio_Cantidad DEFAULT 1,
+        PrecioUnitario DECIMAL(12,2) NOT NULL CONSTRAINT DF_ReservaServicio_Precio DEFAULT 0,
+        CONSTRAINT FK_ReservaServicio_Reserva  FOREIGN KEY (ReservaId)  REFERENCES dbo.Reservas(Id),
+        CONSTRAINT FK_ReservaServicio_Servicio FOREIGN KEY (ServicioId) REFERENCES dbo.Servicios(Id)
+    );
+    CREATE INDEX IX_ReservaServicio_Reserva ON dbo.ReservaServicio(ReservaId);
+END
+GO
+
+-- Seed de servicios de ejemplo.
+IF NOT EXISTS (SELECT 1 FROM dbo.Servicios)
+BEGIN
+    INSERT INTO dbo.Servicios (Nombre, Descripcion, Precio) VALUES
+        (N'Catering por persona', N'Menu completo por invitado',        8500),
+        (N'Decoracion tematica',  N'Ambientacion del salon',           60000),
+        (N'DJ y sonido',          N'Servicio de musica y sonido',      90000),
+        (N'Fotografia y video',   N'Cobertura del evento',            120000),
+        (N'Barra de tragos',      N'Barra libre de bebidas',           75000),
+        (N'Servicio de mozos',    N'Personal de atencion (por mozo)',  25000);
 END
 GO
 
@@ -562,6 +609,21 @@ GO
         (N'ES', N'MSG_CLI_OK', N'Cliente guardado.'), (N'EN', N'MSG_CLI_OK', N'Client saved.'), (N'PT', N'MSG_CLI_OK', N'Cliente salvo.'),
         (N'ES', N'MSG_CLI_SELECCIONE', N'Seleccione un cliente.'), (N'EN', N'MSG_CLI_SELECCIONE', N'Select a client.'), (N'PT', N'MSG_CLI_SELECCIONE', N'Selecione um cliente.'),
         (N'ES', N'MSG_RES_SALON_OCUPADO', N'El salon ya esta reservado para esa fecha.'), (N'EN', N'MSG_RES_SALON_OCUPADO', N'The hall is already booked for that date.'), (N'PT', N'MSG_RES_SALON_OCUPADO', N'O salao ja esta reservado para essa data.'),
+        -- Servicios (Proceso 1)
+        (N'ES', N'MENU_SERVICIOS', N'Servicios'), (N'EN', N'MENU_SERVICIOS', N'Services'), (N'PT', N'MENU_SERVICIOS', N'Servicos'),
+        (N'ES', N'SRV_TITULO', N'Gestion de Servicios'), (N'EN', N'SRV_TITULO', N'Services Management'), (N'PT', N'SRV_TITULO', N'Gestao de Servicos'),
+        (N'ES', N'SRV_NUEVO', N'Nuevo servicio'), (N'EN', N'SRV_NUEVO', N'New service'), (N'PT', N'SRV_NUEVO', N'Novo servico'),
+        (N'ES', N'SRV_FORM_EDITAR', N'Editar servicio'), (N'EN', N'SRV_FORM_EDITAR', N'Edit service'), (N'PT', N'SRV_FORM_EDITAR', N'Editar servico'),
+        (N'ES', N'SRV_COUNT', N'servicios'), (N'EN', N'SRV_COUNT', N'services'), (N'PT', N'SRV_COUNT', N'servicos'),
+        (N'ES', N'COL_DESCRIPCION', N'Descripcion'), (N'EN', N'COL_DESCRIPCION', N'Description'), (N'PT', N'COL_DESCRIPCION', N'Descricao'),
+        (N'ES', N'COL_PRECIO', N'Precio'), (N'EN', N'COL_PRECIO', N'Price'), (N'PT', N'COL_PRECIO', N'Preco'),
+        (N'ES', N'COL_ACTIVO', N'Activo'), (N'EN', N'COL_ACTIVO', N'Active'), (N'PT', N'COL_ACTIVO', N'Ativo'),
+        (N'ES', N'COL_CANTIDAD', N'Cantidad'), (N'EN', N'COL_CANTIDAD', N'Qty'), (N'PT', N'COL_CANTIDAD', N'Qtd'),
+        (N'ES', N'COL_SUBTOTAL', N'Subtotal'), (N'EN', N'COL_SUBTOTAL', N'Subtotal'), (N'PT', N'COL_SUBTOTAL', N'Subtotal'),
+        (N'ES', N'MSG_SRV_NOMBRE', N'Ingrese el nombre del servicio.'), (N'EN', N'MSG_SRV_NOMBRE', N'Enter the service name.'), (N'PT', N'MSG_SRV_NOMBRE', N'Informe o nome do servico.'),
+        (N'ES', N'MSG_SRV_PRECIO', N'El precio no puede ser negativo.'), (N'EN', N'MSG_SRV_PRECIO', N'The price cannot be negative.'), (N'PT', N'MSG_SRV_PRECIO', N'O preco nao pode ser negativo.'),
+        (N'ES', N'MSG_SRV_DUP', N'Ya existe un servicio con ese nombre.'), (N'EN', N'MSG_SRV_DUP', N'A service with that name already exists.'), (N'PT', N'MSG_SRV_DUP', N'Ja existe um servico com esse nome.'),
+        (N'ES', N'MSG_SRV_OK', N'Servicio guardado.'), (N'EN', N'MSG_SRV_OK', N'Service saved.'), (N'PT', N'MSG_SRV_OK', N'Servico salvo.'),
         -- Auditoria unificada (tabs)
         (N'ES', N'AUD_TAB_BITACORA', N'Bitacora general'),            (N'EN', N'AUD_TAB_BITACORA', N'General audit log'),           (N'PT', N'AUD_TAB_BITACORA', N'Registro geral'),
         (N'ES', N'AUD_TAB_LOGIN', N'Auditoria de login'),             (N'EN', N'AUD_TAB_LOGIN', N'Login audit'),                    (N'PT', N'AUD_TAB_LOGIN', N'Auditoria de login')

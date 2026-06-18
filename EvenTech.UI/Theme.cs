@@ -91,6 +91,7 @@ namespace EvenTech.UI
         public static readonly string IcoCalendar = Glyph(0xE787);
         public static readonly string IcoPeople   = Glyph(0xE716);
         public static readonly string IcoContact  = Glyph(0xE77B); // Contact (clientes)
+        public static readonly string IcoServicio = Glyph(0xE719); // Shop (servicios)
         public static readonly string IcoGlobe    = Glyph(0xE774);
         public static readonly string IcoHistory  = Glyph(0xE81C);
         public static readonly string IcoLock     = Glyph(0xE72E);
