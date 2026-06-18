@@ -96,6 +96,7 @@ namespace EvenTech.UI
             _cboCriticidad.Items.Add(CriticidadBitacora.Advertencia);
             _cboCriticidad.Items.Add(CriticidadBitacora.Error);
             _cboCriticidad.SelectedIndex = 0;
+            Ui.DibujarEnum(_cboCriticidad, o => o is CriticidadBitacora cb ? Tr.Criticidad(cb) : o?.ToString());
 
             var fUsuario = Ui.Field("Usuario", _txtUsuario);
             fUsuario.Tag = "FIELD:COL_USUARIO";
@@ -219,6 +220,7 @@ namespace EvenTech.UI
                 int sel = _cboCriticidad.SelectedIndex;
                 _cboCriticidad.Items[0] = Tr.T("OPT_TODAS");
                 _cboCriticidad.SelectedIndex = sel;
+                _cboCriticidad.Invalidate();
             }
             if (_cboModulo.Items.Count > 0)
             {
@@ -226,6 +228,8 @@ namespace EvenTech.UI
                 _cboModulo.Items[0] = Tr.T("OPT_TODOS");
                 _cboModulo.SelectedIndex = sel;
             }
+            if (_grid.DataSource != null && _lblCount.Visible) _lblCount.Text = _grid.Rows.Count + " " + Tr.T("BIT_COUNT");
+            _grid.Invalidate(); // re-traduce los valores de criticidad en las celdas
         }
 
         // Recorre el arbol buscando paneles Ui.Field con Tag "FIELD:CLAVE" y traduce
@@ -290,7 +294,7 @@ namespace EvenTech.UI
             {
                 BLL_Bitacora.RegistrarExcepcion(ex, "Bitacora", "Buscar");
                 _lblCount.Visible = false;
-                _lblError.Text = "Error: " + ex.GetType().Name + " - " + ex.Message;
+                _lblError.Text = Tr.T("MSG_ERROR_PREFIJO") + ex.GetType().Name + " - " + ex.Message;
                 _lblError.Visible = true;
             }
         }
@@ -306,6 +310,8 @@ namespace EvenTech.UI
                 case "Advertencia": e.CellStyle.ForeColor = Theme.Warning; break;
                 case "Info":        e.CellStyle.ForeColor = Theme.Success; break;
             }
+            // Traduce el valor mostrado (el color se calculo arriba con el valor crudo).
+            if (e.Value is CriticidadBitacora cb) { e.Value = Tr.Criticidad(cb); e.FormattingApplied = true; }
         }
     }
 }

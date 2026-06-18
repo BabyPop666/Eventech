@@ -11,6 +11,12 @@ namespace EvenTech.UI
     {
         public static string T(string clave) => GestorDeIdioma.GetInstance.Traducir(clave);
 
+        // Traduccion de valores de enumeraciones mostrados al usuario (grillas/combos).
+        // La clave se arma por convencion PREFIJO_VALOR para no acoplar el enum a la UI.
+        public static string Estado(EvenTech.BE.EstadoReserva e) => T("EST_" + e.ToString());
+        public static string Criticidad(EvenTech.BE.CriticidadBitacora c) => T("CRIT_" + c.ToString().ToUpperInvariant());
+        public static string Accion(string codigo) => T("ACC_" + codigo);
+
         // Asigna el Text traducido a todos los controles cuyo Tag sea "T:CLAVE".
         public static void AplicarTags(Control root)
         {

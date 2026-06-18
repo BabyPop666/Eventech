@@ -211,7 +211,7 @@ namespace EvenTech.UI
             catch (Exception ex)
             {
                 BLL_Bitacora.RegistrarExcepcion(ex, "Perfiles", "Desbloquear usuario");
-                MensajeAsig("Error: " + ex.Message, error: true);
+                MensajeAsig(Tr.T("MSG_ERROR_PREFIJO") + ex.Message, error: true);
             }
         }
 
@@ -228,7 +228,7 @@ namespace EvenTech.UI
             catch (Exception ex)
             {
                 BLL_Bitacora.RegistrarExcepcion(ex, "Perfiles", "Construir arbol de permisos");
-                MostrarError("Error: " + ex.Message);
+                MostrarError(Tr.T("MSG_ERROR_PREFIJO") + ex.Message);
             }
         }
 
@@ -255,7 +255,7 @@ namespace EvenTech.UI
             catch (Exception ex)
             {
                 BLL_Bitacora.RegistrarExcepcion(ex, "Perfiles", "Cargar perfiles");
-                MostrarError("Error: " + ex.Message);
+                MostrarError(Tr.T("MSG_ERROR_PREFIJO") + ex.Message);
             }
         }
 
@@ -273,7 +273,7 @@ namespace EvenTech.UI
             {
                 _suppressAfterCheck = false;
                 BLL_Bitacora.RegistrarExcepcion(ex, "Perfiles", "Cargar asignaciones del perfil");
-                MostrarError("Error: " + ex.Message);
+                MostrarError(Tr.T("MSG_ERROR_PREFIJO") + ex.Message);
             }
         }
 
@@ -323,7 +323,7 @@ namespace EvenTech.UI
             catch (Exception ex)
             {
                 BLL_Bitacora.RegistrarExcepcion(ex, "Perfiles", "Guardar permisos");
-                MostrarError("Error: " + ex.Message);
+                MostrarError(Tr.T("MSG_ERROR_PREFIJO") + ex.Message);
             }
         }
 
@@ -385,7 +385,7 @@ namespace EvenTech.UI
             catch (Exception ex)
             {
                 BLL_Bitacora.RegistrarExcepcion(ex, "Perfiles", "Cargar usuarios");
-                MensajeAsig("Error: " + ex.Message, error: true);
+                MensajeAsig(Tr.T("MSG_ERROR_PREFIJO") + ex.Message, error: true);
             }
         }
 
@@ -405,7 +405,7 @@ namespace EvenTech.UI
             catch (Exception ex)
             {
                 BLL_Bitacora.RegistrarExcepcion(ex, "Perfiles", "Guardar asignaciones de usuarios");
-                MensajeAsig("Error: " + ex.Message, error: true);
+                MensajeAsig(Tr.T("MSG_ERROR_PREFIJO") + ex.Message, error: true);
             }
         }
 

@@ -249,7 +249,7 @@ namespace EvenTech.UI
                 _cboIdioma.ValueMember = "Id";
                 if (_cboIdioma.Items.Count > 0) _cboIdioma.SelectedIndex = 0;
             }
-            catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Idiomas", "Cargar idiomas"); Mensaje("Error: " + ex.Message, true); }
+            catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Idiomas", "Cargar idiomas"); Mensaje(Tr.T("MSG_ERROR_PREFIJO") + ex.Message, true); }
         }
 
         private void CargarTraducciones()
@@ -262,7 +262,7 @@ namespace EvenTech.UI
                 foreach (var kv in trads)
                     _grid.Rows.Add(kv.Key, kv.Value);
             }
-            catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Idiomas", "Cargar traducciones"); Mensaje("Error: " + ex.Message, true); }
+            catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Idiomas", "Cargar traducciones"); Mensaje(Tr.T("MSG_ERROR_PREFIJO") + ex.Message, true); }
         }
 
         private void CrearIdioma()
@@ -282,7 +282,7 @@ namespace EvenTech.UI
                 RefrescarSelectorPrincipal();
                 Mensaje(Tr.T("MSG_IDI_CREADO"), false);
             }
-            catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Idiomas", "Crear idioma"); Mensaje("Error: " + ex.Message, true); }
+            catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Idiomas", "Crear idioma"); Mensaje(Tr.T("MSG_ERROR_PREFIJO") + ex.Message, true); }
         }
 
         private void GuardarTraducciones()
@@ -308,7 +308,7 @@ namespace EvenTech.UI
                 GestorDeIdioma.GetInstance.CambiarIdioma(GestorDeIdioma.GetInstance.IdiomaActual);
                 Mensaje(Tr.T("MSG_IDI_GUARDADO"), false);
             }
-            catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Idiomas", "Guardar traducciones"); Mensaje("Error: " + ex.Message, true); }
+            catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Idiomas", "Guardar traducciones"); Mensaje(Tr.T("MSG_ERROR_PREFIJO") + ex.Message, true); }
         }
 
         private void RefrescarSelectorPrincipal()

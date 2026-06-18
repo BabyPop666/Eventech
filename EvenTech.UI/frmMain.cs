@@ -133,7 +133,7 @@ namespace EvenTech.UI
             };
             EnableDrag(_lblPageTitle);
 
-            _btnLogout = Ui.Primary("Cerrar sesión", Theme.IcoLogout);
+            _btnLogout = Ui.Primary(Tr.T("MENU_SALIR"), Theme.IcoLogout);
             _btnLogout.Size = new Size(150, 34);
             _btnLogout.Anchor = AnchorStyles.Left;
             _btnLogout.BehindColor = Theme.BgTitleBar;

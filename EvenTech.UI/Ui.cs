@@ -51,6 +51,26 @@ namespace EvenTech.UI
             FlatStyle = FlatStyle.Flat
         };
 
+        // Hace que un ComboBox dibuje cada item con texto traducido EN VIVO: como el
+        // texto se resuelve en cada repintado, al cambiar el idioma basta con un
+        // Invalidate() para refrescar (incluido el item seleccionado cerrado).
+        // textOf convierte el item (enum/wrapper/string) al texto a mostrar.
+        public static void DibujarEnum(ComboBox cbo, System.Func<object, string> textOf)
+        {
+            cbo.DrawMode = DrawMode.OwnerDrawFixed;
+            cbo.DrawItem += (s, e) =>
+            {
+                e.DrawBackground();
+                if (e.Index >= 0 && e.Index < cbo.Items.Count)
+                {
+                    string txt = textOf(cbo.Items[e.Index]) ?? string.Empty;
+                    TextRenderer.DrawText(e.Graphics, txt, cbo.Font, e.Bounds, e.ForeColor,
+                        TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+                }
+                e.DrawFocusRectangle();
+            };
+        }
+
         public static DateTimePicker DatePicker() => new DateTimePicker
         {
             Font = Theme.FontInput,

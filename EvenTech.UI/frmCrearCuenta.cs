@@ -27,7 +27,7 @@ namespace EvenTech.UI
 
         private void BuildUi()
         {
-            Text = "EvenTech - Crear cuenta";
+            Text = "EvenTech - " + Tr.T("CC_TITULO");
             ClientSize = new Size(420, 660); // misma altura que el login para cubrirlo por completo
             BackColor = Theme.BgLogin;
             KeyPreview = true;

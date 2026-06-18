@@ -91,7 +91,7 @@ namespace EvenTech.UI
             catch (Exception ex)
             {
                 BLL_Bitacora.RegistrarExcepcion(ex, "Perfiles", "Crear perfil (popup)");
-                _lblMsg.Text = "Error: " + ex.Message;
+                _lblMsg.Text = Tr.T("MSG_ERROR_PREFIJO") + ex.Message;
             }
         }
 
@@ -101,7 +101,7 @@ namespace EvenTech.UI
             {
                 case PerfilResult.NombreInvalido:  return T("MSG_PERF_NOM_INV", "Ingrese el nombre del perfil.");
                 case PerfilResult.NombreDuplicado: return T("MSG_PERF_DUP", "Ya existe un perfil con ese nombre.");
-                default:                           return "Error";
+                default:                           return Tr.T("MSG_ERROR");
             }
         }
 

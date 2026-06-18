@@ -129,7 +129,7 @@ namespace EvenTech.UI
             {
                 BLL_Bitacora.RegistrarExcepcion(ex, "HistorialReserva", "Cargar historial de cambios");
                 ActualizarEstadoVacio(true);
-                MessageBox.Show("No se pudo cargar el historial: " + ex.Message, "Error",
+                MessageBox.Show(Tr.T("MSG_ERROR_PREFIJO") + ex.Message, Tr.T("MSG_ERROR"),
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }

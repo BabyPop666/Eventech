@@ -105,7 +105,7 @@ namespace EvenTech.UI
             catch (Exception ex)
             {
                 BLL_Bitacora.RegistrarExcepcion(ex, "Clientes", "Crear cliente (popup)");
-                _lblMsg.Text = "Error: " + ex.Message;
+                _lblMsg.Text = Tr.T("MSG_ERROR_PREFIJO") + ex.Message;
             }
         }
 
@@ -116,7 +116,7 @@ namespace EvenTech.UI
                 case ClienteResult.NombreInvalido: return T("MSG_CLI_NOMBRE", "Ingrese el nombre del cliente.");
                 case ClienteResult.DniDuplicado:   return T("MSG_CLI_DNI_DUP", "Ya existe un cliente con ese DNI.");
                 case ClienteResult.EmailInvalido:  return T("MSG_CLI_EMAIL", "El email no es valido.");
-                default:                           return "Error";
+                default:                           return Tr.T("MSG_ERROR");
             }
         }
 
