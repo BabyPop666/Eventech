@@ -21,7 +21,7 @@ namespace EvenTech.UI
         private AppButton _btnLogout;
         private LangSelector _lang;
 
-        private SideMenuItem _itInicio, _itReservas, _itClientes, _itPerfiles, _itAuditoria;
+        private SideMenuItem _itInicio, _itReservas, _itClientes, _itServicios, _itPerfiles, _itAuditoria;
         private SideMenuItem _activo;
         private readonly List<SideMenuItem> _items = new List<SideMenuItem>();
 
@@ -91,14 +91,16 @@ namespace EvenTech.UI
             _itInicio    = new SideMenuItem(Theme.IcoHome,     "MENU_INICIO",    (s, e) => Navegar(_itInicio));
             _itReservas  = new SideMenuItem(Theme.IcoCalendar, "MENU_RESERVAS",  (s, e) => Navegar(_itReservas));
             _itClientes  = new SideMenuItem(Theme.IcoContact,  "MENU_CLIENTES",  (s, e) => Navegar(_itClientes));
+            _itServicios = new SideMenuItem(Theme.IcoServicio, "MENU_SERVICIOS", (s, e) => Navegar(_itServicios));
             _itPerfiles  = new SideMenuItem(Theme.IcoPeople,   "MENU_PERFILES",  (s, e) => Navegar(_itPerfiles));
             _itAuditoria = new SideMenuItem(Theme.IcoHistory,  "MENU_AUDITORIA", (s, e) => Navegar(_itAuditoria));
-            _items.AddRange(new[] { _itInicio, _itReservas, _itClientes, _itPerfiles, _itAuditoria });
+            _items.AddRange(new[] { _itInicio, _itReservas, _itClientes, _itServicios, _itPerfiles, _itAuditoria });
 
             // Dock=Top se apila en orden inverso al de agregado.
             // Idiomas salio del menu (se gestiona desde el globo del pie).
             pnlMenu.Controls.Add(_itAuditoria);
             pnlMenu.Controls.Add(_itPerfiles);
+            pnlMenu.Controls.Add(_itServicios);
             pnlMenu.Controls.Add(_itClientes);
             pnlMenu.Controls.Add(_itReservas);
             pnlMenu.Controls.Add(_itInicio);
@@ -202,6 +204,7 @@ namespace EvenTech.UI
             if (item == _itInicio)         vista = BuildInicio();
             else if (item == _itReservas)  vista = new ucReservas();
             else if (item == _itClientes)  vista = new ucClientes();
+            else if (item == _itServicios) vista = new ucServicios();
             else if (item == _itPerfiles)  vista = new ucPerfiles();
             else                           vista = new ucAuditoriaHub();
 
