@@ -16,10 +16,10 @@ namespace EvenTech.UI
     {
         private DataGridView _grid;
         private Label _lblCount, _lblError, _lblFormTitle;
-        private TextBox _txtCliente, _txtMonto;
-        private ComboBox _cboSalon, _cboEstado;
+        private TextBox _txtMonto;
+        private ComboBox _cboCliente, _cboSalon, _cboEstado;
         private DateTimePicker _dtFecha;
-        private AppButton _btnNuevo, _btnGuardar, _btnHistorial;
+        private AppButton _btnNuevo, _btnGuardar, _btnHistorial, _btnNuevoCliente;
 
         private int _editId; // 0 = alta, >0 = edicion
 
@@ -28,7 +28,7 @@ namespace EvenTech.UI
             BackColor = Theme.BgContent;
             BuildUi();
             ActualizarTextos();
-            Load += (s, e) => { CargarSalones(); LimpiarForm(); SafeLoadData(); GestorDeIdioma.GetInstance.Suscribir(this); };
+            Load += (s, e) => { CargarClientes(); CargarSalones(); LimpiarForm(); SafeLoadData(); GestorDeIdioma.GetInstance.Suscribir(this); };
             Disposed += (s, e) => GestorDeIdioma.GetInstance.Desuscribir(this);
         }
 
@@ -199,8 +199,21 @@ namespace EvenTech.UI
             for (int i = 0; i < 5; i++) fields.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             fields.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // empuja los campos hacia arriba
 
-            _txtCliente = Ui.Input();
-            var fldCliente = Ui.Field("Cliente", _txtCliente);
+            // Cliente: combo para elegir uno existente + boton de alta rapida.
+            _cboCliente = Ui.Combo();
+            _cboCliente.Dock = DockStyle.Fill;
+            _cboCliente.Margin = new Padding(0, 0, Theme.SpaceXs, 0);
+            _btnNuevoCliente = Ui.Secondary("", Theme.IcoAdd);
+            _btnNuevoCliente.Dock = DockStyle.Fill;
+            _btnNuevoCliente.Margin = new Padding(0);
+            _btnNuevoCliente.Click += (s, e) => NuevoCliente();
+            var clientePanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.Transparent, Margin = new Padding(0) };
+            clientePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            clientePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 36));
+            clientePanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            clientePanel.Controls.Add(_cboCliente, 0, 0);
+            clientePanel.Controls.Add(_btnNuevoCliente, 1, 0);
+            var fldCliente = Ui.Field("Cliente", clientePanel);
             ((Label)fldCliente.GetControlFromPosition(0, 0)).Tag = "T:COL_CLIENTE";
 
             _cboSalon = Ui.Combo();
@@ -313,6 +326,35 @@ namespace EvenTech.UI
             }
         }
 
+        private void CargarClientes()
+        {
+            try
+            {
+                _cboCliente.DataSource = BLL_Cliente.GetAll();
+                _cboCliente.DisplayMember = "NombreCompleto";
+                _cboCliente.ValueMember = "Id";
+                _cboCliente.SelectedIndex = _cboCliente.Items.Count > 0 ? 0 : -1;
+            }
+            catch (Exception ex)
+            {
+                BLL_Bitacora.RegistrarExcepcion(ex, "Reservas", "Cargar clientes");
+                ShowError("Error cargando clientes: " + ex.Message);
+            }
+        }
+
+        // Alta rapida de cliente desde la ficha (Proceso 1: "si es nuevo, registrarlo").
+        private void NuevoCliente()
+        {
+            using (var dlg = new frmNuevoCliente())
+            {
+                if (dlg.ShowDialog(FindForm()) == DialogResult.OK)
+                {
+                    CargarClientes();
+                    _cboCliente.SelectedValue = dlg.NuevoId;
+                }
+            }
+        }
+
         private void SafeLoadData()
         {
             try
@@ -339,7 +381,7 @@ namespace EvenTech.UI
         {
             _editId = r.Id;
             ActualizarTituloForm();
-            _txtCliente.Text = r.ClienteNombre;
+            _cboCliente.SelectedValue = r.ClienteId;
             _cboSalon.SelectedValue = r.SalonId;
             _dtFecha.Value = r.FechaEvento < _dtFecha.MinDate ? _dtFecha.MinDate : r.FechaEvento;
             _cboEstado.SelectedItem = r.Estado;
@@ -350,7 +392,7 @@ namespace EvenTech.UI
         {
             _editId = 0;
             ActualizarTituloForm();
-            _txtCliente.Text = "";
+            if (_cboCliente.Items.Count > 0) _cboCliente.SelectedIndex = 0;
             if (_cboSalon.Items.Count > 0) _cboSalon.SelectedIndex = 0;
             _dtFecha.Value = DateTime.Today;
             _cboEstado.SelectedItem = EstadoReserva.PENDIENTE;
@@ -371,7 +413,7 @@ namespace EvenTech.UI
             var reserva = new BE_Reserva
             {
                 Id = _editId,
-                ClienteNombre = _txtCliente.Text.Trim(),
+                ClienteId = _cboCliente.SelectedValue is int cid ? cid : 0,
                 SalonId = _cboSalon.SelectedValue is int sid ? sid : 0,
                 FechaEvento = _dtFecha.Value.Date,
                 Estado = _cboEstado.SelectedItem is EstadoReserva es ? es : EstadoReserva.PENDIENTE,
@@ -401,6 +443,7 @@ namespace EvenTech.UI
                 case ReservaResult.InvalidSalon:   return Tr.T("MSG_RES_SALON");
                 case ReservaResult.InvalidFecha:   return Tr.T("MSG_RES_FECHA");
                 case ReservaResult.InvalidMonto:   return Tr.T("MSG_RES_MONTO");
+                case ReservaResult.SalonOcupado:   return Tr.T("MSG_RES_SALON_OCUPADO");
                 case ReservaResult.NotFound:       return Tr.T("MSG_RES_NOTFOUND");
                 default:                           return Tr.T("MSG_RES_ERROR");
             }

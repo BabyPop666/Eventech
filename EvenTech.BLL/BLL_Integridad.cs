@@ -18,6 +18,16 @@ namespace EvenTech.BLL
     {
         private const string TablaReservas = "Reservas";
 
+        // Recalcula el DV horizontal de TODAS las reservas y luego el vertical.
+        // Util tras una migracion que cambia los campos que entran al DV (deja la
+        // linea base consistente para que la verificacion al arranque no falle).
+        public static void RecalcularTodo()
+        {
+            foreach (var r in DAL_Reserva.GetAll())
+                DAL_Reserva.UpdateDvh(r.Id, ValidadorDeIntegridad.CalcularDVH(r));
+            RecalcularDVVerticalReservas();
+        }
+
         // Recalcula el DV vertical de Reservas a partir de los DVH almacenados.
         // Se invoca tras cada alta/modificacion para mantener la linea base.
         public static void RecalcularDVVerticalReservas()
