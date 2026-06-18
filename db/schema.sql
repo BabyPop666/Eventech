@@ -676,6 +676,20 @@ GO
         (N'ES', N'MSG_PAGO_EXCEDE', N'El pago supera el saldo pendiente.'), (N'EN', N'MSG_PAGO_EXCEDE', N'The payment exceeds the pending balance.'), (N'PT', N'MSG_PAGO_EXCEDE', N'O pagamento excede o saldo pendente.'),
         (N'ES', N'MSG_PAGO_RESERVA', N'Reserva invalida.'), (N'EN', N'MSG_PAGO_RESERVA', N'Invalid reservation.'), (N'PT', N'MSG_PAGO_RESERVA', N'Reserva invalida.'),
         (N'ES', N'MSG_PAGO_GUARDAR_RESERVA', N'Guarde la reserva antes de registrar pagos.'), (N'EN', N'MSG_PAGO_GUARDAR_RESERVA', N'Save the reservation before adding payments.'), (N'PT', N'MSG_PAGO_GUARDAR_RESERVA', N'Salve a reserva antes de registrar pagamentos.'),
+        -- Comprobante / presupuesto (Proceso 1, paso 6)
+        (N'ES', N'RES_COMPROBANTE_BTN', N'Comprobante'), (N'EN', N'RES_COMPROBANTE_BTN', N'Receipt'), (N'PT', N'RES_COMPROBANTE_BTN', N'Comprovante'),
+        (N'ES', N'CMP_TITULO', N'Comprobante de Reserva'), (N'EN', N'CMP_TITULO', N'Reservation Receipt'), (N'PT', N'CMP_TITULO', N'Comprovante de Reserva'),
+        (N'ES', N'CMP_TAGLINE', N'GESTION DE EVENTOS'), (N'EN', N'CMP_TAGLINE', N'EVENT MANAGEMENT'), (N'PT', N'CMP_TAGLINE', N'GESTAO DE EVENTOS'),
+        (N'ES', N'CMP_DOC_NRO', N'Comprobante N'), (N'EN', N'CMP_DOC_NRO', N'Receipt No'), (N'PT', N'CMP_DOC_NRO', N'Comprovante N'),
+        (N'ES', N'CMP_EMITIDO', N'Emitido'), (N'EN', N'CMP_EMITIDO', N'Issued'), (N'PT', N'CMP_EMITIDO', N'Emitido'),
+        (N'ES', N'CMP_EVENTO', N'Evento'), (N'EN', N'CMP_EVENTO', N'Event'), (N'PT', N'CMP_EVENTO', N'Evento'),
+        (N'ES', N'CMP_DETALLE_SERVICIOS', N'Detalle de servicios'), (N'EN', N'CMP_DETALLE_SERVICIOS', N'Services detail'), (N'PT', N'CMP_DETALLE_SERVICIOS', N'Detalhe de servicos'),
+        (N'ES', N'CMP_SIN_SERVICIOS', N'Sin servicios contratados.'), (N'EN', N'CMP_SIN_SERVICIOS', N'No services added.'), (N'PT', N'CMP_SIN_SERVICIOS', N'Sem servicos contratados.'),
+        (N'ES', N'CMP_SIN_PAGOS', N'Sin pagos registrados.'), (N'EN', N'CMP_SIN_PAGOS', N'No payments recorded.'), (N'PT', N'CMP_SIN_PAGOS', N'Sem pagamentos registrados.'),
+        (N'ES', N'CMP_GRACIAS', N'Gracias por su reserva.'), (N'EN', N'CMP_GRACIAS', N'Thank you for your reservation.'), (N'PT', N'CMP_GRACIAS', N'Obrigado pela sua reserva.'),
+        (N'ES', N'CMP_EST_PAGADO', N'Pagado'), (N'EN', N'CMP_EST_PAGADO', N'Paid'), (N'PT', N'CMP_EST_PAGADO', N'Pago'),
+        (N'ES', N'CMP_EST_PARCIAL', N'Pago parcial'), (N'EN', N'CMP_EST_PARCIAL', N'Partially paid'), (N'PT', N'CMP_EST_PARCIAL', N'Pago parcial'),
+        (N'ES', N'CMP_EST_PENDIENTE', N'Pendiente'), (N'EN', N'CMP_EST_PENDIENTE', N'Pending'), (N'PT', N'CMP_EST_PENDIENTE', N'Pendente'),
         -- Auditoria unificada (tabs)
         (N'ES', N'AUD_TAB_BITACORA', N'Bitacora general'),            (N'EN', N'AUD_TAB_BITACORA', N'General audit log'),           (N'PT', N'AUD_TAB_BITACORA', N'Registro geral'),
         (N'ES', N'AUD_TAB_LOGIN', N'Auditoria de login'),             (N'EN', N'AUD_TAB_LOGIN', N'Login audit'),                    (N'PT', N'AUD_TAB_LOGIN', N'Auditoria de login')

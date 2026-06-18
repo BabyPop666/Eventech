@@ -19,7 +19,7 @@ namespace EvenTech.UI
         private TextBox _txtMonto;   // solo lectura: total = suma de los servicios contratados
         private ComboBox _cboCliente, _cboSalon, _cboEstado;
         private DateTimePicker _dtFecha;
-        private AppButton _btnNuevo, _btnGuardar, _btnHistorial, _btnNuevoCliente, _btnServicios, _btnPagos;
+        private AppButton _btnNuevo, _btnGuardar, _btnHistorial, _btnNuevoCliente, _btnServicios, _btnPagos, _btnComprobante;
         private List<BE_ReservaServicio> _serviciosReserva = new List<BE_ReservaServicio>();
 
         private int _editId; // 0 = alta, >0 = edicion
@@ -259,12 +259,13 @@ namespace EvenTech.UI
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 ColumnCount = 1,
-                RowCount = 2,
+                RowCount = 3,
                 BackColor = Color.Transparent,
                 Margin = new Padding(0, Theme.SpaceSm, 0, 0)
             };
             actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+            actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
             actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
 
             _btnGuardar = Ui.Primary("Guardar", Theme.IcoSave);
@@ -294,8 +295,15 @@ namespace EvenTech.UI
             secondary.Controls.Add(_btnHistorial, 0, 0);
             secondary.Controls.Add(_btnPagos, 1, 0);
 
+            _btnComprobante = Ui.Secondary("Comprobante", Theme.IcoDocumento);
+            _btnComprobante.Tag = "T:RES_COMPROBANTE_BTN";
+            _btnComprobante.Dock = DockStyle.Fill;
+            _btnComprobante.Margin = new Padding(0, Theme.SpaceSm, 0, 0);
+            _btnComprobante.Click += (s, e) => GenerarComprobante();
+
             actions.Controls.Add(_btnGuardar, 0, 0);
             actions.Controls.Add(secondary, 0, 1);
+            actions.Controls.Add(_btnComprobante, 0, 2);
 
             layout.Controls.Add(_lblFormTitle, 0, 0);
             layout.Controls.Add(fields, 0, 1);
@@ -460,6 +468,42 @@ namespace EvenTech.UI
             }
             using (var dlg = new frmReservaPagos(_editId, BLL_Pago.MontoReserva(_editId)))
                 dlg.ShowDialog(FindForm());
+        }
+
+        // Genera el comprobante/presupuesto HTML de la reserva, lo guarda donde el
+        // usuario elija y lo abre en el navegador para imprimir (Proceso 1, paso 6).
+        private void GenerarComprobante()
+        {
+            if (_editId == 0)
+            {
+                ShowError(Tr.T("MSG_PAGO_GUARDAR_RESERVA"));
+                return;
+            }
+            try
+            {
+                string html = ComprobanteService.GenerarHtml(_editId);
+                if (html == null) { ShowError(Tr.T("MSG_RES_NOTFOUND")); return; }
+
+                using (var dlg = new SaveFileDialog
+                {
+                    Title = Tr.T("RES_COMPROBANTE_BTN"),
+                    Filter = "HTML (*.html)|*.html",
+                    FileName = "Comprobante_Reserva_" + _editId + ".html",
+                    InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
+                })
+                {
+                    if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
+                    System.IO.File.WriteAllText(dlg.FileName, html, System.Text.Encoding.UTF8);
+                    BLL_Bitacora.Registrar("Reservas", "Comprobante generado", CriticidadBitacora.Info,
+                        "Comprobante de la reserva #" + _editId);
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dlg.FileName) { UseShellExecute = true });
+                }
+            }
+            catch (Exception ex)
+            {
+                BLL_Bitacora.RegistrarExcepcion(ex, "Reservas", "Generar comprobante");
+                ShowError(Tr.T("MSG_RES_ERROR"));
+            }
         }
 
         private void Guardar()
