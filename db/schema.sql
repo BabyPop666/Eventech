@@ -690,6 +690,14 @@ GO
         (N'ES', N'CMP_EST_PAGADO', N'Pagado'), (N'EN', N'CMP_EST_PAGADO', N'Paid'), (N'PT', N'CMP_EST_PAGADO', N'Pago'),
         (N'ES', N'CMP_EST_PARCIAL', N'Pago parcial'), (N'EN', N'CMP_EST_PARCIAL', N'Partially paid'), (N'PT', N'CMP_EST_PARCIAL', N'Pago parcial'),
         (N'ES', N'CMP_EST_PENDIENTE', N'Pendiente'), (N'EN', N'CMP_EST_PENDIENTE', N'Pending'), (N'PT', N'CMP_EST_PENDIENTE', N'Pendente'),
+        -- Envio del comprobante por email (Proceso 1, paso 7 - mailto)
+        (N'ES', N'RES_EMAIL_BTN', N'Email'), (N'EN', N'RES_EMAIL_BTN', N'Email'), (N'PT', N'RES_EMAIL_BTN', N'Email'),
+        (N'ES', N'EMAIL_ASUNTO', N'Comprobante de reserva'), (N'EN', N'EMAIL_ASUNTO', N'Reservation receipt'), (N'PT', N'EMAIL_ASUNTO', N'Comprovante de reserva'),
+        (N'ES', N'EMAIL_SALUDO', N'Hola {0},'), (N'EN', N'EMAIL_SALUDO', N'Hello {0},'), (N'PT', N'EMAIL_SALUDO', N'Ola {0},'),
+        (N'ES', N'EMAIL_INTRO', N'Le enviamos el comprobante de su reserva #{0}.'), (N'EN', N'EMAIL_INTRO', N'We are sending you the receipt for your reservation #{0}.'), (N'PT', N'EMAIL_INTRO', N'Enviamos o comprovante da sua reserva #{0}.'),
+        (N'ES', N'EMAIL_CIERRE', N'Adjuntamos el comprobante. Saludos, EvenTech.'), (N'EN', N'EMAIL_CIERRE', N'The receipt is attached. Regards, EvenTech.'), (N'PT', N'EMAIL_CIERRE', N'O comprovante esta anexado. Saudacoes, EvenTech.'),
+        (N'ES', N'MSG_EMAIL_SIN_CORREO', N'El cliente no tiene email cargado.'), (N'EN', N'MSG_EMAIL_SIN_CORREO', N'The client has no email on file.'), (N'PT', N'MSG_EMAIL_SIN_CORREO', N'O cliente nao tem email cadastrado.'),
+        (N'ES', N'MSG_EMAIL_ADJUNTAR', N'Se abrio tu correo con el mensaje listo. Adjunta el comprobante (abrimos su carpeta) y envialo.'), (N'EN', N'MSG_EMAIL_ADJUNTAR', N'Your email client opened with the message. Attach the receipt (we opened its folder) and send it.'), (N'PT', N'MSG_EMAIL_ADJUNTAR', N'Seu cliente de email abriu com a mensagem. Anexe o comprovante (abrimos a pasta) e envie.'),
         -- Auditoria unificada (tabs)
         (N'ES', N'AUD_TAB_BITACORA', N'Bitacora general'),            (N'EN', N'AUD_TAB_BITACORA', N'General audit log'),           (N'PT', N'AUD_TAB_BITACORA', N'Registro geral'),
         (N'ES', N'AUD_TAB_LOGIN', N'Auditoria de login'),             (N'EN', N'AUD_TAB_LOGIN', N'Login audit'),                    (N'PT', N'AUD_TAB_LOGIN', N'Auditoria de login')
