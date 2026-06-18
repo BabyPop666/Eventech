@@ -19,7 +19,7 @@ namespace EvenTech.UI
         private TextBox _txtMonto;   // solo lectura: total = suma de los servicios contratados
         private ComboBox _cboCliente, _cboSalon, _cboEstado;
         private DateTimePicker _dtFecha;
-        private AppButton _btnNuevo, _btnGuardar, _btnHistorial, _btnNuevoCliente, _btnServicios;
+        private AppButton _btnNuevo, _btnGuardar, _btnHistorial, _btnNuevoCliente, _btnServicios, _btnPagos;
         private List<BE_ReservaServicio> _serviciosReserva = new List<BE_ReservaServicio>();
 
         private int _editId; // 0 = alta, >0 = edicion
@@ -273,14 +273,29 @@ namespace EvenTech.UI
             _btnGuardar.Margin = new Padding(0, 0, 0, Theme.SpaceSm);
             _btnGuardar.Click += (s, e) => Guardar();
 
+            // Fila inferior: historial + pagos lado a lado.
+            var secondary = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.Transparent, Margin = new Padding(0) };
+            secondary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            secondary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            secondary.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
             _btnHistorial = Ui.Secondary("Ver historial de cambios");
             _btnHistorial.Tag = "T:RES_HISTORIAL";
             _btnHistorial.Dock = DockStyle.Fill;
-            _btnHistorial.Margin = new Padding(0);
+            _btnHistorial.Margin = new Padding(0, 0, Theme.SpaceXs, 0);
             _btnHistorial.Click += (s, e) => VerHistorial();
 
+            _btnPagos = Ui.Secondary("Pagos", Theme.IcoPago);
+            _btnPagos.Tag = "T:RES_PAGOS_BTN";
+            _btnPagos.Dock = DockStyle.Fill;
+            _btnPagos.Margin = new Padding(Theme.SpaceXs, 0, 0, 0);
+            _btnPagos.Click += (s, e) => EditarPagos();
+
+            secondary.Controls.Add(_btnHistorial, 0, 0);
+            secondary.Controls.Add(_btnPagos, 1, 0);
+
             actions.Controls.Add(_btnGuardar, 0, 0);
-            actions.Controls.Add(_btnHistorial, 0, 1);
+            actions.Controls.Add(secondary, 0, 1);
 
             layout.Controls.Add(_lblFormTitle, 0, 0);
             layout.Controls.Add(fields, 0, 1);
@@ -432,6 +447,19 @@ namespace EvenTech.UI
                     ActualizarMonto();
                 }
             }
+        }
+
+        // Abre el dialogo de pagos. Requiere una reserva guardada (los pagos se
+        // registran contra su Id y su Monto = total ya persistido).
+        private void EditarPagos()
+        {
+            if (_editId == 0)
+            {
+                ShowError(Tr.T("MSG_PAGO_GUARDAR_RESERVA"));
+                return;
+            }
+            using (var dlg = new frmReservaPagos(_editId, BLL_Pago.MontoReserva(_editId)))
+                dlg.ShowDialog(FindForm());
         }
 
         private void Guardar()
