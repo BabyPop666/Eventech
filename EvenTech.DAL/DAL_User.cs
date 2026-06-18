@@ -14,7 +14,7 @@ namespace EvenTech.DAL
             var list = new List<BE_User>();
             using (var cn = new DAL_DB_Connection())
             using (var cmd = new SqlCommand(
-                "SELECT Id, Username, PasswordHash, CreatedAt, PerfilId FROM dbo.Users ORDER BY Username",
+                "SELECT Id, Username, PasswordHash, CreatedAt, PerfilId, Activo, Blocked, FailedAttempts FROM dbo.Users ORDER BY Username",
                 cn.OpenConnection()))
             using (var r = cmd.ExecuteReader())
             {
@@ -25,7 +25,10 @@ namespace EvenTech.DAL
                         Username = r.GetString(1),
                         PasswordHash = r.GetString(2),
                         CreatedAt = r.GetDateTime(3),
-                        PerfilId = r.IsDBNull(4) ? (int?)null : r.GetInt32(4)
+                        PerfilId = r.IsDBNull(4) ? (int?)null : r.GetInt32(4),
+                        Activo = r.GetBoolean(5),
+                        Blocked = r.GetBoolean(6),
+                        FailedAttempts = r.GetInt32(7)
                     });
             }
             return list;
@@ -48,7 +51,7 @@ namespace EvenTech.DAL
             using (var cn = new DAL_DB_Connection())
             {
                 using (var cmd = new SqlCommand(
-                    "SELECT Id, Username, PasswordHash, CreatedAt, PerfilId FROM dbo.Users WHERE Username = @username",
+                    "SELECT Id, Username, PasswordHash, CreatedAt, PerfilId, Activo, Blocked, FailedAttempts FROM dbo.Users WHERE Username = @username",
                     cn.OpenConnection()))
                 {
                     cmd.Parameters.Add("@username", SqlDbType.NVarChar, 50).Value = username ?? string.Empty;
@@ -63,7 +66,10 @@ namespace EvenTech.DAL
                             Username = reader.GetString(1),
                             PasswordHash = reader.GetString(2),
                             CreatedAt = reader.GetDateTime(3),
-                            PerfilId = reader.IsDBNull(4) ? (int?)null : reader.GetInt32(4)
+                            PerfilId = reader.IsDBNull(4) ? (int?)null : reader.GetInt32(4),
+                            Activo = reader.GetBoolean(5),
+                            Blocked = reader.GetBoolean(6),
+                            FailedAttempts = reader.GetInt32(7)
                         };
                     }
                 }
@@ -96,6 +102,53 @@ namespace EvenTech.DAL
                     cmd.Parameters.Add("@passwordHash", SqlDbType.NVarChar, 64).Value = passwordHash;
                     cmd.ExecuteNonQuery();
                 }
+            }
+        }
+
+        // Suma 1 al contador de intentos fallidos y devuelve el nuevo total.
+        public static int IncrementFailedAttempts(string username)
+        {
+            using (var cn = new DAL_DB_Connection())
+            using (var cmd = new SqlCommand(
+                "UPDATE dbo.Users SET FailedAttempts = FailedAttempts + 1 WHERE Username = @u; " +
+                "SELECT FailedAttempts FROM dbo.Users WHERE Username = @u;",
+                cn.OpenConnection()))
+            {
+                cmd.Parameters.Add("@u", SqlDbType.NVarChar, 50).Value = username ?? string.Empty;
+                object o = cmd.ExecuteScalar();
+                return (o == null || o == DBNull.Value) ? 0 : (int)o;
+            }
+        }
+
+        public static void ResetFailedAttempts(string username)
+        {
+            using (var cn = new DAL_DB_Connection())
+            using (var cmd = new SqlCommand("UPDATE dbo.Users SET FailedAttempts = 0 WHERE Username = @u", cn.OpenConnection()))
+            {
+                cmd.Parameters.Add("@u", SqlDbType.NVarChar, 50).Value = username ?? string.Empty;
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        public static void SetBlocked(string username, bool blocked)
+        {
+            using (var cn = new DAL_DB_Connection())
+            using (var cmd = new SqlCommand("UPDATE dbo.Users SET Blocked = @b WHERE Username = @u", cn.OpenConnection()))
+            {
+                cmd.Parameters.Add("@b", SqlDbType.Bit).Value = blocked;
+                cmd.Parameters.Add("@u", SqlDbType.NVarChar, 50).Value = username ?? string.Empty;
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // Desbloqueo por admin: quita el bloqueo y resetea el contador de intentos.
+        public static void Desbloquear(int userId)
+        {
+            using (var cn = new DAL_DB_Connection())
+            using (var cmd = new SqlCommand("UPDATE dbo.Users SET Blocked = 0, FailedAttempts = 0 WHERE Id = @id", cn.OpenConnection()))
+            {
+                cmd.Parameters.Add("@id", SqlDbType.Int).Value = userId;
+                cmd.ExecuteNonQuery();
             }
         }
     }

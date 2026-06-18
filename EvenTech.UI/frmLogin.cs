@@ -200,10 +200,10 @@ namespace EvenTech.UI
             string hashed = Encrypt.HashValue(plain);
             _txtPass.Clear();
 
-            LoginResult result;
+            LoginResponse resp;
             try
             {
-                result = BLL_Login.Authenticate(username, hashed);
+                resp = BLL_Login.Authenticate(username, hashed);
             }
             catch (Exception ex)
             {
@@ -212,7 +212,7 @@ namespace EvenTech.UI
                 return;
             }
 
-            switch (result)
+            switch (resp.Result)
             {
                 case LoginResult.Success:
                     LoginPrefs.Save(_chkRemember.Checked, username);
@@ -228,7 +228,15 @@ namespace EvenTech.UI
                     SetError(T("LOGIN_ERR_USUARIO", "Usuario no encontrado."));
                     break;
                 case LoginResult.IncorrectPassword:
-                    SetError(T("LOGIN_ERR_PASS", "Contraseña incorrecta."));
+                    // Muestra el intento actual: "Contraseña incorrecta. Intento 2 de 3."
+                    SetError(T("LOGIN_ERR_PASS", "Contraseña incorrecta.") + " " +
+                             string.Format(T("LOGIN_INTENTOS", "Intento {0} de {1}."), resp.FailedAttempts, resp.MaxAttempts));
+                    break;
+                case LoginResult.UserBlocked:
+                    SetError(T("LOGIN_BLOQUEADA", "Cuenta bloqueada. Contactate con un administrador."));
+                    break;
+                case LoginResult.AccountInactive:
+                    SetError(T("LOGIN_INACTIVA", "La cuenta esta inactiva. Contactate con un administrador."));
                     break;
             }
         }

@@ -23,6 +23,17 @@ BEGIN
 END
 GO
 
+-- Estado de cuenta + control de intentos fallidos (RF01.3 / RF01.4). Idempotente.
+IF COL_LENGTH('dbo.Users','Activo') IS NULL
+    ALTER TABLE dbo.Users ADD Activo BIT NOT NULL CONSTRAINT DF_Users_Activo DEFAULT 1;
+GO
+IF COL_LENGTH('dbo.Users','Blocked') IS NULL
+    ALTER TABLE dbo.Users ADD Blocked BIT NOT NULL CONSTRAINT DF_Users_Blocked DEFAULT 0;
+GO
+IF COL_LENGTH('dbo.Users','FailedAttempts') IS NULL
+    ALTER TABLE dbo.Users ADD FailedAttempts INT NOT NULL CONSTRAINT DF_Users_FailedAttempts DEFAULT 0;
+GO
+
 -- Bitacora de logins / logouts. Se registra cada intento (exitoso o fallido).
 IF OBJECT_ID('dbo.LoginAuditLog','U') IS NULL
 BEGIN
@@ -468,6 +479,17 @@ GO
         (N'ES', N'MSG_PERF_NOM_INV', N'Ingrese el nombre del perfil.'),(N'EN', N'MSG_PERF_NOM_INV', N'Enter the profile name.'),     (N'PT', N'MSG_PERF_NOM_INV', N'Informe o nome do perfil.'),
         (N'ES', N'MSG_PERF_DUP', N'Ya existe un perfil con ese nombre.'), (N'EN', N'MSG_PERF_DUP', N'A profile with that name already exists.'), (N'PT', N'MSG_PERF_DUP', N'Ja existe um perfil com esse nome.'),
         (N'ES', N'MSG_PERF_CREADO', N'Perfil creado.'),               (N'EN', N'MSG_PERF_CREADO', N'Profile created.'),             (N'PT', N'MSG_PERF_CREADO', N'Perfil criado.'),
+        -- Login: bloqueo / estado / intentos
+        (N'ES', N'LOGIN_BLOQUEADA', N'Cuenta bloqueada. Contactate con un administrador.'), (N'EN', N'LOGIN_BLOQUEADA', N'Account blocked. Contact an administrator.'), (N'PT', N'LOGIN_BLOQUEADA', N'Conta bloqueada. Entre em contato com um administrador.'),
+        (N'ES', N'LOGIN_INACTIVA', N'La cuenta esta inactiva. Contactate con un administrador.'), (N'EN', N'LOGIN_INACTIVA', N'The account is inactive. Contact an administrator.'), (N'PT', N'LOGIN_INACTIVA', N'A conta esta inativa. Entre em contato com um administrador.'),
+        (N'ES', N'LOGIN_INTENTOS', N'Intento {0} de {1}.'), (N'EN', N'LOGIN_INTENTOS', N'Attempt {0} of {1}.'), (N'PT', N'LOGIN_INTENTOS', N'Tentativa {0} de {1}.'),
+        -- Estado de usuario (grilla de asignacion)
+        (N'ES', N'COL_ESTADO', N'Estado'), (N'EN', N'COL_ESTADO', N'Status'), (N'PT', N'COL_ESTADO', N'Estado'),
+        (N'ES', N'EST_ACTIVO', N'Activo'), (N'EN', N'EST_ACTIVO', N'Active'), (N'PT', N'EST_ACTIVO', N'Ativo'),
+        (N'ES', N'EST_BLOQUEADO', N'Bloqueado'), (N'EN', N'EST_BLOQUEADO', N'Blocked'), (N'PT', N'EST_BLOQUEADO', N'Bloqueado'),
+        (N'ES', N'EST_INACTIVO', N'Inactivo'), (N'EN', N'EST_INACTIVO', N'Inactive'), (N'PT', N'EST_INACTIVO', N'Inativo'),
+        (N'ES', N'PERF_DESBLOQUEAR', N'Desbloquear'), (N'EN', N'PERF_DESBLOQUEAR', N'Unblock'), (N'PT', N'PERF_DESBLOQUEAR', N'Desbloquear'),
+        (N'ES', N'MSG_PERF_DESBLOQ', N'Usuario desbloqueado.'), (N'EN', N'MSG_PERF_DESBLOQ', N'User unblocked.'), (N'PT', N'MSG_PERF_DESBLOQ', N'Usuario desbloqueado.'),
         -- Auditoria unificada (tabs)
         (N'ES', N'AUD_TAB_BITACORA', N'Bitacora general'),            (N'EN', N'AUD_TAB_BITACORA', N'General audit log'),           (N'PT', N'AUD_TAB_BITACORA', N'Registro geral'),
         (N'ES', N'AUD_TAB_LOGIN', N'Auditoria de login'),             (N'EN', N'AUD_TAB_LOGIN', N'Login audit'),                    (N'PT', N'AUD_TAB_LOGIN', N'Auditoria de login')
