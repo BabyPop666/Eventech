@@ -86,7 +86,7 @@ BEGIN
         ClienteNombre NVARCHAR(150)     NOT NULL,
         SalonId       INT               NOT NULL,
         FechaEvento   DATETIME          NOT NULL,
-        Estado        NVARCHAR(20)      NOT NULL CONSTRAINT DF_Reservas_Estado DEFAULT 'PENDIENTE',
+        Estado        NVARCHAR(20)      NOT NULL CONSTRAINT DF_Reservas_Estado DEFAULT 'COTIZACION',
         Monto         DECIMAL(12,2)     NOT NULL CONSTRAINT DF_Reservas_Monto DEFAULT 0,
         CreatedAt     DATETIME          NOT NULL CONSTRAINT DF_Reservas_CreatedAt DEFAULT GETDATE(),
         Dvh           NVARCHAR(64)      NULL,

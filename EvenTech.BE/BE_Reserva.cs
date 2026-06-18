@@ -5,8 +5,9 @@ namespace EvenTech.BE
 {
     public enum EstadoReserva
     {
-        PENDIENTE,
-        CONFIRMADA,
+        COTIZACION,   // presupuesto: no compromete el salon (puede haber varios por fecha)
+        PENDIENTE,    // reserva tentativa (p.ej. esperando senia): tampoco bloquea el salon
+        CONFIRMADA,   // reserva firme: bloquea el salon para esa fecha (anti-solapamiento)
         CANCELADA
     }
 

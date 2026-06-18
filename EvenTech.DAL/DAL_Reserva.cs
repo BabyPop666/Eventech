@@ -45,14 +45,15 @@ namespace EvenTech.DAL
             }
         }
 
-        // Anti-solapamiento: hay otra reserva NO cancelada para ese salon y fecha
-        // (excluyendo la propia reserva en edicion)?
+        // Anti-solapamiento: hay otra reserva CONFIRMADA para ese salon y fecha
+        // (excluyendo la propia reserva en edicion)? Las cotizaciones y reservas
+        // pendientes no comprometen el salon: solo una reserva firme lo bloquea.
         public static bool SalonOcupado(int salonId, DateTime fecha, int excluirId)
         {
             using (var cn = new DAL_DB_Connection())
             using (var cmd = new SqlCommand(
                 "SELECT COUNT(1) FROM dbo.Reservas " +
-                "WHERE SalonId = @s AND CAST(FechaEvento AS DATE) = @f AND Estado <> 'CANCELADA' AND Id <> @ex",
+                "WHERE SalonId = @s AND CAST(FechaEvento AS DATE) = @f AND Estado = 'CONFIRMADA' AND Id <> @ex",
                 cn.OpenConnection()))
             {
                 cmd.Parameters.Add("@s", SqlDbType.Int).Value = salonId;

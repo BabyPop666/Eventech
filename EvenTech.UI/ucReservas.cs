@@ -227,7 +227,7 @@ namespace EvenTech.UI
             ((Label)fldFecha.GetControlFromPosition(0, 0)).Tag = "T:RES_LBL_FECHA";
 
             _cboEstado = Ui.Combo();
-            _cboEstado.Items.AddRange(new object[] { EstadoReserva.PENDIENTE, EstadoReserva.CONFIRMADA, EstadoReserva.CANCELADA });
+            _cboEstado.Items.AddRange(new object[] { EstadoReserva.COTIZACION, EstadoReserva.PENDIENTE, EstadoReserva.CONFIRMADA, EstadoReserva.CANCELADA });
             var fldEstado = Ui.Field("Estado", _cboEstado);
             ((Label)fldEstado.GetControlFromPosition(0, 0)).Tag = "T:COL_ESTADO";
 
@@ -446,7 +446,7 @@ namespace EvenTech.UI
             if (_cboCliente.Items.Count > 0) _cboCliente.SelectedIndex = 0;
             if (_cboSalon.Items.Count > 0) _cboSalon.SelectedIndex = 0;
             _dtFecha.Value = DateTime.Today;
-            _cboEstado.SelectedItem = EstadoReserva.PENDIENTE;
+            _cboEstado.SelectedItem = EstadoReserva.COTIZACION;
             _serviciosReserva = new List<BE_ReservaServicio>();
             ActualizarMonto();
             _grid.ClearSelection();
@@ -589,7 +589,7 @@ namespace EvenTech.UI
                 ClienteId = _cboCliente.SelectedValue is int cid ? cid : 0,
                 SalonId = _cboSalon.SelectedValue is int sid ? sid : 0,
                 FechaEvento = _dtFecha.Value.Date,
-                Estado = _cboEstado.SelectedItem is EstadoReserva es ? es : EstadoReserva.PENDIENTE,
+                Estado = _cboEstado.SelectedItem is EstadoReserva es ? es : EstadoReserva.COTIZACION,
                 Monto = monto
             };
 

@@ -81,9 +81,11 @@ namespace EvenTech.BLL
             if (reserva.Monto < 0)
                 return ReservaResult.InvalidMonto;
 
-            // Anti-solapamiento: un salon no puede tener dos reservas activas el
-            // mismo dia (las canceladas no cuentan). Se excluye la propia reserva.
-            if (reserva.Estado != EstadoReserva.CANCELADA &&
+            // Anti-solapamiento: el salon se compromete solo al CONFIRMAR. Una
+            // cotizacion o una reserva pendiente no bloquean (puede haber varias
+            // para la misma fecha); recien al confirmar se verifica que no haya
+            // otra reserva firme ese dia. Se excluye la propia reserva.
+            if (reserva.Estado == EstadoReserva.CONFIRMADA &&
                 DAL_Reserva.SalonOcupado(reserva.SalonId, reserva.FechaEvento, reserva.Id))
                 return ReservaResult.SalonOcupado;
 
