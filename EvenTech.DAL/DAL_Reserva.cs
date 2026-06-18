@@ -8,10 +8,13 @@ namespace EvenTech.DAL
 {
     public static class DAL_Reserva
     {
-        // SELECT base con JOIN al salon para proyectar el nombre.
+        // SELECT base con JOIN a salon y cliente para proyectar sus nombres.
         private const string SelectBase =
-            "SELECT r.Id, r.ClienteNombre, r.SalonId, s.Nombre, r.FechaEvento, r.Estado, r.Monto, r.CreatedAt, r.Dvh " +
-            "FROM dbo.Reservas r INNER JOIN dbo.Salones s ON s.Id = r.SalonId ";
+            "SELECT r.Id, r.ClienteId, LTRIM(ISNULL(c.Nombre,'') + ISNULL(' ' + c.Apellido,'')) AS ClienteNombre, " +
+            "r.SalonId, s.Nombre, r.FechaEvento, r.Estado, r.Monto, r.CreatedAt, r.Dvh " +
+            "FROM dbo.Reservas r " +
+            "INNER JOIN dbo.Salones s ON s.Id = r.SalonId " +
+            "LEFT JOIN dbo.Clientes c ON c.Id = r.ClienteId ";
 
         public static List<BE_Reserva> GetAll()
         {
@@ -42,12 +45,29 @@ namespace EvenTech.DAL
             }
         }
 
+        // Anti-solapamiento: hay otra reserva NO cancelada para ese salon y fecha
+        // (excluyendo la propia reserva en edicion)?
+        public static bool SalonOcupado(int salonId, DateTime fecha, int excluirId)
+        {
+            using (var cn = new DAL_DB_Connection())
+            using (var cmd = new SqlCommand(
+                "SELECT COUNT(1) FROM dbo.Reservas " +
+                "WHERE SalonId = @s AND CAST(FechaEvento AS DATE) = @f AND Estado <> 'CANCELADA' AND Id <> @ex",
+                cn.OpenConnection()))
+            {
+                cmd.Parameters.Add("@s", SqlDbType.Int).Value = salonId;
+                cmd.Parameters.Add("@f", SqlDbType.Date).Value = fecha.Date;
+                cmd.Parameters.Add("@ex", SqlDbType.Int).Value = excluirId;
+                return (int)cmd.ExecuteScalar() > 0;
+            }
+        }
+
         public static int Insert(BE_Reserva reserva)
         {
             using (var cn = new DAL_DB_Connection())
             {
                 using (var cmd = new SqlCommand(
-                    "INSERT INTO dbo.Reservas (ClienteNombre, SalonId, FechaEvento, Estado, Monto, Dvh) " +
+                    "INSERT INTO dbo.Reservas (ClienteId, SalonId, FechaEvento, Estado, Monto, Dvh) " +
                     "OUTPUT INSERTED.Id " +
                     "VALUES (@cliente, @salon, @fecha, @estado, @monto, @dvh)",
                     cn.OpenConnection()))
@@ -63,7 +83,7 @@ namespace EvenTech.DAL
             using (var cn = new DAL_DB_Connection())
             {
                 using (var cmd = new SqlCommand(
-                    "UPDATE dbo.Reservas SET ClienteNombre = @cliente, SalonId = @salon, " +
+                    "UPDATE dbo.Reservas SET ClienteId = @cliente, SalonId = @salon, " +
                     "FechaEvento = @fecha, Estado = @estado, Monto = @monto, Dvh = @dvh WHERE Id = @id",
                     cn.OpenConnection()))
                 {
@@ -74,9 +94,21 @@ namespace EvenTech.DAL
             }
         }
 
+        // Actualiza solo el DV horizontal (usado al recalcular la linea base).
+        public static void UpdateDvh(int id, string dvh)
+        {
+            using (var cn = new DAL_DB_Connection())
+            using (var cmd = new SqlCommand("UPDATE dbo.Reservas SET Dvh = @dvh WHERE Id = @id", cn.OpenConnection()))
+            {
+                cmd.Parameters.Add("@dvh", SqlDbType.NVarChar, 64).Value = (object)dvh ?? DBNull.Value;
+                cmd.Parameters.Add("@id", SqlDbType.Int).Value = id;
+                cmd.ExecuteNonQuery();
+            }
+        }
+
         private static void BindEditable(SqlCommand cmd, BE_Reserva reserva)
         {
-            cmd.Parameters.Add("@cliente", SqlDbType.NVarChar, 150).Value = reserva.ClienteNombre ?? string.Empty;
+            cmd.Parameters.Add("@cliente", SqlDbType.Int).Value = reserva.ClienteId;
             cmd.Parameters.Add("@salon", SqlDbType.Int).Value = reserva.SalonId;
             cmd.Parameters.Add("@fecha", SqlDbType.DateTime).Value = reserva.FechaEvento;
             cmd.Parameters.Add("@estado", SqlDbType.NVarChar, 20).Value = reserva.Estado.ToString();
@@ -87,14 +119,15 @@ namespace EvenTech.DAL
         private static BE_Reserva Map(SqlDataReader r) => new BE_Reserva
         {
             Id = r.GetInt32(0),
-            ClienteNombre = r.GetString(1),
-            SalonId = r.GetInt32(2),
-            SalonNombre = r.GetString(3),
-            FechaEvento = r.GetDateTime(4),
-            Estado = (EstadoReserva)Enum.Parse(typeof(EstadoReserva), r.GetString(5)),
-            Monto = r.GetDecimal(6),
-            CreatedAt = r.GetDateTime(7),
-            Dvh = r.IsDBNull(8) ? null : r.GetString(8)
+            ClienteId = r.IsDBNull(1) ? 0 : r.GetInt32(1),
+            ClienteNombre = r.IsDBNull(2) ? string.Empty : r.GetString(2),
+            SalonId = r.GetInt32(3),
+            SalonNombre = r.GetString(4),
+            FechaEvento = r.GetDateTime(5),
+            Estado = (EstadoReserva)Enum.Parse(typeof(EstadoReserva), r.GetString(6)),
+            Monto = r.GetDecimal(7),
+            CreatedAt = r.GetDateTime(8),
+            Dvh = r.IsDBNull(9) ? null : r.GetString(9)
         };
     }
 }

@@ -98,6 +98,61 @@ BEGIN
 END
 GO
 
+-- ===========================================================================
+-- Clientes (Proceso 1) + normalizacion de Reservas (ClienteNombre -> ClienteId)
+-- ===========================================================================
+IF OBJECT_ID('dbo.Clientes','U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Clientes (
+        Id        INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Clientes PRIMARY KEY,
+        Nombre    NVARCHAR(60)      NOT NULL,
+        Apellido  NVARCHAR(60)      NULL,
+        Dni       NVARCHAR(20)      NULL,
+        Email     NVARCHAR(120)     NULL,
+        Telefono  NVARCHAR(30)      NULL,
+        CreatedAt DATETIME          NOT NULL CONSTRAINT DF_Clientes_CreatedAt DEFAULT GETDATE()
+    );
+    -- DNI unico solo cuando esta cargado (permite varios clientes sin DNI).
+    CREATE UNIQUE INDEX UX_Clientes_Dni ON dbo.Clientes(Dni) WHERE Dni IS NOT NULL;
+END
+GO
+
+-- Reservas.ClienteId (FK -> Clientes)
+IF COL_LENGTH('dbo.Reservas','ClienteId') IS NULL
+    ALTER TABLE dbo.Reservas ADD ClienteId INT NULL
+        CONSTRAINT FK_Reservas_Clientes FOREIGN KEY REFERENCES dbo.Clientes(Id);
+GO
+
+-- Migracion: crea un Cliente por cada ClienteNombre existente, enlaza la reserva
+-- y luego elimina la columna ClienteNombre (queda normalizado en Clientes / 3FN).
+IF COL_LENGTH('dbo.Reservas','ClienteNombre') IS NOT NULL
+BEGIN
+    INSERT INTO dbo.Clientes (Nombre)
+        SELECT DISTINCT LTRIM(RTRIM(r.ClienteNombre))
+        FROM dbo.Reservas r
+        WHERE r.ClienteNombre IS NOT NULL AND LTRIM(RTRIM(r.ClienteNombre)) <> ''
+          AND NOT EXISTS (
+              SELECT 1 FROM dbo.Clientes c
+              WHERE c.Nombre = LTRIM(RTRIM(r.ClienteNombre)) AND c.Apellido IS NULL AND c.Dni IS NULL);
+
+    UPDATE r SET r.ClienteId = c.Id
+        FROM dbo.Reservas r
+        JOIN dbo.Clientes c ON c.Nombre = LTRIM(RTRIM(r.ClienteNombre)) AND c.Apellido IS NULL AND c.Dni IS NULL
+        WHERE r.ClienteId IS NULL;
+
+    ALTER TABLE dbo.Reservas DROP COLUMN ClienteNombre;
+END
+GO
+
+-- Seed de clientes de ejemplo (solo si la tabla quedo vacia).
+IF NOT EXISTS (SELECT 1 FROM dbo.Clientes)
+BEGIN
+    INSERT INTO dbo.Clientes (Nombre, Apellido, Dni, Email, Telefono) VALUES
+        (N'Juan',  N'Perez', N'30111222', N'juan.perez@mail.com',  N'11-5555-1111'),
+        (N'Maria', N'Gomez', N'28999333', N'maria.gomez@mail.com', N'11-5555-2222');
+END
+GO
+
 -- Seed de salones de ejemplo para poder operar.
 IF NOT EXISTS (SELECT 1 FROM dbo.Salones)
 BEGIN
@@ -490,6 +545,23 @@ GO
         (N'ES', N'EST_INACTIVO', N'Inactivo'), (N'EN', N'EST_INACTIVO', N'Inactive'), (N'PT', N'EST_INACTIVO', N'Inativo'),
         (N'ES', N'PERF_DESBLOQUEAR', N'Desbloquear'), (N'EN', N'PERF_DESBLOQUEAR', N'Unblock'), (N'PT', N'PERF_DESBLOQUEAR', N'Desbloquear'),
         (N'ES', N'MSG_PERF_DESBLOQ', N'Usuario desbloqueado.'), (N'EN', N'MSG_PERF_DESBLOQ', N'User unblocked.'), (N'PT', N'MSG_PERF_DESBLOQ', N'Usuario desbloqueado.'),
+        -- Clientes (Proceso 1)
+        (N'ES', N'MENU_CLIENTES', N'Clientes'), (N'EN', N'MENU_CLIENTES', N'Clients'), (N'PT', N'MENU_CLIENTES', N'Clientes'),
+        (N'ES', N'CLI_TITULO', N'Gestion de Clientes'), (N'EN', N'CLI_TITULO', N'Clients Management'), (N'PT', N'CLI_TITULO', N'Gestao de Clientes'),
+        (N'ES', N'CLI_NUEVO', N'Nuevo cliente'), (N'EN', N'CLI_NUEVO', N'New client'), (N'PT', N'CLI_NUEVO', N'Novo cliente'),
+        (N'ES', N'CLI_FORM_EDITAR', N'Editar cliente'), (N'EN', N'CLI_FORM_EDITAR', N'Edit client'), (N'PT', N'CLI_FORM_EDITAR', N'Editar cliente'),
+        (N'ES', N'CLI_COUNT', N'clientes'), (N'EN', N'CLI_COUNT', N'clients'), (N'PT', N'CLI_COUNT', N'clientes'),
+        (N'ES', N'COL_NOMBRE', N'Nombre'), (N'EN', N'COL_NOMBRE', N'Name'), (N'PT', N'COL_NOMBRE', N'Nome'),
+        (N'ES', N'COL_APELLIDO', N'Apellido'), (N'EN', N'COL_APELLIDO', N'Last name'), (N'PT', N'COL_APELLIDO', N'Sobrenome'),
+        (N'ES', N'COL_DNI', N'DNI'), (N'EN', N'COL_DNI', N'ID'), (N'PT', N'COL_DNI', N'Documento'),
+        (N'ES', N'COL_EMAIL', N'Email'), (N'EN', N'COL_EMAIL', N'Email'), (N'PT', N'COL_EMAIL', N'Email'),
+        (N'ES', N'COL_TELEFONO', N'Telefono'), (N'EN', N'COL_TELEFONO', N'Phone'), (N'PT', N'COL_TELEFONO', N'Telefone'),
+        (N'ES', N'MSG_CLI_NOMBRE', N'Ingrese el nombre del cliente.'), (N'EN', N'MSG_CLI_NOMBRE', N'Enter the client name.'), (N'PT', N'MSG_CLI_NOMBRE', N'Informe o nome do cliente.'),
+        (N'ES', N'MSG_CLI_DNI_DUP', N'Ya existe un cliente con ese DNI.'), (N'EN', N'MSG_CLI_DNI_DUP', N'A client with that ID already exists.'), (N'PT', N'MSG_CLI_DNI_DUP', N'Ja existe um cliente com esse documento.'),
+        (N'ES', N'MSG_CLI_EMAIL', N'El email no es valido.'), (N'EN', N'MSG_CLI_EMAIL', N'The email is not valid.'), (N'PT', N'MSG_CLI_EMAIL', N'O email nao e valido.'),
+        (N'ES', N'MSG_CLI_OK', N'Cliente guardado.'), (N'EN', N'MSG_CLI_OK', N'Client saved.'), (N'PT', N'MSG_CLI_OK', N'Cliente salvo.'),
+        (N'ES', N'MSG_CLI_SELECCIONE', N'Seleccione un cliente.'), (N'EN', N'MSG_CLI_SELECCIONE', N'Select a client.'), (N'PT', N'MSG_CLI_SELECCIONE', N'Selecione um cliente.'),
+        (N'ES', N'MSG_RES_SALON_OCUPADO', N'El salon ya esta reservado para esa fecha.'), (N'EN', N'MSG_RES_SALON_OCUPADO', N'The hall is already booked for that date.'), (N'PT', N'MSG_RES_SALON_OCUPADO', N'O salao ja esta reservado para essa data.'),
         -- Auditoria unificada (tabs)
         (N'ES', N'AUD_TAB_BITACORA', N'Bitacora general'),            (N'EN', N'AUD_TAB_BITACORA', N'General audit log'),           (N'PT', N'AUD_TAB_BITACORA', N'Registro geral'),
         (N'ES', N'AUD_TAB_LOGIN', N'Auditoria de login'),             (N'EN', N'AUD_TAB_LOGIN', N'Login audit'),                    (N'PT', N'AUD_TAB_LOGIN', N'Auditoria de login')

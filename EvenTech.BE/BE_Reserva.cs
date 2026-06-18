@@ -17,9 +17,10 @@ namespace EvenTech.BE
     public class BE_Reserva : IVerificable
     {
         public int Id { get; set; }
-        public string ClienteNombre { get; set; }
+        public int ClienteId { get; set; }
+        public string ClienteNombre { get; set; }  // proyectado en lecturas (JOIN), no se persiste aca
         public int SalonId { get; set; }
-        public string SalonNombre { get; set; }   // proyectado en lecturas (JOIN), no se persiste aca
+        public string SalonNombre { get; set; }    // proyectado en lecturas (JOIN), no se persiste aca
         public DateTime FechaEvento { get; set; }
         public EstadoReserva Estado { get; set; }
         public decimal Monto { get; set; }
@@ -30,7 +31,7 @@ namespace EvenTech.BE
         // invariante evita que el formato de fecha/monto cambie el DV entre equipos.
         public string[] ObtenerCamposParaDV() => new[]
         {
-            ClienteNombre ?? string.Empty,
+            ClienteId.ToString(CultureInfo.InvariantCulture),
             SalonId.ToString(CultureInfo.InvariantCulture),
             FechaEvento.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             Estado.ToString(),

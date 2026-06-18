@@ -13,6 +13,7 @@ namespace EvenTech.BLL
         InvalidSalon,
         InvalidFecha,
         InvalidMonto,
+        SalonOcupado,   // ya hay otra reserva activa para ese salon y fecha
         NotFound
     }
 
@@ -27,7 +28,7 @@ namespace EvenTech.BLL
 
         // Campos auditados por el control de cambios (T06b).
         private static readonly string[] CamposAuditados =
-            { "ClienteNombre", "SalonId", "FechaEvento", "Estado", "Monto" };
+            { "ClienteId", "SalonId", "FechaEvento", "Estado", "Monto" };
 
         public static ReservaResult Crear(BE_Reserva reserva, out int nuevoId)
         {
@@ -41,7 +42,7 @@ namespace EvenTech.BLL
             BLL_Integridad.RecalcularDVVerticalReservas();
 
             BLL_Bitacora.Registrar("Reservas", "Alta de reserva", CriticidadBitacora.Info,
-                $"Reserva #{nuevoId} - cliente '{reserva.ClienteNombre}', monto {reserva.Monto:0.00}");
+                $"Reserva #{nuevoId} - cliente #{reserva.ClienteId}, monto {reserva.Monto:0.00}");
             return ReservaResult.Success;
         }
 
@@ -67,7 +68,7 @@ namespace EvenTech.BLL
 
         private static ReservaResult Validar(BE_Reserva reserva)
         {
-            if (reserva == null || string.IsNullOrWhiteSpace(reserva.ClienteNombre))
+            if (reserva == null || reserva.ClienteId <= 0 || !DAL_Cliente.Exists(reserva.ClienteId))
                 return ReservaResult.InvalidCliente;
 
             if (reserva.SalonId <= 0 || !DAL_Salon.Exists(reserva.SalonId))
@@ -79,6 +80,12 @@ namespace EvenTech.BLL
 
             if (reserva.Monto < 0)
                 return ReservaResult.InvalidMonto;
+
+            // Anti-solapamiento: un salon no puede tener dos reservas activas el
+            // mismo dia (las canceladas no cuentan). Se excluye la propia reserva.
+            if (reserva.Estado != EstadoReserva.CANCELADA &&
+                DAL_Reserva.SalonOcupado(reserva.SalonId, reserva.FechaEvento, reserva.Id))
+                return ReservaResult.SalonOcupado;
 
             return ReservaResult.Success;
         }
