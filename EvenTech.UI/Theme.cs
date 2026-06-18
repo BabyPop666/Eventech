@@ -109,5 +109,6 @@ namespace EvenTech.UI
         public static readonly string IcoUnlock   = Glyph(0xE785); // Unlock (desbloquear)
         public static readonly string IcoPago     = Glyph(0xE8C7); // PaymentCard (pagos)
         public static readonly string IcoDocumento = Glyph(0xE8A5); // Document (comprobante)
+        public static readonly string IcoEmail     = Glyph(0xE715); // Mail (enviar comprobante)
     }
 }

@@ -19,7 +19,7 @@ namespace EvenTech.UI
         private TextBox _txtMonto;   // solo lectura: total = suma de los servicios contratados
         private ComboBox _cboCliente, _cboSalon, _cboEstado;
         private DateTimePicker _dtFecha;
-        private AppButton _btnNuevo, _btnGuardar, _btnHistorial, _btnNuevoCliente, _btnServicios, _btnPagos, _btnComprobante;
+        private AppButton _btnNuevo, _btnGuardar, _btnHistorial, _btnNuevoCliente, _btnServicios, _btnPagos, _btnComprobante, _btnEmail;
         private List<BE_ReservaServicio> _serviciosReserva = new List<BE_ReservaServicio>();
 
         private int _editId; // 0 = alta, >0 = edicion
@@ -295,15 +295,30 @@ namespace EvenTech.UI
             secondary.Controls.Add(_btnHistorial, 0, 0);
             secondary.Controls.Add(_btnPagos, 1, 0);
 
+            // Fila documental: comprobante + email lado a lado.
+            var docRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.Transparent, Margin = new Padding(0, Theme.SpaceSm, 0, 0) };
+            docRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            docRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            docRow.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
             _btnComprobante = Ui.Secondary("Comprobante", Theme.IcoDocumento);
             _btnComprobante.Tag = "T:RES_COMPROBANTE_BTN";
             _btnComprobante.Dock = DockStyle.Fill;
-            _btnComprobante.Margin = new Padding(0, Theme.SpaceSm, 0, 0);
+            _btnComprobante.Margin = new Padding(0, 0, Theme.SpaceXs, 0);
             _btnComprobante.Click += (s, e) => GenerarComprobante();
+
+            _btnEmail = Ui.Secondary("Email", Theme.IcoEmail);
+            _btnEmail.Tag = "T:RES_EMAIL_BTN";
+            _btnEmail.Dock = DockStyle.Fill;
+            _btnEmail.Margin = new Padding(Theme.SpaceXs, 0, 0, 0);
+            _btnEmail.Click += (s, e) => EnviarEmail();
+
+            docRow.Controls.Add(_btnComprobante, 0, 0);
+            docRow.Controls.Add(_btnEmail, 1, 0);
 
             actions.Controls.Add(_btnGuardar, 0, 0);
             actions.Controls.Add(secondary, 0, 1);
-            actions.Controls.Add(_btnComprobante, 0, 2);
+            actions.Controls.Add(docRow, 0, 2);
 
             layout.Controls.Add(_lblFormTitle, 0, 0);
             layout.Controls.Add(fields, 0, 1);
@@ -502,6 +517,61 @@ namespace EvenTech.UI
             catch (Exception ex)
             {
                 BLL_Bitacora.RegistrarExcepcion(ex, "Reservas", "Generar comprobante");
+                ShowError(Tr.T("MSG_RES_ERROR"));
+            }
+        }
+
+        // Envia el comprobante por email (paso 7). Sin SMTP: genera y guarda el
+        // comprobante, abre el cliente de correo (mailto) con destinatario/asunto/
+        // cuerpo prellenados y abre la carpeta del archivo para adjuntarlo.
+        private void EnviarEmail()
+        {
+            if (_editId == 0)
+            {
+                ShowError(Tr.T("MSG_PAGO_GUARDAR_RESERVA"));
+                return;
+            }
+            var reserva = BLL_Reserva.GetById(_editId);
+            var cliente = reserva != null && reserva.ClienteId > 0 ? BLL_Cliente.GetById(reserva.ClienteId) : null;
+            if (cliente == null || string.IsNullOrWhiteSpace(cliente.Email))
+            {
+                ShowError(Tr.T("MSG_EMAIL_SIN_CORREO"));
+                return;
+            }
+            try
+            {
+                string html = ComprobanteService.GenerarHtml(_editId);
+                string path = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    "Comprobante_Reserva_" + _editId + ".html");
+                System.IO.File.WriteAllText(path, html, System.Text.Encoding.UTF8);
+
+                decimal total = reserva.Monto;
+                decimal saldo = BLL_Pago.Saldo(_editId);
+
+                var cuerpo = new System.Text.StringBuilder();
+                cuerpo.Append(string.Format(Tr.T("EMAIL_SALUDO"), cliente.NombreCompleto)).Append("\n\n");
+                cuerpo.Append(string.Format(Tr.T("EMAIL_INTRO"), _editId)).Append("\n\n");
+                cuerpo.Append(Tr.T("COL_SALON")).Append(": ").Append(reserva.SalonNombre).Append("\n");
+                cuerpo.Append(Tr.T("RES_LBL_FECHA")).Append(": ").Append(reserva.FechaEvento.ToString("yyyy-MM-dd")).Append("\n");
+                cuerpo.Append(Tr.T("LBL_TOTAL")).Append(": ").Append(total.ToString("N2")).Append("\n");
+                cuerpo.Append(Tr.T("LBL_SALDO")).Append(": ").Append(saldo.ToString("N2")).Append("\n\n");
+                cuerpo.Append(Tr.T("EMAIL_CIERRE"));
+
+                string mailto = "mailto:" + Uri.EscapeDataString(cliente.Email)
+                    + "?subject=" + Uri.EscapeDataString(Tr.T("EMAIL_ASUNTO") + " #" + _editId)
+                    + "&body=" + Uri.EscapeDataString(cuerpo.ToString());
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(mailto) { UseShellExecute = true });
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", "/select,\"" + path + "\"") { UseShellExecute = true });
+
+                BLL_Bitacora.Registrar("Reservas", "Comprobante enviado por email", CriticidadBitacora.Info,
+                    "Reserva #" + _editId + " -> " + cliente.Email);
+
+                MessageBox.Show(Tr.T("MSG_EMAIL_ADJUNTAR"), "EvenTech", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                BLL_Bitacora.RegistrarExcepcion(ex, "Reservas", "Enviar comprobante por email");
                 ShowError(Tr.T("MSG_RES_ERROR"));
             }
         }
