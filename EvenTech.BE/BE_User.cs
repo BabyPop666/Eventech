@@ -11,5 +11,10 @@ namespace EvenTech.BE
 
         // Perfil asignado (T04). NULL = sin perfil (acceso total / superusuario).
         public int? PerfilId { get; set; }
+
+        // Estado de cuenta y control de intentos fallidos (RF01.3 / RF01.4).
+        public bool Activo { get; set; } = true;
+        public bool Blocked { get; set; }
+        public int FailedAttempts { get; set; }
     }
 }

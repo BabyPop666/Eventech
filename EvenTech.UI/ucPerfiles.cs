@@ -159,9 +159,16 @@ namespace EvenTech.UI
             _gridUsuarios = new DataGridView { Dock = DockStyle.Fill };
             UiGrid.Style(_gridUsuarios, editable: true);
             _gridUsuarios.DataError += (s, e) => e.ThrowException = false; // valores de combo fuera de lista: ignorar
-            _gridUsuarios.Columns.Add(new DataGridViewTextBoxColumn { Name = "cUsuario", HeaderText = "Usuario", FillWeight = 50, ReadOnly = true });
-            var colPerfil = new DataGridViewComboBoxColumn { Name = "cPerfil", HeaderText = "Perfil", FillWeight = 50, FlatStyle = FlatStyle.Flat, DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton };
+            _gridUsuarios.Columns.Add(new DataGridViewTextBoxColumn { Name = "cUsuario", HeaderText = "Usuario", FillWeight = 30, ReadOnly = true });
+            var colPerfil = new DataGridViewComboBoxColumn { Name = "cPerfil", HeaderText = "Perfil", FillWeight = 33, FlatStyle = FlatStyle.Flat, DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton };
             _gridUsuarios.Columns.Add(colPerfil);
+            _gridUsuarios.Columns.Add(new DataGridViewTextBoxColumn { Name = "cEstado", HeaderText = "Estado", FillWeight = 25, ReadOnly = true });
+            // Boton-icono (candado abierto) para desbloquear: compacto + tooltip.
+            var colDesbloq = new DataGridViewButtonColumn { Name = "cDesbloq", HeaderText = "", FillWeight = 12, FlatStyle = FlatStyle.Flat, UseColumnTextForButtonValue = false, ToolTipText = "Desbloquear" };
+            colDesbloq.DefaultCellStyle.Font = new Font("Segoe MDL2 Assets", 10F);
+            colDesbloq.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            _gridUsuarios.Columns.Add(colDesbloq);
+            _gridUsuarios.CellContentClick += GridUsuarios_CellContentClick;
 
             var acciones = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, BackColor = Color.Transparent, Margin = new Padding(0, Theme.SpaceSm, 0, 0) };
             _btnGuardarAsig = Ui.Primary("Guardar asignaciones", Theme.IcoSave);
@@ -180,10 +187,31 @@ namespace EvenTech.UI
         public void ActualizarTextos()
         {
             Tr.AplicarTags(this);
-            if (_gridUsuarios != null && _gridUsuarios.Columns.Count >= 2)
+            if (_gridUsuarios != null && _gridUsuarios.Columns.Count >= 4)
             {
                 _gridUsuarios.Columns["cUsuario"].HeaderText = Tr.T("COL_USUARIO");
                 _gridUsuarios.Columns["cPerfil"].HeaderText  = Tr.T("COL_PERFIL");
+                _gridUsuarios.Columns["cEstado"].HeaderText  = Tr.T("COL_ESTADO");
+                _gridUsuarios.Columns["cDesbloq"].ToolTipText = Tr.T("PERF_DESBLOQUEAR");
+            }
+        }
+
+        // Desbloqueo de la cuenta de un usuario (boton de la grilla).
+        private void GridUsuarios_CellContentClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (_gridUsuarios.Columns[e.ColumnIndex].Name != "cDesbloq") return;
+            if (!(_gridUsuarios.Rows[e.RowIndex].Tag is BE_User u) || !u.Blocked) return;
+            try
+            {
+                BLL_User.Desbloquear(u.Id);
+                CargarUsuarios();
+                MensajeAsig(Tr.T("MSG_PERF_DESBLOQ"), error: false);
+            }
+            catch (Exception ex)
+            {
+                BLL_Bitacora.RegistrarExcepcion(ex, "Perfiles", "Desbloquear usuario");
+                MensajeAsig("Error: " + ex.Message, error: true);
             }
         }
 
@@ -345,8 +373,13 @@ namespace EvenTech.UI
                 {
                     int idx = _gridUsuarios.Rows.Add(u.Username);
                     var row = _gridUsuarios.Rows[idx];
-                    row.Tag = u.Id;
+                    row.Tag = u;
                     row.Cells["cPerfil"].Value = u.PerfilId ?? 0;
+                    row.Cells["cEstado"].Value = u.Blocked ? Tr.T("EST_BLOQUEADO")
+                                               : (u.Activo ? Tr.T("EST_ACTIVO") : Tr.T("EST_INACTIVO"));
+                    // Icono de candado (desbloquear) solo para cuentas bloqueadas.
+                    row.Cells["cDesbloq"].Value = u.Blocked ? Theme.IcoUnlock : "";
+                    if (u.Blocked) row.Cells["cEstado"].Style.ForeColor = Theme.Error;
                 }
             }
             catch (Exception ex)
@@ -363,9 +396,9 @@ namespace EvenTech.UI
                 _gridUsuarios.EndEdit();
                 foreach (DataGridViewRow row in _gridUsuarios.Rows)
                 {
-                    if (!(row.Tag is int userId)) continue;
+                    if (!(row.Tag is BE_User u)) continue;
                     int val = row.Cells["cPerfil"].Value is int v ? v : 0;
-                    BLL_User.AsignarPerfil(userId, val == 0 ? (int?)null : val);
+                    BLL_User.AsignarPerfil(u.Id, val == 0 ? (int?)null : val);
                 }
                 MensajeAsig(Tr.T("MSG_PERF_ASIG_OK"), error: false);
             }

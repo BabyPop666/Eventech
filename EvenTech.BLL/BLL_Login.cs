@@ -11,31 +11,83 @@ namespace EvenTech.BLL
     {
         Success,
         UserNotFound,
-        IncorrectPassword
+        IncorrectPassword,
+        UserBlocked,        // cuenta bloqueada por intentos fallidos (RF01.3)
+        AccountInactive     // cuenta dada de baja / inactiva (RF01.4)
+    }
+
+    // Resultado del login con info para que la UI muestre los intentos restantes.
+    public class LoginResponse
+    {
+        public LoginResult Result { get; set; }
+        public int FailedAttempts { get; set; }
+        public int MaxAttempts { get; set; } = BLL_Login.MaxIntentos;
+        public override string ToString() => Result.ToString();
     }
 
     // Autenticacion. El password llega ya hasheado desde la UI: el plain text
-    // nunca viaja a la BLL ni a la DB.
+    // nunca viaja a la BLL ni a la DB. Controla estado de cuenta e intentos
+    // fallidos: tras MaxIntentos fallos la cuenta queda bloqueada (RF01.3/RF01.4).
     public static class BLL_Login
     {
-        public static LoginResult Authenticate(string username, string hashedPassword)
-        {
-            BE_User user = DAL_User.GetByUsername(username);
+        public const int MaxIntentos = 3;
 
+        public static LoginResponse Authenticate(string username, string hashedPassword)
+        {
+            var resp = new LoginResponse { MaxAttempts = MaxIntentos };
+
+            BE_User user = DAL_User.GetByUsername(username);
             if (user == null)
             {
                 BLL_LoginAudit.Register(username, LoginAuditAction.LOGIN_FAIL, "Usuario inexistente");
-                return LoginResult.UserNotFound;
+                resp.Result = LoginResult.UserNotFound;
+                return resp;
             }
 
+            // RF01.4 - estado de cuenta
+            if (!user.Activo)
+            {
+                BLL_LoginAudit.Register(username, LoginAuditAction.LOGIN_FAIL, "Cuenta inactiva");
+                resp.Result = LoginResult.AccountInactive;
+                resp.FailedAttempts = user.FailedAttempts;
+                return resp;
+            }
+
+            // RF01.3 - cuenta ya bloqueada (o que llego al maximo sin marcarse)
+            if (user.Blocked || user.FailedAttempts >= MaxIntentos)
+            {
+                if (!user.Blocked) DAL_User.SetBlocked(username, true);
+                BLL_LoginAudit.Register(username, LoginAuditAction.LOGIN_FAIL, "Intento sobre cuenta bloqueada");
+                resp.Result = LoginResult.UserBlocked;
+                resp.FailedAttempts = Math.Max(user.FailedAttempts, MaxIntentos);
+                return resp;
+            }
+
+            // RF01.2 - verificacion segura de contrasena
             if (!AuthenticationService.CompareHashedPasswords(hashedPassword, user.PasswordHash))
             {
-                BLL_LoginAudit.Register(username, LoginAuditAction.LOGIN_FAIL, "Password incorrecto");
-                return LoginResult.IncorrectPassword;
+                int intentos = DAL_User.IncrementFailedAttempts(username);
+                resp.FailedAttempts = intentos;
+
+                if (intentos >= MaxIntentos)
+                {
+                    DAL_User.SetBlocked(username, true);
+                    BLL_LoginAudit.Register(username, LoginAuditAction.LOGIN_FAIL,
+                        $"Password incorrecto - cuenta bloqueada ({intentos}/{MaxIntentos})");
+                    resp.Result = LoginResult.UserBlocked;
+                    return resp;
+                }
+
+                BLL_LoginAudit.Register(username, LoginAuditAction.LOGIN_FAIL,
+                    $"Password incorrecto (intento {intentos}/{MaxIntentos})");
+                resp.Result = LoginResult.IncorrectPassword;
+                return resp;
             }
 
-            // Cargar permisos efectivos del perfil (Composite) hacia la sesion.
-            // Sin perfil => SIN acceso (la UI lo bloquea y pide contactar al admin).
+            // Credenciales OK: resetear intentos y abrir sesion.
+            DAL_User.ResetFailedAttempts(username);
+
+            // Permisos efectivos del perfil (Composite) hacia la sesion.
             HashSet<string> permisos = null;
             bool sinPerfil = !user.PerfilId.HasValue;
             bool accesoTotal = false;
@@ -51,8 +103,6 @@ namespace EvenTech.BLL
                 }
                 catch (Exception ex)
                 {
-                    // Fallo al cargar permisos de un perfil real: no lo bloqueamos
-                    // (acceso total) para no dejar afuera a un admin por error transitorio.
                     accesoTotal = true;
                     BLL_Bitacora.RegistrarExcepcion(ex, "Login", "Carga de permisos del perfil");
                 }
@@ -60,7 +110,8 @@ namespace EvenTech.BLL
 
             SessionManager.Login(user, permisos, accesoTotal, sinPerfil);
             BLL_LoginAudit.Register(username, LoginAuditAction.LOGIN_OK, "Ingreso correcto");
-            return LoginResult.Success;
+            resp.Result = LoginResult.Success;
+            return resp;
         }
 
         public static void Logout()

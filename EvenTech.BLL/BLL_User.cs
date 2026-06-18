@@ -46,5 +46,14 @@ namespace EvenTech.BLL
             BLL_Bitacora.Registrar("Perfiles", "Asignacion de perfil", CriticidadBitacora.Info,
                 $"Usuario #{userId} -> perfil {(perfilId.HasValue ? "#" + perfilId.Value : "(ninguno)")}");
         }
+
+        // Desbloqueo de cuenta por un administrador (RF01.3): quita el bloqueo y
+        // resetea el contador de intentos fallidos.
+        public static void Desbloquear(int userId)
+        {
+            DAL_User.Desbloquear(userId);
+            BLL_Bitacora.Registrar("Usuarios", "Desbloqueo de cuenta", CriticidadBitacora.Info,
+                $"Usuario #{userId} desbloqueado");
+        }
     }
 }
