@@ -197,13 +197,14 @@ namespace EvenTech.UI
                 return;
             }
 
-            string hashed = Encrypt.HashValue(plain);
             _txtPass.Clear();
 
             LoginResponse resp;
             try
             {
-                resp = BLL_Login.Authenticate(username, hashed);
+                // La contrasena en claro se verifica en la BLL contra el hash salteado
+                // (PBKDF2) usando el salt de la base; no se persiste ni se reutiliza.
+                resp = BLL_Login.Authenticate(username, plain);
             }
             catch (Exception ex)
             {
@@ -218,14 +219,19 @@ namespace EvenTech.UI
                     LoginPrefs.Save(_chkRemember.Checked, username);
                     Hide();
                     using (var main = new frmMain()) main.ShowDialog();
-                    _txtUser.Clear();
+                    // Al volver del logout respeta "Recordar cuenta": repuebla el
+                    // usuario guardado en vez de dejar el campo siempre vacio.
+                    LoginPrefs.Load();
+                    _txtUser.Text = LoginPrefs.Remember ? LoginPrefs.Username : string.Empty;
                     _txtPass.Clear();
                     _lblStatus.Text = "";
                     _txtUser.Focus();
                     Show();
                     break;
                 case LoginResult.UserNotFound:
-                    SetError(T("LOGIN_ERR_USUARIO", "Usuario no encontrado."));
+                    // Mensaje generico (no revela si el usuario existe): mitiga la
+                    // enumeracion de cuentas. El detalle real queda en la auditoria.
+                    SetError(T("LOGIN_ERR_CREDENCIALES", "Usuario o contraseña incorrectos."));
                     break;
                 case LoginResult.IncorrectPassword:
                     // Muestra el intento actual: "Contraseña incorrecta. Intento 2 de 3."

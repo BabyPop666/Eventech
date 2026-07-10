@@ -99,19 +99,32 @@ namespace EvenTech.DAL
                     cn.OpenConnection()))
                 {
                     cmd.Parameters.Add("@username", SqlDbType.NVarChar, 50).Value = username;
-                    cmd.Parameters.Add("@passwordHash", SqlDbType.NVarChar, 64).Value = passwordHash;
+                    cmd.Parameters.Add("@passwordHash", SqlDbType.NVarChar, 200).Value = passwordHash;
                     cmd.ExecuteNonQuery();
                 }
             }
         }
 
-        // Suma 1 al contador de intentos fallidos y devuelve el nuevo total.
+        // Reescribe el hash de un usuario (migracion de SHA-256 legacy a PBKDF2).
+        public static void UpdatePasswordHash(string username, string newHash)
+        {
+            using (var cn = new DAL_DB_Connection())
+            using (var cmd = new SqlCommand("UPDATE dbo.Users SET PasswordHash = @h WHERE Username = @u", cn.OpenConnection()))
+            {
+                cmd.Parameters.Add("@h", SqlDbType.NVarChar, 200).Value = newHash ?? string.Empty;
+                cmd.Parameters.Add("@u", SqlDbType.NVarChar, 50).Value = username ?? string.Empty;
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // Suma 1 al contador de intentos fallidos y devuelve el nuevo total en el
+        // mismo statement atomico (OUTPUT), sin ventana de carrera entre UPDATE y SELECT.
         public static int IncrementFailedAttempts(string username)
         {
             using (var cn = new DAL_DB_Connection())
             using (var cmd = new SqlCommand(
-                "UPDATE dbo.Users SET FailedAttempts = FailedAttempts + 1 WHERE Username = @u; " +
-                "SELECT FailedAttempts FROM dbo.Users WHERE Username = @u;",
+                "UPDATE dbo.Users SET FailedAttempts = FailedAttempts + 1 " +
+                "OUTPUT INSERTED.FailedAttempts WHERE Username = @u;",
                 cn.OpenConnection()))
             {
                 cmd.Parameters.Add("@u", SqlDbType.NVarChar, 50).Value = username ?? string.Empty;

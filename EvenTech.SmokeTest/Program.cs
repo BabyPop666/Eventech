@@ -5,29 +5,29 @@ Console.WriteLine("== EvenTech smoke test v2 ==");
 
 // [1] Login OK
 Console.WriteLine("[1] Login admin/admin123:");
-var r1 = BLL_Login.Authenticate("admin", Encrypt.HashValue("admin123"));
+var r1 = BLL_Login.Authenticate("admin", "admin123");
 Console.WriteLine($"  result={r1}, sesionActiva={SessionManager.IsSessionActive}");
 BLL_Login.Logout();
 
 // [2] Crear usuario nuevo (con timestamp para que sea unico entre corridas)
 string newUser = "smoke_" + DateTime.Now.ToString("HHmmss");
 Console.WriteLine($"[2] Crear usuario '{newUser}' password 'pass1234':");
-var rc1 = BLL_User.CreateUser(newUser, Encrypt.HashValue("pass1234"));
+var rc1 = BLL_User.CreateUser(newUser, "pass1234");
 Console.WriteLine($"  result={rc1}");
 
 // [3] Crear duplicado
 Console.WriteLine($"[3] Crear '{newUser}' duplicado:");
-var rc2 = BLL_User.CreateUser(newUser, Encrypt.HashValue("otra"));
+var rc2 = BLL_User.CreateUser(newUser, "otra1234");
 Console.WriteLine($"  result={rc2}");
 
 // [4] Username invalido
 Console.WriteLine("[4] Crear con username '..' (invalido):");
-var rc3 = BLL_User.CreateUser("..", Encrypt.HashValue("xxxx"));
+var rc3 = BLL_User.CreateUser("..", "xxxx1234");
 Console.WriteLine($"  result={rc3}");
 
 // [5] Login con el usuario recien creado
 Console.WriteLine($"[5] Login con '{newUser}':");
-var r5 = BLL_Login.Authenticate(newUser, Encrypt.HashValue("pass1234"));
+var r5 = BLL_Login.Authenticate(newUser, "pass1234");
 Console.WriteLine($"  result={r5}");
 BLL_Login.Logout();
 
@@ -41,15 +41,16 @@ foreach (var e in BLL_LoginAudit.GetAll(5))
 // [7] Reservas: alta valida
 Console.WriteLine("[7] Crear reserva valida:");
 var salones = BLL_Salon.GetAll();
-if (salones.Count == 0)
+var clientes = BLL_Cliente.GetAll();
+if (salones.Count == 0 || clientes.Count == 0)
 {
-    Console.WriteLine("  (no hay salones seed; corre db/schema.sql)");
+    Console.WriteLine("  (faltan salones/clientes seed; corre db/schema.sql)");
 }
 else
 {
     var nueva = new EvenTech.BE.BE_Reserva
     {
-        ClienteNombre = "Cliente " + DateTime.Now.ToString("HHmmss"),
+        ClienteId = clientes[0].Id,
         SalonId = salones[0].Id,
         FechaEvento = DateTime.Today.AddDays(30),
         Estado = EvenTech.BE.EstadoReserva.PENDIENTE,
@@ -62,7 +63,7 @@ else
     Console.WriteLine("[8] Crear reserva con fecha pasada (invalida):");
     var pasada = new EvenTech.BE.BE_Reserva
     {
-        ClienteNombre = "X",
+        ClienteId = clientes[0].Id,
         SalonId = salones[0].Id,
         FechaEvento = DateTime.Today.AddDays(-1),
         Estado = EvenTech.BE.EstadoReserva.PENDIENTE,
