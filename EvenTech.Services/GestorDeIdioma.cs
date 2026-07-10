@@ -83,6 +83,11 @@ namespace EvenTech.Services
             NotificarObservadores();
         }
 
+        // Fuerza el re-render de todos los observadores con el idioma actual, sin
+        // cambiarlo. Lo usa la edicion de traducciones del idioma ya activo (que de
+        // otro modo no dispararia ninguna notificacion).
+        public void RefrescarIdiomaActual() => NotificarObservadores();
+
         private void NotificarObservadores()
         {
             // Copia para evitar problemas si un observador se desuscribe durante la notificacion.

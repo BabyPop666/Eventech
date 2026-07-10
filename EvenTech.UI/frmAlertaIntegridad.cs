@@ -5,9 +5,10 @@ using System.Windows.Forms;
 namespace EvenTech.UI
 {
     // Pantalla de alerta que se muestra al iniciar la app cuando la verificacion
-    // de integridad (digitos verificadores) detecta inconsistencias. Bloquea el
-    // flujo hasta que el administrador la revise (la cierra explicitamente).
-    // Borderless heredando de FormBase, con identidad de marca (azul oscuro + dorado).
+    // de integridad (digitos verificadores) detecta inconsistencias. Es INFORMATIVA:
+    // interrumpe el arranque hasta que el operador la reconoce (la cierra), pero no
+    // impide el ingreso (el bloqueo efectivo del acceso queda para una iteracion
+    // posterior). Borderless heredando de FormBase, con identidad de marca.
     public class frmAlertaIntegridad : FormBase
     {
         public frmAlertaIntegridad(IReadOnlyList<string> inconsistencias)

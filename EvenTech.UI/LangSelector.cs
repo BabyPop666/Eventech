@@ -53,6 +53,9 @@ namespace EvenTech.UI
         {
             var g = GestorDeIdioma.GetInstance;
             var menu = new ContextMenuStrip { Font = Theme.FontBody };
+            // Se crea uno nuevo por apertura: liberarlo al cerrarse evita acumular
+            // handles/ToolStripItems hasta el finalizador (control de uso frecuente).
+            menu.Closed += (s, e) => menu.Dispose();
 
             foreach (var idi in g.IdiomasDisponibles)
             {

@@ -25,20 +25,24 @@ namespace EvenTech.BLL
         public override string ToString() => Result.ToString();
     }
 
-    // Autenticacion. El password llega ya hasheado desde la UI: el plain text
-    // nunca viaja a la BLL ni a la DB. Controla estado de cuenta e intentos
-    // fallidos: tras MaxIntentos fallos la cuenta queda bloqueada (RF01.3/RF01.4).
+    // Autenticacion. La contrasena en claro se recibe aca y se verifica contra el
+    // hash salteado (PBKDF2) usando el salt de la base: el hashing es server-side y
+    // el plain nunca se persiste. Controla estado de cuenta e intentos fallidos:
+    // tras MaxIntentos fallos la cuenta queda bloqueada (RF01.3/RF01.4).
     public static class BLL_Login
     {
         public const int MaxIntentos = 3;
 
-        public static LoginResponse Authenticate(string username, string hashedPassword)
+        public static LoginResponse Authenticate(string username, string plainPassword)
         {
             var resp = new LoginResponse { MaxAttempts = MaxIntentos };
 
             BE_User user = DAL_User.GetByUsername(username);
             if (user == null)
             {
+                // Verificacion "en vacio" para igualar el costo temporal y no revelar
+                // por timing si el usuario existe (mitiga enumeracion).
+                Encrypt.HashPassword(plainPassword);
                 BLL_LoginAudit.Register(username, LoginAuditAction.LOGIN_FAIL, "Usuario inexistente");
                 resp.Result = LoginResult.UserNotFound;
                 return resp;
@@ -63,8 +67,9 @@ namespace EvenTech.BLL
                 return resp;
             }
 
-            // RF01.2 - verificacion segura de contrasena
-            if (!AuthenticationService.CompareHashedPasswords(hashedPassword, user.PasswordHash))
+            // RF01.2 - verificacion segura de contrasena (PBKDF2 salteado; los hashes
+            // SHA-256 legacy tambien validan y se migran mas abajo).
+            if (!Encrypt.Verify(plainPassword, user.PasswordHash))
             {
                 int intentos = DAL_User.IncrementFailedAttempts(username);
                 resp.FailedAttempts = intentos;
@@ -87,6 +92,14 @@ namespace EvenTech.BLL
             // Credenciales OK: resetear intentos y abrir sesion.
             DAL_User.ResetFailedAttempts(username);
 
+            // Migracion transparente: si el hash almacenado es SHA-256 legacy, se
+            // re-guarda salteado (PBKDF2) ahora que tenemos la contrasena en claro.
+            if (Encrypt.EsLegacy(user.PasswordHash))
+            {
+                try { DAL_User.UpdatePasswordHash(username, Encrypt.HashPassword(plainPassword)); }
+                catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Login", "Migracion de hash"); }
+            }
+
             // Permisos efectivos del perfil (Composite) hacia la sesion.
             HashSet<string> permisos = null;
             bool sinPerfil = !user.PerfilId.HasValue;
@@ -103,7 +116,11 @@ namespace EvenTech.BLL
                 }
                 catch (Exception ex)
                 {
-                    accesoTotal = true;
+                    // Fail-CLOSED: si no se pueden cargar los permisos, la sesion queda
+                    // SIN permisos (ninguna seccion visible) en vez de otorgar acceso
+                    // total. Un error transitorio ya no puede volver superusuario a nadie.
+                    accesoTotal = false;
+                    permisos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     BLL_Bitacora.RegistrarExcepcion(ex, "Login", "Carga de permisos del perfil");
                 }
             }

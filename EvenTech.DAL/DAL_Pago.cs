@@ -43,28 +43,68 @@ namespace EvenTech.DAL
             }
         }
 
-        public static int Insert(BE_Pago p)
+        // Inserta el pago verificando el tope en una unica transaccion serializable:
+        // lee la suma con UPDLOCK/HOLDLOCK, valida que (pagado + monto) no supere el
+        // tope y recien inserta. Bloquea la carrera de dos pagos simultaneos que, con
+        // el chequeo por separado, podian pasar ambos y sobrepasar el total.
+        // Devuelve el Id del pago, o -1 si excederia el tope.
+        public static int InsertConTope(BE_Pago p, decimal tope)
         {
             using (var cn = new DAL_DB_Connection())
-            using (var cmd = new SqlCommand(
-                "INSERT INTO dbo.Pagos (ReservaId, MetodoPagoId, Monto, Fecha, Observacion) " +
-                "OUTPUT INSERTED.Id VALUES (@r, @m, @mo, GETDATE(), @o)", cn.OpenConnection()))
             {
-                cmd.Parameters.Add("@r", SqlDbType.Int).Value = p.ReservaId;
-                cmd.Parameters.Add("@m", SqlDbType.Int).Value = p.MetodoPagoId;
-                cmd.Parameters.Add("@mo", SqlDbType.Decimal).Value = p.Monto;
-                cmd.Parameters.Add("@o", SqlDbType.NVarChar, 200).Value = (object)p.Observacion ?? System.DBNull.Value;
-                return (int)cmd.ExecuteScalar();
+                var conn = cn.OpenConnection();
+                using (var tx = conn.BeginTransaction(IsolationLevel.Serializable))
+                {
+                    try
+                    {
+                        decimal pagado;
+                        using (var q = new SqlCommand(
+                            "SELECT ISNULL(SUM(Monto), 0) FROM dbo.Pagos WITH (UPDLOCK, HOLDLOCK) WHERE ReservaId = @r", conn, tx))
+                        {
+                            q.Parameters.Add("@r", SqlDbType.Int).Value = p.ReservaId;
+                            pagado = (decimal)q.ExecuteScalar();
+                        }
+
+                        if (pagado + p.Monto > tope)
+                        {
+                            tx.Rollback();
+                            return -1;
+                        }
+
+                        int nuevoId;
+                        using (var ins = new SqlCommand(
+                            "INSERT INTO dbo.Pagos (ReservaId, MetodoPagoId, Monto, Fecha, Observacion) " +
+                            "OUTPUT INSERTED.Id VALUES (@r, @m, @mo, GETDATE(), @o)", conn, tx))
+                        {
+                            ins.Parameters.Add("@r", SqlDbType.Int).Value = p.ReservaId;
+                            ins.Parameters.Add("@m", SqlDbType.Int).Value = p.MetodoPagoId;
+                            ins.Parameters.Add("@mo", SqlDbType.Decimal).Value = p.Monto;
+                            ins.Parameters.Add("@o", SqlDbType.NVarChar, 200).Value = (object)p.Observacion ?? System.DBNull.Value;
+                            nuevoId = (int)ins.ExecuteScalar();
+                        }
+
+                        tx.Commit();
+                        return nuevoId;
+                    }
+                    catch
+                    {
+                        try { tx.Rollback(); } catch { }
+                        throw;
+                    }
+                }
             }
         }
 
-        public static void Delete(int id)
+        // Borra el pago verificando que pertenezca a la reserva indicada. Devuelve la
+        // cantidad de filas afectadas (0 = no existia / no era de esa reserva).
+        public static int Delete(int id, int reservaId)
         {
             using (var cn = new DAL_DB_Connection())
-            using (var cmd = new SqlCommand("DELETE FROM dbo.Pagos WHERE Id = @id", cn.OpenConnection()))
+            using (var cmd = new SqlCommand("DELETE FROM dbo.Pagos WHERE Id = @id AND ReservaId = @r", cn.OpenConnection()))
             {
                 cmd.Parameters.Add("@id", SqlDbType.Int).Value = id;
-                cmd.ExecuteNonQuery();
+                cmd.Parameters.Add("@r", SqlDbType.Int).Value = reservaId;
+                return cmd.ExecuteNonQuery();
             }
         }
     }

@@ -17,6 +17,7 @@ namespace EvenTech.UI
         private TextBox _txtNombre, _txtApellido, _txtDni, _txtEmail, _txtTelefono;
         private AppButton _btnNuevo, _btnGuardar;
         private int _editId;
+        private bool _cargandoGrilla; // evita que ClearSelection/rebind reactive la edicion
 
         public ucClientes()
         {
@@ -175,11 +176,15 @@ namespace EvenTech.UI
             try
             {
                 _lblError.Visible = false;
+                _cargandoGrilla = true;
                 _grid.DataSource = BLL_Cliente.GetAll();
+                _grid.ClearSelection();
+                _cargandoGrilla = false;
                 ActualizarCount();
             }
             catch (Exception ex)
             {
+                _cargandoGrilla = false;
                 BLL_Bitacora.RegistrarExcepcion(ex, "Clientes", "Cargar clientes");
                 _lblError.Text = Tr.T("MSG_ERROR_PREFIJO") + ex.GetType().Name + " - " + ex.Message;
                 _lblError.Visible = true;
@@ -189,6 +194,9 @@ namespace EvenTech.UI
 
         private void Grid_SelectionChanged(object sender, EventArgs e)
         {
+            // Guard: "Nuevo" y el rebind disparan SelectionChanged con la fila aun
+            // apuntada; sin esto, Guardar terminaba actualizando el registro corriente.
+            if (_cargandoGrilla) return;
             if (_grid.CurrentRow?.DataBoundItem is BE_Cliente c) CargarEnForm(c);
         }
 
@@ -210,7 +218,9 @@ namespace EvenTech.UI
             _lblOk.Visible = false;
             _lblFormTitle.Text = Tr.T("CLI_NUEVO");
             _txtNombre.Text = _txtApellido.Text = _txtDni.Text = _txtEmail.Text = _txtTelefono.Text = "";
+            _cargandoGrilla = true;
             _grid.ClearSelection();
+            _cargandoGrilla = false;
         }
 
         private void Guardar()
@@ -226,17 +236,26 @@ namespace EvenTech.UI
                 Email = _txtEmail.Text.Trim(),
                 Telefono = _txtTelefono.Text.Trim()
             };
-            ClienteResult r = _editId == 0 ? BLL_Cliente.Crear(c, out _) : BLL_Cliente.Actualizar(c);
-            if (r == ClienteResult.Success)
+            try
             {
-                LimpiarForm();
-                SafeLoadData();
-                _lblOk.Text = Tr.T("MSG_CLI_OK");
-                _lblOk.Visible = true;
+                ClienteResult r = _editId == 0 ? BLL_Cliente.Crear(c, out _) : BLL_Cliente.Actualizar(c);
+                if (r == ClienteResult.Success)
+                {
+                    LimpiarForm();
+                    SafeLoadData();
+                    _lblOk.Text = Tr.T("MSG_CLI_OK");
+                    _lblOk.Visible = true;
+                }
+                else
+                {
+                    _lblError.Text = MensajeError(r);
+                    _lblError.Visible = true;
+                }
             }
-            else
+            catch (Exception ex)
             {
-                _lblError.Text = MensajeError(r);
+                BLL_Bitacora.RegistrarExcepcion(ex, "Clientes", "Guardar cliente");
+                _lblError.Text = Tr.T("MSG_ERROR_PREFIJO") + ex.Message;
                 _lblError.Visible = true;
             }
         }

@@ -34,6 +34,13 @@ IF COL_LENGTH('dbo.Users','FailedAttempts') IS NULL
     ALTER TABLE dbo.Users ADD FailedAttempts INT NOT NULL CONSTRAINT DF_Users_FailedAttempts DEFAULT 0;
 GO
 
+-- PasswordHash se amplia para alojar el formato salteado PBKDF2$iter$salt$hash
+-- (~90 chars). Los hashes SHA-256 legacy (64 hex) siguen validando y se migran
+-- a PBKDF2 en el proximo login. Idempotente: re-ejecutar no rompe nada.
+IF COL_LENGTH('dbo.Users','PasswordHash') < 200
+    ALTER TABLE dbo.Users ALTER COLUMN PasswordHash NVARCHAR(200) NOT NULL;
+GO
+
 -- Bitacora de logins / logouts. Se registra cada intento (exitoso o fallido).
 IF OBJECT_ID('dbo.LoginAuditLog','U') IS NULL
 BEGIN
@@ -98,6 +105,16 @@ BEGIN
 END
 GO
 
+-- Anti-doble-reserva a nivel de motor: no puede haber dos reservas CONFIRMADA
+-- para el mismo salon y fecha. Es la red de seguridad ante una carrera entre dos
+-- confirmaciones simultaneas (la BLL igual lo pre-valida). Indice UNICO filtrado:
+-- solo aplica a las CONFIRMADA; cotizaciones/pendientes/canceladas no compiten.
+-- La app guarda FechaEvento con hora 00:00, asi (SalonId, FechaEvento) = (salon, dia).
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Reservas_SalonFecha_Confirmada')
+    CREATE UNIQUE INDEX UX_Reservas_SalonFecha_Confirmada
+        ON dbo.Reservas(SalonId, FechaEvento) WHERE Estado = 'CONFIRMADA';
+GO
+
 -- ===========================================================================
 -- Clientes (Proceso 1) + normalizacion de Reservas (ClienteNombre -> ClienteId)
 -- ===========================================================================
@@ -129,19 +146,29 @@ GO
 -- cuando la columna ya no existe (si no, el re-run del script fallaria).
 IF COL_LENGTH('dbo.Reservas','ClienteNombre') IS NOT NULL
 BEGIN
+    -- XACT_ABORT + transaccion: si algo falla, se revierte TODO en vez de borrar la
+    -- columna ClienteNombre con datos a medio migrar. LEFT(...,60) evita el error de
+    -- truncacion (ClienteNombre NVARCHAR(150) -> Clientes.Nombre NVARCHAR(60)); el
+    -- mismo LEFT en el JOIN mantiene la correspondencia para enlazar la reserva.
+    SET XACT_ABORT ON;
+    BEGIN TRANSACTION;
+
     EXEC('INSERT INTO dbo.Clientes (Nombre)
-            SELECT DISTINCT LTRIM(RTRIM(r.ClienteNombre))
+            SELECT DISTINCT LEFT(LTRIM(RTRIM(r.ClienteNombre)), 60)
             FROM dbo.Reservas r
             WHERE r.ClienteNombre IS NOT NULL AND LTRIM(RTRIM(r.ClienteNombre)) <> ''''
               AND NOT EXISTS (SELECT 1 FROM dbo.Clientes c
-                  WHERE c.Nombre = LTRIM(RTRIM(r.ClienteNombre)) AND c.Apellido IS NULL AND c.Dni IS NULL);');
+                  WHERE c.Nombre = LEFT(LTRIM(RTRIM(r.ClienteNombre)), 60) AND c.Apellido IS NULL AND c.Dni IS NULL);');
 
     EXEC('UPDATE r SET r.ClienteId = c.Id
             FROM dbo.Reservas r
-            JOIN dbo.Clientes c ON c.Nombre = LTRIM(RTRIM(r.ClienteNombre)) AND c.Apellido IS NULL AND c.Dni IS NULL
+            JOIN dbo.Clientes c ON c.Nombre = LEFT(LTRIM(RTRIM(r.ClienteNombre)), 60) AND c.Apellido IS NULL AND c.Dni IS NULL
             WHERE r.ClienteId IS NULL;');
 
     EXEC('ALTER TABLE dbo.Reservas DROP COLUMN ClienteNombre;');
+
+    COMMIT TRANSACTION;
+    SET XACT_ABORT OFF;
 END
 GO
 
@@ -360,6 +387,44 @@ BEGIN
     INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId) VALUES
         (N'Ver Bitacora',           NULL, 0, N'BITACORA_VER',       @gAudit),
         (N'Ver Auditoria Login',    NULL, 0, N'AUDIT_LOGIN_VER',    @gAudit);
+END
+GO
+
+-- Permisos de administracion (catalogos, perfiles, idiomas). Antes estas secciones
+-- eran SIEMPRE visibles => cualquier usuario con perfil podia entrar a "Perfiles" y
+-- auto-asignarse el perfil Administrador (escalada de privilegios). Ahora requieren
+-- permiso explicito. Bloque idempotente: agrega solo lo que falte y re-sincroniza el
+-- perfil Administrador para que conserve acceso total (incluso en bases ya creadas).
+IF EXISTS (SELECT 1 FROM dbo.Permisos)
+BEGIN
+    DECLARE @raizAdm INT = (SELECT TOP 1 Id FROM dbo.Permisos WHERE PermisoPadreId IS NULL AND EsGrupo = 1 ORDER BY Id);
+
+    IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Nombre = N'Administracion del sistema')
+        INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
+            VALUES (N'Administracion del sistema', N'Gestion de catalogos, perfiles e idiomas', 1, NULL, @raizAdm);
+
+    DECLARE @gAdmSis INT = (SELECT TOP 1 Id FROM dbo.Permisos WHERE Nombre = N'Administracion del sistema');
+
+    IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'CLIENTES_GESTION')
+        INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
+            VALUES (N'Gestion de Clientes', NULL, 0, N'CLIENTES_GESTION', @gAdmSis);
+    IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'SERVICIOS_GESTION')
+        INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
+            VALUES (N'Gestion de Servicios', NULL, 0, N'SERVICIOS_GESTION', @gAdmSis);
+    IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'PERFILES_GESTION')
+        INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
+            VALUES (N'Gestion de Perfiles', NULL, 0, N'PERFILES_GESTION', @gAdmSis);
+    IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'IDIOMAS_GESTION')
+        INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
+            VALUES (N'Gestion de Idiomas', NULL, 0, N'IDIOMAS_GESTION', @gAdmSis);
+
+    -- El perfil Administrador siempre tiene TODOS los permisos (incluye los nuevos).
+    INSERT INTO dbo.PerfilPermiso (PerfilId, PermisoId)
+        SELECT p.Id, pm.Id
+        FROM dbo.Perfiles p
+        CROSS JOIN dbo.Permisos pm
+        WHERE p.Nombre = N'Administrador'
+          AND NOT EXISTS (SELECT 1 FROM dbo.PerfilPermiso x WHERE x.PerfilId = p.Id AND x.PermisoId = pm.Id);
 END
 GO
 
@@ -617,7 +682,8 @@ GO
         (N'ES', N'LOGIN_INACTIVA', N'La cuenta esta inactiva. Contactate con un administrador.'), (N'EN', N'LOGIN_INACTIVA', N'The account is inactive. Contact an administrator.'), (N'PT', N'LOGIN_INACTIVA', N'A conta esta inativa. Entre em contato com um administrador.'),
         (N'ES', N'LOGIN_INTENTOS', N'Intento {0} de {1}.'), (N'EN', N'LOGIN_INTENTOS', N'Attempt {0} of {1}.'), (N'PT', N'LOGIN_INTENTOS', N'Tentativa {0} de {1}.'),
         -- Estado de usuario (grilla de asignacion)
-        (N'ES', N'COL_ESTADO', N'Estado'), (N'EN', N'COL_ESTADO', N'Status'), (N'PT', N'COL_ESTADO', N'Estado'),
+        -- (COL_ESTADO ya esta definido mas arriba, en "Columnas compartidas": no repetir,
+        --  o el INSERT ... WHERE NOT EXISTS viola UQ_Traducciones y aborta todo el seed.)
         (N'ES', N'EST_ACTIVO', N'Activo'), (N'EN', N'EST_ACTIVO', N'Active'), (N'PT', N'EST_ACTIVO', N'Ativo'),
         (N'ES', N'EST_BLOQUEADO', N'Bloqueado'), (N'EN', N'EST_BLOQUEADO', N'Blocked'), (N'PT', N'EST_BLOQUEADO', N'Bloqueado'),
         (N'ES', N'EST_INACTIVO', N'Inactivo'), (N'EN', N'EST_INACTIVO', N'Inactive'), (N'PT', N'EST_INACTIVO', N'Inativo'),

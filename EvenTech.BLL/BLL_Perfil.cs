@@ -43,20 +43,25 @@ namespace EvenTech.BLL
             List<BE_IComponentePermiso> arbol, HashSet<int> asignados)
         {
             var efectivos = new Dictionary<int, BE_Permiso>();
+            var visitados = new HashSet<int>();   // corta ciclos si la jerarquia esta mal armada
             foreach (var nodo in arbol)
-                Recolectar(nodo, asignados, false, efectivos);
+                Recolectar(nodo, asignados, false, efectivos, visitados);
             return new List<BE_Permiso>(efectivos.Values);
         }
 
         private static void Recolectar(BE_IComponentePermiso nodo, HashSet<int> asignados,
-            bool heredado, Dictionary<int, BE_Permiso> acumulado)
+            bool heredado, Dictionary<int, BE_Permiso> acumulado, HashSet<int> visitados)
         {
+            // Proteccion anti-ciclo: un PermisoPadreId mal configurado (A->B->A)
+            // produciria recursion infinita / StackOverflow durante el login.
+            if (!visitados.Add(nodo.Id)) return;
+
             bool activo = heredado || asignados.Contains(nodo.Id);
 
             if (nodo is BE_GrupoPermisos grupo)
             {
                 foreach (var hijo in grupo.Hijos)
-                    Recolectar(hijo, asignados, activo, acumulado);
+                    Recolectar(hijo, asignados, activo, acumulado, visitados);
             }
             else if (nodo is BE_Permiso permiso && activo)
             {

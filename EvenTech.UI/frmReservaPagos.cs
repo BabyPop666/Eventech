@@ -64,7 +64,9 @@ namespace EvenTech.UI
             _cboMetodo = Ui.Combo(); _cboMetodo.Width = 170; _cboMetodo.Margin = new Padding(0, 0, Theme.SpaceSm, 0);
             foreach (var m in BLL_Pago.GetMetodos()) _cboMetodo.Items.Add(m);
             if (_cboMetodo.Items.Count > 0) _cboMetodo.SelectedIndex = 0;
-            _numMonto = new NumericUpDown { Minimum = 0, Maximum = 99999999, DecimalPlaces = 2, Increment = 1000, Width = 120, Font = Theme.FontInput, Margin = new Padding(0, 0, Theme.SpaceSm, 0), TextAlign = HorizontalAlignment.Right };
+            // Maximum acorde al total posible de una reserva (DECIMAL(12,2)); antes
+            // 99.999.999 impedia saldar de un solo pago las reservas grandes.
+            _numMonto = new NumericUpDown { Minimum = 0, Maximum = 9999999999m, DecimalPlaces = 2, Increment = 1000, Width = 120, Font = Theme.FontInput, Margin = new Padding(0, 0, Theme.SpaceSm, 0), TextAlign = HorizontalAlignment.Right };
             _txtObs = Ui.Input(); _txtObs.Width = 150; _txtObs.Margin = new Padding(0, 0, Theme.SpaceSm, 0);
             var btnRegistrar = Ui.Primary(T("BTN_REGISTRAR", "Registrar"), Theme.IcoAdd); btnRegistrar.BehindColor = Theme.BgContent; btnRegistrar.Size = new Size(130, 30); btnRegistrar.Click += (s, e) => Registrar();
             var btnQuitar = Ui.Secondary(T("BTN_QUITAR", "Quitar"), Theme.IcoClear); btnQuitar.BehindColor = Theme.BgContent; btnQuitar.Size = new Size(100, 30); btnQuitar.Margin = new Padding(Theme.SpaceSm, 0, 0, 0); btnQuitar.Click += (s, e) => Quitar();
@@ -109,30 +111,48 @@ namespace EvenTech.UI
                 Monto = _numMonto.Value,
                 Observacion = string.IsNullOrWhiteSpace(_txtObs.Text) ? null : _txtObs.Text.Trim()
             };
-            int id;
-            var res = BLL_Pago.Registrar(pago, out id);
-            switch (res)
+            try
             {
-                case PagoResult.MontoInvalido:
-                    Aviso(T("MSG_PAGO_MONTO", "Ingrese un monto valido.")); return;
-                case PagoResult.MetodoInvalido:
-                    Aviso(T("MSG_PAGO_METODO", "Seleccione un metodo de pago.")); return;
-                case PagoResult.ExcedeSaldo:
-                    Aviso(T("MSG_PAGO_EXCEDE", "El pago supera el saldo pendiente.")); return;
-                case PagoResult.ReservaInvalida:
-                    Aviso(T("MSG_PAGO_RESERVA", "Reserva invalida.")); return;
+                int id;
+                var res = BLL_Pago.Registrar(pago, out id);
+                switch (res)
+                {
+                    case PagoResult.MontoInvalido:
+                        Aviso(T("MSG_PAGO_MONTO", "Ingrese un monto valido.")); return;
+                    case PagoResult.MetodoInvalido:
+                        Aviso(T("MSG_PAGO_METODO", "Seleccione un metodo de pago.")); return;
+                    case PagoResult.ExcedeSaldo:
+                        Aviso(T("MSG_PAGO_EXCEDE", "El pago supera el saldo pendiente.")); return;
+                    case PagoResult.ReservaInvalida:
+                        Aviso(T("MSG_PAGO_RESERVA", "Reserva invalida.")); return;
+                    case PagoResult.EstadoNoPermitido:
+                        Aviso(T("MSG_PAGO_ESTADO", "Solo se pueden registrar pagos sobre reservas pendientes o confirmadas.")); return;
+                }
+                _numMonto.Value = 0;
+                _txtObs.Clear();
+                Refrescar();
             }
-            _numMonto.Value = 0;
-            _txtObs.Clear();
-            Refrescar();
+            catch (Exception ex)
+            {
+                BLL_Bitacora.RegistrarExcepcion(ex, "Pagos", "Registrar pago");
+                Aviso(T("MSG_ERROR_PREFIJO", "Error: ") + ex.Message);
+            }
         }
 
         private void Quitar()
         {
             if (_grid.CurrentRow == null) return;
             if (!(_grid.CurrentRow.Tag is int pagoId)) return;
-            BLL_Pago.Eliminar(pagoId, _reservaId);
-            Refrescar();
+            try
+            {
+                BLL_Pago.Eliminar(pagoId, _reservaId);
+                Refrescar();
+            }
+            catch (Exception ex)
+            {
+                BLL_Bitacora.RegistrarExcepcion(ex, "Pagos", "Anular pago");
+                Aviso(T("MSG_ERROR_PREFIJO", "Error: ") + ex.Message);
+            }
         }
 
         private void Refrescar()
