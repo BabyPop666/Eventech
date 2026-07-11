@@ -9,7 +9,7 @@ namespace EvenTech.DAL
     public class DAL_DB_Connection : IDisposable
     {
         public const string ConnectionString =
-            @"Data Source=localhost\SQLEXPRESS;Initial Catalog=EvenTechDB;Integrated Security=True;TrustServerCertificate=True";
+            @"Data Source=.;Initial Catalog=EvenTechDB;Integrated Security=True;TrustServerCertificate=True";
 
         private readonly SqlConnection _connection;
 

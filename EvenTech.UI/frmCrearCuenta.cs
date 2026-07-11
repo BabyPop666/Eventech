@@ -146,12 +146,13 @@ namespace EvenTech.UI
                 return;
             }
 
+            string hash = Encrypt.HashValue(p1);
+            _txtPass.Clear();
+            _txtPass2.Clear();
+
             try
             {
-                // La contrasena en claro se hashea (salteada, PBKDF2) dentro de la BLL.
-                var r = BLL_User.CreateUser(user, p1);
-                _txtPass.Clear();
-                _txtPass2.Clear();
+                var r = BLL_User.CreateUser(user, hash);
                 switch (r)
                 {
                     case CreateUserResult.Success:

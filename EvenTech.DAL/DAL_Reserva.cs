@@ -63,84 +63,34 @@ namespace EvenTech.DAL
             }
         }
 
-        // Insert. Si se pasan conn/tx (no null), participa de esa transaccion externa
-        // (para guardar reserva + servicios de forma atomica); si no, abre su propia
-        // conexion como siempre.
-        public static int Insert(BE_Reserva reserva, SqlConnection conn = null, SqlTransaction tx = null)
+        public static int Insert(BE_Reserva reserva)
         {
-            const string sql =
-                "INSERT INTO dbo.Reservas (ClienteId, SalonId, FechaEvento, Estado, Monto, Dvh) " +
-                "OUTPUT INSERTED.Id " +
-                "VALUES (@cliente, @salon, @fecha, @estado, @monto, @dvh)";
-
-            if (conn != null)
+            using (var cn = new DAL_DB_Connection())
             {
-                using (var cmd = new SqlCommand(sql, conn, tx))
+                using (var cmd = new SqlCommand(
+                    "INSERT INTO dbo.Reservas (ClienteId, SalonId, FechaEvento, Estado, Monto, Dvh) " +
+                    "OUTPUT INSERTED.Id " +
+                    "VALUES (@cliente, @salon, @fecha, @estado, @monto, @dvh)",
+                    cn.OpenConnection()))
                 {
                     BindEditable(cmd, reserva);
                     return (int)cmd.ExecuteScalar();
                 }
             }
-            using (var cn = new DAL_DB_Connection())
-            using (var cmd = new SqlCommand(sql, cn.OpenConnection()))
-            {
-                BindEditable(cmd, reserva);
-                return (int)cmd.ExecuteScalar();
-            }
         }
 
-        public static void Update(BE_Reserva reserva, SqlConnection conn = null, SqlTransaction tx = null)
+        public static void Update(BE_Reserva reserva)
         {
-            const string sql =
-                "UPDATE dbo.Reservas SET ClienteId = @cliente, SalonId = @salon, " +
-                "FechaEvento = @fecha, Estado = @estado, Monto = @monto, Dvh = @dvh WHERE Id = @id";
-
-            if (conn != null)
+            using (var cn = new DAL_DB_Connection())
             {
-                using (var cmd = new SqlCommand(sql, conn, tx))
+                using (var cmd = new SqlCommand(
+                    "UPDATE dbo.Reservas SET ClienteId = @cliente, SalonId = @salon, " +
+                    "FechaEvento = @fecha, Estado = @estado, Monto = @monto, Dvh = @dvh WHERE Id = @id",
+                    cn.OpenConnection()))
                 {
                     BindEditable(cmd, reserva);
                     cmd.Parameters.Add("@id", SqlDbType.Int).Value = reserva.Id;
                     cmd.ExecuteNonQuery();
-                }
-                return;
-            }
-            using (var cn = new DAL_DB_Connection())
-            using (var cmd = new SqlCommand(sql, cn.OpenConnection()))
-            {
-                BindEditable(cmd, reserva);
-                cmd.Parameters.Add("@id", SqlDbType.Int).Value = reserva.Id;
-                cmd.ExecuteNonQuery();
-            }
-        }
-
-        // Guarda la reserva (alta o edicion) y reemplaza sus servicios contratados
-        // en UNA sola transaccion: o quedan ambos, o ninguno. Evita el estado
-        // inconsistente en que la cabecera se persistia pero los servicios fallaban
-        // (Monto/DVH sin sus lineas). Devuelve el Id de la reserva.
-        public static int GuardarConServicios(BE_Reserva reserva, IEnumerable<BE_ReservaServicio> servicios, bool esAlta)
-        {
-            using (var cn = new DAL_DB_Connection())
-            {
-                var conn = cn.OpenConnection();
-                using (var tx = conn.BeginTransaction())
-                {
-                    try
-                    {
-                        int id;
-                        if (esAlta) { id = Insert(reserva, conn, tx); }
-                        else { Update(reserva, conn, tx); id = reserva.Id; }
-
-                        DAL_ReservaServicio.ReplaceForReserva(id, servicios ?? new List<BE_ReservaServicio>(), conn, tx);
-
-                        tx.Commit();
-                        return id;
-                    }
-                    catch
-                    {
-                        try { tx.Rollback(); } catch { }
-                        throw;
-                    }
                 }
             }
         }

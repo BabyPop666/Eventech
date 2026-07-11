@@ -14,12 +14,26 @@ namespace EvenTech.UI
     // Observa el idioma para traducir sus textos.
     public class ucPerfiles : UserControl, IObservadorIdioma
     {
+        // Marca del nodo raiz de la rama "Perfiles incluidos" (Composite de
+        // perfiles): es un titulo, no un componente seleccionable.
+        private const string TagRamaPerfiles = "PERFILES_INCLUIDOS";
+
         private ComboBox _cboPerfil;
         private TreeView _tree;
+        private TreeNode _nodoPerfiles; // rama con los demas perfiles para incluir
         private AppButton _btnGuardar, _btnNuevoPerfil, _btnGuardarAsig;
         private Label _lblError, _lblOk, _lblAsigTitulo, _lblMsgAsig;
         private DataGridView _gridUsuarios;
         private bool _suppressAfterCheck;
+
+        // Ids de permisos cuyo tilde es heredado de un perfil incluido (el check
+        // lo puso el sistema, no el usuario): se muestran marcados y no se
+        // persisten como asignacion directa al guardar.
+        private HashSet<int> _marcadosHeredados = new HashSet<int>();
+
+        // Cache de permisos efectivos por perfil incluido (evita repetir la
+        // resolucion del Composite en cada tilde).
+        private readonly Dictionary<int, List<BE_Permiso>> _permisosPorPerfil = new Dictionary<int, List<BE_Permiso>>();
 
         public ucPerfiles()
         {
@@ -187,6 +201,14 @@ namespace EvenTech.UI
         public void ActualizarTextos()
         {
             Tr.AplicarTags(this);
+            if (_nodoPerfiles != null)
+            {
+                _nodoPerfiles.Text = T("PERF_INCLUIDOS", "Perfiles incluidos");
+                // Re-traduce el sufijo "(heredado)" de los permisos marcados.
+                _suppressAfterCheck = true;
+                ActualizarHerencia();
+                _suppressAfterCheck = false;
+            }
             if (_gridUsuarios != null && _gridUsuarios.Columns.Count >= 4)
             {
                 _gridUsuarios.Columns["cUsuario"].HeaderText = Tr.T("COL_USUARIO");
@@ -265,8 +287,13 @@ namespace EvenTech.UI
             try
             {
                 HashSet<int> asignados = BLL_Perfil.GetPermisosAsignados(perfilId);
+                HashSet<int> incluidos = BLL_Perfil.GetPerfilesIncluidos(perfilId);
                 _suppressAfterCheck = true;
+                QuitarRamaPerfiles();
+                _marcadosHeredados = new HashSet<int>();
                 AplicarChecks(_tree.Nodes, asignados);
+                ConstruirRamaPerfiles(perfilId, incluidos);
+                ActualizarHerencia();
                 _suppressAfterCheck = false;
             }
             catch (Exception ex)
@@ -275,6 +302,127 @@ namespace EvenTech.UI
                 BLL_Bitacora.RegistrarExcepcion(ex, "Perfiles", "Cargar asignaciones del perfil");
                 MostrarError(Tr.T("MSG_ERROR_PREFIJO") + ex.Message);
             }
+        }
+
+        private void QuitarRamaPerfiles()
+        {
+            if (_nodoPerfiles != null)
+            {
+                _tree.Nodes.Remove(_nodoPerfiles);
+                _nodoPerfiles = null;
+            }
+            _permisosPorPerfil.Clear();
+        }
+
+        // Refleja en el arbol principal los permisos heredados de los perfiles
+        // incluidos tildados: aparecen tildados y marcados "(heredado)". El tilde
+        // heredado no se persiste como asignacion directa ni se puede destildar
+        // (se quita destildando el perfil incluido que lo aporta).
+        private void ActualizarHerencia()
+        {
+            var heredados = new HashSet<int>();
+            if (_nodoPerfiles != null)
+            {
+                foreach (TreeNode n in _nodoPerfiles.Nodes)
+                {
+                    if (!n.Checked || !(n.Tag is BE_Perfil p)) continue;
+                    if (_permisosPorPerfil.TryGetValue(p.Id, out var permisos))
+                        foreach (var permiso in permisos) heredados.Add(permiso.Id);
+                }
+            }
+
+            var nuevosMarcados = new HashSet<int>();
+            AplicarHerencia(_tree.Nodes, heredados, nuevosMarcados);
+            _marcadosHeredados = nuevosMarcados;
+        }
+
+        private void AplicarHerencia(TreeNodeCollection nodes, HashSet<int> heredados, HashSet<int> nuevosMarcados)
+        {
+            foreach (TreeNode n in nodes)
+            {
+                if (n == _nodoPerfiles) continue; // la rama de perfiles no se marca
+
+                if (n.Tag is int id)
+                {
+                    bool eraHeredado = _marcadosHeredados.Contains(id);
+                    // El tilde es "directo" si lo puso el usuario (no el sistema).
+                    bool directo = n.Checked && !eraHeredado;
+
+                    if (heredados.Contains(id) && !directo)
+                    {
+                        n.Checked = true;
+                        MarcarHeredado(n, true);
+                        nuevosMarcados.Add(id);
+                    }
+                    else
+                    {
+                        if (eraHeredado) n.Checked = directo; // dejo de heredarse: se destilda
+                        MarcarHeredado(n, false);
+                    }
+                }
+                AplicarHerencia(n.Nodes, heredados, nuevosMarcados);
+            }
+        }
+
+        // Marca visual del permiso heredado: sufijo "(heredado)" + color de exito.
+        // El texto original se conserva en Name para poder restaurarlo.
+        private void MarcarHeredado(TreeNode n, bool heredado)
+        {
+            if (heredado)
+            {
+                if (string.IsNullOrEmpty(n.Name)) n.Name = n.Text;
+                n.Text = n.Name + "  " + T("PERF_HEREDADO", "(heredado)");
+                n.ForeColor = Theme.Success;
+            }
+            else
+            {
+                if (!string.IsNullOrEmpty(n.Name)) n.Text = n.Name;
+                n.ForeColor = _tree.ForeColor;
+            }
+        }
+
+        // Rama del Composite de perfiles: lista los demas perfiles para poder
+        // incluirlos dentro del seleccionado (p.ej. Gerencial contiene Vendedor
+        // y hereda sus permisos). Debajo de cada perfil se muestran, a modo
+        // informativo, los permisos efectivos que aportaria.
+        private void ConstruirRamaPerfiles(int perfilId, HashSet<int> incluidos)
+        {
+            _nodoPerfiles = new TreeNode(T("PERF_INCLUIDOS", "Perfiles incluidos"))
+            {
+                Tag = TagRamaPerfiles,
+                NodeFont = Theme.FontBodyBold
+            };
+
+            foreach (var perfil in BLL_Perfil.GetPerfiles())
+            {
+                if (perfil.Id == perfilId) continue; // un perfil no puede incluirse a si mismo
+
+                var nodoPerfil = new TreeNode(perfil.Nombre) { Tag = perfil, NodeFont = Theme.FontBodyBold };
+                try
+                {
+                    // Permisos efectivos del perfil incluido (resueltos por el
+                    // Composite, inclusiones anidadas incluidas). Tag null: son
+                    // informativos, no se recolectan al guardar.
+                    List<BE_Permiso> permisos = BLL_Perfil.GetPermisosEfectivosDePerfil(perfil.Id);
+                    _permisosPorPerfil[perfil.Id] = permisos;
+                    foreach (var permiso in permisos)
+                        nodoPerfil.Nodes.Add(new TreeNode(permiso.Nombre));
+                }
+                catch (Exception ex)
+                {
+                    _permisosPorPerfil[perfil.Id] = new List<BE_Permiso>();
+                    BLL_Bitacora.RegistrarExcepcion(ex, "Perfiles", "Resolver permisos del perfil incluido");
+                }
+
+                nodoPerfil.Checked = incluidos.Contains(perfil.Id);
+                if (nodoPerfil.Checked) PropagarHijos(nodoPerfil, true);
+
+                _nodoPerfiles.Nodes.Add(nodoPerfil);
+                if (nodoPerfil.Checked) nodoPerfil.Expand();
+            }
+
+            _tree.Nodes.Add(_nodoPerfiles);
+            _nodoPerfiles.Expand();
         }
 
         private void AplicarChecks(TreeNodeCollection nodes, HashSet<int> asignados)
@@ -290,7 +438,38 @@ namespace EvenTech.UI
         {
             if (_suppressAfterCheck) return;
             _suppressAfterCheck = true;
-            PropagarHijos(e.Node, e.Node.Checked);
+            if (e.Node.Tag as string == TagRamaPerfiles)
+            {
+                // El titulo de la rama de perfiles no es seleccionable.
+                e.Node.Checked = false;
+            }
+            else if (e.Node.Tag is BE_Perfil)
+            {
+                // (Des)incluir un perfil: sus hijos informativos lo siguen y los
+                // permisos que aporta se reflejan en el arbol principal.
+                PropagarHijos(e.Node, e.Node.Checked);
+                if (e.Node.Checked) e.Node.Expand();
+                ActualizarHerencia();
+            }
+            else if (e.Node.Tag == null && e.Node.Parent?.Tag is BE_Perfil)
+            {
+                // Los permisos mostrados bajo un perfil incluido son informativos:
+                // siguen el estado del perfil, no se tildan sueltos.
+                e.Node.Checked = e.Node.Parent.Checked;
+            }
+            else if (e.Node.Tag is int id && !e.Node.Checked && _marcadosHeredados.Contains(id))
+            {
+                // Un permiso heredado no se destilda a mano: se quita destildando
+                // el perfil incluido que lo aporta.
+                e.Node.Checked = true;
+            }
+            else
+            {
+                PropagarHijos(e.Node, e.Node.Checked);
+                // El cascadeo pudo tildar/destildar permisos heredados: se
+                // restablecen sus marcas y tildes.
+                ActualizarHerencia();
+            }
             _suppressAfterCheck = false;
         }
 
@@ -316,7 +495,26 @@ namespace EvenTech.UI
             {
                 var ids = new List<int>();
                 RecolectarChecked(_tree.Nodes, ids);
-                BLL_Perfil.GuardarAsignaciones(perfilId, ids);
+                // Los tildes heredados los puso el sistema: no son asignaciones
+                // directas del perfil (viven en el perfil incluido que las aporta).
+                ids.RemoveAll(id => _marcadosHeredados.Contains(id));
+
+                // Perfiles incluidos tildados en la rama del Composite de perfiles.
+                var incluidos = new List<int>();
+                if (_nodoPerfiles != null)
+                    foreach (TreeNode n in _nodoPerfiles.Nodes)
+                        if (n.Checked && n.Tag is BE_Perfil p) incluidos.Add(p.Id);
+
+                PerfilResult res = BLL_Perfil.GuardarComposicion(perfilId, ids, incluidos);
+                if (res == PerfilResult.ReferenciaCircular)
+                {
+                    MostrarError(T("MSG_PERF_CICLO", "No se puede incluir ese perfil: generaria una referencia circular."));
+                    return;
+                }
+
+                // Refresca la rama: los permisos heredados que muestran los demas
+                // perfiles pueden haber cambiado con esta edicion.
+                CargarAsignacionesPerfil();
                 _lblOk.Text = Tr.T("MSG_PERF_OK");
                 _lblOk.Visible = true;
             }
@@ -353,6 +551,13 @@ namespace EvenTech.UI
         {
             _lblError.Text = msg;
             _lblError.Visible = true;
+        }
+
+        // Devuelve la traduccion de 'clave' o, si falta, el texto por defecto dado.
+        private static string T(string clave, string defecto)
+        {
+            string t = Tr.T(clave);
+            return t == clave ? defecto : t;
         }
 
         // ===================== Asignacion a usuarios =====================

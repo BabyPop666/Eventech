@@ -34,13 +34,6 @@ IF COL_LENGTH('dbo.Users','FailedAttempts') IS NULL
     ALTER TABLE dbo.Users ADD FailedAttempts INT NOT NULL CONSTRAINT DF_Users_FailedAttempts DEFAULT 0;
 GO
 
--- PasswordHash se amplia para alojar el formato salteado PBKDF2$iter$salt$hash
--- (~90 chars). Los hashes SHA-256 legacy (64 hex) siguen validando y se migran
--- a PBKDF2 en el proximo login. Idempotente: re-ejecutar no rompe nada.
-IF COL_LENGTH('dbo.Users','PasswordHash') < 200
-    ALTER TABLE dbo.Users ALTER COLUMN PasswordHash NVARCHAR(200) NOT NULL;
-GO
-
 -- Bitacora de logins / logouts. Se registra cada intento (exitoso o fallido).
 IF OBJECT_ID('dbo.LoginAuditLog','U') IS NULL
 BEGIN
@@ -105,16 +98,6 @@ BEGIN
 END
 GO
 
--- Anti-doble-reserva a nivel de motor: no puede haber dos reservas CONFIRMADA
--- para el mismo salon y fecha. Es la red de seguridad ante una carrera entre dos
--- confirmaciones simultaneas (la BLL igual lo pre-valida). Indice UNICO filtrado:
--- solo aplica a las CONFIRMADA; cotizaciones/pendientes/canceladas no compiten.
--- La app guarda FechaEvento con hora 00:00, asi (SalonId, FechaEvento) = (salon, dia).
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Reservas_SalonFecha_Confirmada')
-    CREATE UNIQUE INDEX UX_Reservas_SalonFecha_Confirmada
-        ON dbo.Reservas(SalonId, FechaEvento) WHERE Estado = 'CONFIRMADA';
-GO
-
 -- ===========================================================================
 -- Clientes (Proceso 1) + normalizacion de Reservas (ClienteNombre -> ClienteId)
 -- ===========================================================================
@@ -146,29 +129,19 @@ GO
 -- cuando la columna ya no existe (si no, el re-run del script fallaria).
 IF COL_LENGTH('dbo.Reservas','ClienteNombre') IS NOT NULL
 BEGIN
-    -- XACT_ABORT + transaccion: si algo falla, se revierte TODO en vez de borrar la
-    -- columna ClienteNombre con datos a medio migrar. LEFT(...,60) evita el error de
-    -- truncacion (ClienteNombre NVARCHAR(150) -> Clientes.Nombre NVARCHAR(60)); el
-    -- mismo LEFT en el JOIN mantiene la correspondencia para enlazar la reserva.
-    SET XACT_ABORT ON;
-    BEGIN TRANSACTION;
-
     EXEC('INSERT INTO dbo.Clientes (Nombre)
-            SELECT DISTINCT LEFT(LTRIM(RTRIM(r.ClienteNombre)), 60)
+            SELECT DISTINCT LTRIM(RTRIM(r.ClienteNombre))
             FROM dbo.Reservas r
             WHERE r.ClienteNombre IS NOT NULL AND LTRIM(RTRIM(r.ClienteNombre)) <> ''''
               AND NOT EXISTS (SELECT 1 FROM dbo.Clientes c
-                  WHERE c.Nombre = LEFT(LTRIM(RTRIM(r.ClienteNombre)), 60) AND c.Apellido IS NULL AND c.Dni IS NULL);');
+                  WHERE c.Nombre = LTRIM(RTRIM(r.ClienteNombre)) AND c.Apellido IS NULL AND c.Dni IS NULL);');
 
     EXEC('UPDATE r SET r.ClienteId = c.Id
             FROM dbo.Reservas r
-            JOIN dbo.Clientes c ON c.Nombre = LEFT(LTRIM(RTRIM(r.ClienteNombre)), 60) AND c.Apellido IS NULL AND c.Dni IS NULL
+            JOIN dbo.Clientes c ON c.Nombre = LTRIM(RTRIM(r.ClienteNombre)) AND c.Apellido IS NULL AND c.Dni IS NULL
             WHERE r.ClienteId IS NULL;');
 
     EXEC('ALTER TABLE dbo.Reservas DROP COLUMN ClienteNombre;');
-
-    COMMIT TRANSACTION;
-    SET XACT_ABORT OFF;
 END
 GO
 
@@ -387,44 +360,6 @@ BEGIN
     INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId) VALUES
         (N'Ver Bitacora',           NULL, 0, N'BITACORA_VER',       @gAudit),
         (N'Ver Auditoria Login',    NULL, 0, N'AUDIT_LOGIN_VER',    @gAudit);
-END
-GO
-
--- Permisos de administracion (catalogos, perfiles, idiomas). Antes estas secciones
--- eran SIEMPRE visibles => cualquier usuario con perfil podia entrar a "Perfiles" y
--- auto-asignarse el perfil Administrador (escalada de privilegios). Ahora requieren
--- permiso explicito. Bloque idempotente: agrega solo lo que falte y re-sincroniza el
--- perfil Administrador para que conserve acceso total (incluso en bases ya creadas).
-IF EXISTS (SELECT 1 FROM dbo.Permisos)
-BEGIN
-    DECLARE @raizAdm INT = (SELECT TOP 1 Id FROM dbo.Permisos WHERE PermisoPadreId IS NULL AND EsGrupo = 1 ORDER BY Id);
-
-    IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Nombre = N'Administracion del sistema')
-        INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
-            VALUES (N'Administracion del sistema', N'Gestion de catalogos, perfiles e idiomas', 1, NULL, @raizAdm);
-
-    DECLARE @gAdmSis INT = (SELECT TOP 1 Id FROM dbo.Permisos WHERE Nombre = N'Administracion del sistema');
-
-    IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'CLIENTES_GESTION')
-        INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
-            VALUES (N'Gestion de Clientes', NULL, 0, N'CLIENTES_GESTION', @gAdmSis);
-    IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'SERVICIOS_GESTION')
-        INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
-            VALUES (N'Gestion de Servicios', NULL, 0, N'SERVICIOS_GESTION', @gAdmSis);
-    IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'PERFILES_GESTION')
-        INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
-            VALUES (N'Gestion de Perfiles', NULL, 0, N'PERFILES_GESTION', @gAdmSis);
-    IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'IDIOMAS_GESTION')
-        INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
-            VALUES (N'Gestion de Idiomas', NULL, 0, N'IDIOMAS_GESTION', @gAdmSis);
-
-    -- El perfil Administrador siempre tiene TODOS los permisos (incluye los nuevos).
-    INSERT INTO dbo.PerfilPermiso (PerfilId, PermisoId)
-        SELECT p.Id, pm.Id
-        FROM dbo.Perfiles p
-        CROSS JOIN dbo.Permisos pm
-        WHERE p.Nombre = N'Administrador'
-          AND NOT EXISTS (SELECT 1 FROM dbo.PerfilPermiso x WHERE x.PerfilId = p.Id AND x.PermisoId = pm.Id);
 END
 GO
 
@@ -682,8 +617,7 @@ GO
         (N'ES', N'LOGIN_INACTIVA', N'La cuenta esta inactiva. Contactate con un administrador.'), (N'EN', N'LOGIN_INACTIVA', N'The account is inactive. Contact an administrator.'), (N'PT', N'LOGIN_INACTIVA', N'A conta esta inativa. Entre em contato com um administrador.'),
         (N'ES', N'LOGIN_INTENTOS', N'Intento {0} de {1}.'), (N'EN', N'LOGIN_INTENTOS', N'Attempt {0} of {1}.'), (N'PT', N'LOGIN_INTENTOS', N'Tentativa {0} de {1}.'),
         -- Estado de usuario (grilla de asignacion)
-        -- (COL_ESTADO ya esta definido mas arriba, en "Columnas compartidas": no repetir,
-        --  o el INSERT ... WHERE NOT EXISTS viola UQ_Traducciones y aborta todo el seed.)
+        (N'ES', N'COL_ESTADO', N'Estado'), (N'EN', N'COL_ESTADO', N'Status'), (N'PT', N'COL_ESTADO', N'Estado'),
         (N'ES', N'EST_ACTIVO', N'Activo'), (N'EN', N'EST_ACTIVO', N'Active'), (N'PT', N'EST_ACTIVO', N'Ativo'),
         (N'ES', N'EST_BLOQUEADO', N'Bloqueado'), (N'EN', N'EST_BLOQUEADO', N'Blocked'), (N'PT', N'EST_BLOQUEADO', N'Bloqueado'),
         (N'ES', N'EST_INACTIVO', N'Inactivo'), (N'EN', N'EST_INACTIVO', N'Inactive'), (N'PT', N'EST_INACTIVO', N'Inativo'),
@@ -814,4 +748,94 @@ UPDATE t SET Texto = CASE i.Codigo WHEN N'EN' THEN N'History' WHEN N'PT' THEN N'
 FROM dbo.Traducciones t
 JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
 WHERE t.Clave = N'RES_HISTORIAL';
+GO
+
+-- ===========================================================================
+-- Patron Memento: versiones de reservas para poder volver a un estado previo.
+-- Cada fila de ReservaMemento es la foto completa de la reserva tomada antes
+-- de una modificacion; ReservaMementoServicio congela las lineas de servicios
+-- de esa foto (el monto se deriva de ellas).
+-- ===========================================================================
+IF OBJECT_ID('dbo.ReservaMemento','U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ReservaMemento (
+        Id          INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_ReservaMemento PRIMARY KEY,
+        ReservaId   INT               NOT NULL,
+        ClienteId   INT               NOT NULL,
+        SalonId     INT               NOT NULL,
+        FechaEvento DATETIME          NOT NULL,
+        Estado      NVARCHAR(20)      NOT NULL,
+        Monto       DECIMAL(12,2)     NOT NULL,
+        Usuario     NVARCHAR(50)      NOT NULL,
+        Fecha       DATETIME          NOT NULL CONSTRAINT DF_ReservaMemento_Fecha DEFAULT GETDATE(),
+        CONSTRAINT FK_ReservaMemento_Reserva FOREIGN KEY (ReservaId) REFERENCES dbo.Reservas(Id)
+    );
+    CREATE INDEX IX_ReservaMemento_Reserva ON dbo.ReservaMemento(ReservaId);
+END
+GO
+
+IF OBJECT_ID('dbo.ReservaMementoServicio','U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ReservaMementoServicio (
+        Id             INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_ReservaMementoServicio PRIMARY KEY,
+        MementoId      INT           NOT NULL,
+        ServicioId     INT           NOT NULL,
+        Cantidad       INT           NOT NULL CONSTRAINT DF_ReservaMementoServicio_Cantidad DEFAULT 1,
+        PrecioUnitario DECIMAL(12,2) NOT NULL CONSTRAINT DF_ReservaMementoServicio_Precio DEFAULT 0,
+        CONSTRAINT FK_ReservaMementoServicio_Memento  FOREIGN KEY (MementoId)  REFERENCES dbo.ReservaMemento(Id),
+        CONSTRAINT FK_ReservaMementoServicio_Servicio FOREIGN KEY (ServicioId) REFERENCES dbo.Servicios(Id)
+    );
+    CREATE INDEX IX_ReservaMementoServicio_Memento ON dbo.ReservaMementoServicio(MementoId);
+END
+GO
+
+-- ===========================================================================
+-- Composite de perfiles: un perfil puede INCLUIR otros perfiles y hereda sus
+-- permisos (p.ej. Gerencial contiene a Vendedor). Relacion reflexiva N:M;
+-- los ciclos se validan en la capa de negocio (BLL_Perfil).
+-- ===========================================================================
+IF OBJECT_ID('dbo.PerfilIncluido','U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PerfilIncluido (
+        PerfilPadreId INT NOT NULL,
+        PerfilHijoId  INT NOT NULL,
+        CONSTRAINT PK_PerfilIncluido PRIMARY KEY (PerfilPadreId, PerfilHijoId),
+        CONSTRAINT FK_PerfilIncluido_Padre FOREIGN KEY (PerfilPadreId) REFERENCES dbo.Perfiles(Id),
+        CONSTRAINT FK_PerfilIncluido_Hijo  FOREIGN KEY (PerfilHijoId)  REFERENCES dbo.Perfiles(Id),
+        CONSTRAINT CK_PerfilIncluido_NoSelf CHECK (PerfilPadreId <> PerfilHijoId)
+    );
+END
+GO
+
+-- La rama "Perfiles incluidos" del arbol de gestion de perfiles.
+UPDATE t SET Texto = CASE i.Codigo
+        WHEN N'EN' THEN N'Check the profile permissions. Checking a group includes its children; under "Included profiles" you can nest other profiles and inherit their permissions.'
+        WHEN N'PT' THEN N'Marque as permissoes do perfil. Marcar um grupo inclui seus filhos; em "Perfis incluidos" voce pode conter outros perfis e herdar suas permissoes.'
+        ELSE N'Tilde los permisos del perfil. Marcar un grupo incluye a sus hijos; en "Perfiles incluidos" podes contener otros perfiles y heredar sus permisos.' END
+FROM dbo.Traducciones t
+JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
+WHERE t.Clave = N'PERF_HINT';
+GO
+
+-- Traducciones del modulo de versiones (idempotente: solo inserta las que falten).
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'PERF_INCLUIDOS', N'Perfiles incluidos'), (N'EN', N'PERF_INCLUIDOS', N'Included profiles'), (N'PT', N'PERF_INCLUIDOS', N'Perfis incluidos'),
+        (N'ES', N'PERF_HEREDADO', N'(heredado)'), (N'EN', N'PERF_HEREDADO', N'(inherited)'), (N'PT', N'PERF_HEREDADO', N'(herdado)'),
+        (N'ES', N'MSG_PERF_CICLO', N'No se puede incluir ese perfil: generaria una referencia circular.'), (N'EN', N'MSG_PERF_CICLO', N'That profile cannot be included: it would create a circular reference.'), (N'PT', N'MSG_PERF_CICLO', N'Nao e possivel incluir esse perfil: geraria uma referencia circular.'),
+        (N'ES', N'RES_VERSIONES', N'Versiones'), (N'EN', N'RES_VERSIONES', N'Versions'), (N'PT', N'RES_VERSIONES', N'Versoes'),
+        (N'ES', N'VER_TITULO', N'Versiones de la reserva'), (N'EN', N'VER_TITULO', N'Reservation versions'), (N'PT', N'VER_TITULO', N'Versoes da reserva'),
+        (N'ES', N'VER_RESTAURAR', N'Restaurar seleccionada'), (N'EN', N'VER_RESTAURAR', N'Restore selected'), (N'PT', N'VER_RESTAURAR', N'Restaurar selecionada'),
+        (N'ES', N'VER_VACIO', N'Sin versiones guardadas. Se crea una automaticamente al modificar la reserva.'), (N'EN', N'VER_VACIO', N'No saved versions. One is created automatically when the reservation is modified.'), (N'PT', N'VER_VACIO', N'Sem versoes salvas. Uma e criada automaticamente ao modificar a reserva.'),
+        (N'ES', N'VER_CONFIRMA', N'Restaurar la reserva al estado de la version seleccionada? El estado actual se guardara como una nueva version.'), (N'EN', N'VER_CONFIRMA', N'Restore the reservation to the selected version? The current state will be saved as a new version.'), (N'PT', N'VER_CONFIRMA', N'Restaurar a reserva ao estado da versao selecionada? O estado atual sera salvo como uma nova versao.'),
+        (N'ES', N'MSG_VER_OK', N'Version restaurada.'), (N'EN', N'MSG_VER_OK', N'Version restored.'), (N'PT', N'MSG_VER_OK', N'Versao restaurada.')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, t.Texto
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+);
 GO

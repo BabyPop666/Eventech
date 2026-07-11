@@ -19,11 +19,10 @@ namespace EvenTech.UI
         private TextBox _txtMonto;   // solo lectura: total = suma de los servicios contratados
         private ComboBox _cboCliente, _cboSalon, _cboEstado;
         private DateTimePicker _dtFecha;
-        private AppButton _btnNuevo, _btnGuardar, _btnHistorial, _btnNuevoCliente, _btnServicios, _btnPagos, _btnComprobante, _btnEmail;
+        private AppButton _btnNuevo, _btnGuardar, _btnHistorial, _btnNuevoCliente, _btnServicios, _btnPagos, _btnComprobante, _btnEmail, _btnVersiones;
         private List<BE_ReservaServicio> _serviciosReserva = new List<BE_ReservaServicio>();
 
         private int _editId; // 0 = alta, >0 = edicion
-        private bool _cargandoGrilla; // evita que ClearSelection/rebind reactive la edicion
 
         public ucReservas()
         {
@@ -224,9 +223,7 @@ namespace EvenTech.UI
             ((Label)fldSalon.GetControlFromPosition(0, 0)).Tag = "T:COL_SALON";
 
             _dtFecha = Ui.DatePicker();
-            // Sin MinDate=Today: asi la ficha puede MOSTRAR la fecha real de una
-            // reserva pasada (editarla/cancelarla ya no la reescribe a hoy). El
-            // rechazo de fechas pasadas en ALTAS lo hace la BLL (InvalidFecha).
+            _dtFecha.MinDate = DateTime.Today;
             var fldFecha = Ui.Field("Fecha", _dtFecha);
             ((Label)fldFecha.GetControlFromPosition(0, 0)).Tag = "T:RES_LBL_FECHA";
 
@@ -264,12 +261,13 @@ namespace EvenTech.UI
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 ColumnCount = 1,
-                RowCount = 3,
+                RowCount = 4,
                 BackColor = Color.Transparent,
                 Margin = new Padding(0, Theme.SpaceSm, 0, 0)
             };
             actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+            actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
             actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
             actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
 
@@ -321,9 +319,18 @@ namespace EvenTech.UI
             docRow.Controls.Add(_btnComprobante, 0, 0);
             docRow.Controls.Add(_btnEmail, 1, 0);
 
+            // Fila de versiones (patron Memento): abre el dialogo para restaurar
+            // la reserva a un estado anterior.
+            _btnVersiones = Ui.Secondary("Versiones", Theme.IcoDocumento);
+            _btnVersiones.Tag = "T:RES_VERSIONES";
+            _btnVersiones.Dock = DockStyle.Fill;
+            _btnVersiones.Margin = new Padding(0, Theme.SpaceSm, 0, 0);
+            _btnVersiones.Click += (s, e) => VerVersiones();
+
             actions.Controls.Add(_btnGuardar, 0, 0);
             actions.Controls.Add(secondary, 0, 1);
             actions.Controls.Add(docRow, 0, 2);
+            actions.Controls.Add(_btnVersiones, 0, 3);
 
             layout.Controls.Add(_lblFormTitle, 0, 0);
             layout.Controls.Add(fields, 0, 1);
@@ -418,17 +425,11 @@ namespace EvenTech.UI
             {
                 _lblError.Visible = false;
                 List<BE_Reserva> data = BLL_Reserva.GetAll();
-                // Rebindear selecciona la primera fila y dispara SelectionChanged; el
-                // guard evita que eso reactive el modo edicion recien limpiado.
-                _cargandoGrilla = true;
                 _grid.DataSource = data;
-                _grid.ClearSelection();
-                _cargandoGrilla = false;
                 ActualizarCount();
             }
             catch (Exception ex)
             {
-                _cargandoGrilla = false;
                 BLL_Bitacora.RegistrarExcepcion(ex, "Reservas", "Cargar reservas");
                 ShowError(Tr.T("MSG_ERROR_PREFIJO") + ex.GetType().Name + " - " + ex.Message);
                 _lblCount.Text = "";
@@ -437,10 +438,6 @@ namespace EvenTech.UI
 
         private void Grid_SelectionChanged(object sender, EventArgs e)
         {
-            // Al limpiar la ficha o recargar la grilla se dispara SelectionChanged con
-            // la fila corriente todavia apuntada: sin este guard, "Nuevo" volvia a
-            // cargar la reserva y Guardar terminaba PISANDO un registro existente.
-            if (_cargandoGrilla) return;
             if (_grid.CurrentRow?.DataBoundItem is BE_Reserva r) CargarEnForm(r);
         }
 
@@ -456,13 +453,9 @@ namespace EvenTech.UI
         {
             _editId = r.Id;
             ActualizarTituloForm();
-            // Reservas migradas sin cliente vienen con ClienteId = 0: no forzar el
-            // combo a una seleccion ajena (heredaba el cliente que estuviera elegido).
-            _cboCliente.SelectedValue = r.ClienteId > 0 ? (object)r.ClienteId : null;
+            _cboCliente.SelectedValue = r.ClienteId;
             _cboSalon.SelectedValue = r.SalonId;
-            // Fecha real, sin clamp (el picker ya no tiene MinDate).
-            if (r.FechaEvento >= _dtFecha.MinDate && r.FechaEvento <= _dtFecha.MaxDate)
-                _dtFecha.Value = r.FechaEvento;
+            _dtFecha.Value = r.FechaEvento < _dtFecha.MinDate ? _dtFecha.MinDate : r.FechaEvento;
             _cboEstado.SelectedItem = r.Estado;
             try { _serviciosReserva = BLL_ReservaServicio.GetByReserva(r.Id); }
             catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Reservas", "Cargar servicios de reserva"); _serviciosReserva = new List<BE_ReservaServicio>(); }
@@ -479,9 +472,7 @@ namespace EvenTech.UI
             _cboEstado.SelectedItem = EstadoReserva.COTIZACION;
             _serviciosReserva = new List<BE_ReservaServicio>();
             ActualizarMonto();
-            _cargandoGrilla = true;
             _grid.ClearSelection();
-            _cargandoGrilla = false;
         }
 
         // Refleja el total (suma de servicios) en el campo Monto y el conteo en el boton.
@@ -625,29 +616,21 @@ namespace EvenTech.UI
                 Monto = monto
             };
 
-            try
-            {
-                // Cabecera + servicios se persisten en UNA transaccion (atomico): ya
-                // no puede quedar la reserva con su Monto guardado pero sin servicios.
-                int idReserva;
-                ReservaResult result = _editId == 0
-                    ? BLL_Reserva.CrearConServicios(reserva, _serviciosReserva, out idReserva)
-                    : BLL_Reserva.ActualizarConServicios(reserva, _serviciosReserva);
+            int idReserva = _editId;
+            ReservaResult result = _editId == 0
+                ? BLL_Reserva.Crear(reserva, out idReserva)
+                : BLL_Reserva.Actualizar(reserva);
 
-                if (result == ReservaResult.Success)
-                {
-                    LimpiarForm();
-                    SafeLoadData();
-                }
-                else
-                {
-                    ShowError(MensajeError(result));
-                }
-            }
-            catch (Exception ex)
+            if (result == ReservaResult.Success)
             {
-                BLL_Bitacora.RegistrarExcepcion(ex, "Reservas", "Guardar reserva");
-                ShowError(Tr.T("MSG_ERROR_PREFIJO") + ex.Message);
+                try { BLL_ReservaServicio.Guardar(idReserva, _serviciosReserva); }
+                catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Reservas", "Guardar servicios de reserva"); }
+                LimpiarForm();
+                SafeLoadData();
+            }
+            else
+            {
+                ShowError(MensajeError(result));
             }
         }
 
@@ -655,23 +638,14 @@ namespace EvenTech.UI
         {
             switch (r)
             {
-                case ReservaResult.InvalidCliente:      return Tr.T("MSG_RES_CLIENTE");
-                case ReservaResult.InvalidSalon:        return Tr.T("MSG_RES_SALON");
-                case ReservaResult.InvalidFecha:        return Tr.T("MSG_RES_FECHA");
-                case ReservaResult.InvalidMonto:        return Tr.T("MSG_RES_MONTO");
-                case ReservaResult.SalonOcupado:        return Tr.T("MSG_RES_SALON_OCUPADO");
-                case ReservaResult.NotFound:            return Tr.T("MSG_RES_NOTFOUND");
-                case ReservaResult.NoEditable:          return T("MSG_RES_NO_EDITABLE", "La reserva esta cancelada: no puede modificarse.");
-                case ReservaResult.MontoMenorQuePagado: return T("MSG_RES_MONTO_PAGADO", "El monto no puede ser menor que lo ya pagado. Anule pagos primero.");
-                default:                                return Tr.T("MSG_RES_ERROR");
+                case ReservaResult.InvalidCliente: return Tr.T("MSG_RES_CLIENTE");
+                case ReservaResult.InvalidSalon:   return Tr.T("MSG_RES_SALON");
+                case ReservaResult.InvalidFecha:   return Tr.T("MSG_RES_FECHA");
+                case ReservaResult.InvalidMonto:   return Tr.T("MSG_RES_MONTO");
+                case ReservaResult.SalonOcupado:   return Tr.T("MSG_RES_SALON_OCUPADO");
+                case ReservaResult.NotFound:       return Tr.T("MSG_RES_NOTFOUND");
+                default:                           return Tr.T("MSG_RES_ERROR");
             }
-        }
-
-        // Traduccion con fallback al texto por defecto si la clave no esta seedeada.
-        private static string T(string clave, string defecto)
-        {
-            string t = Tr.T(clave);
-            return t == clave ? defecto : t;
         }
 
         private void VerHistorial()
@@ -684,6 +658,33 @@ namespace EvenTech.UI
             using (var frm = new frmHistorialReserva(_editId))
             {
                 frm.ShowDialog(FindForm());
+            }
+        }
+
+        // Abre las versiones guardadas de la reserva (patron Memento). Si se
+        // restauro una, recarga la grilla y reselecciona la reserva para que la
+        // ficha muestre los valores repuestos.
+        private void VerVersiones()
+        {
+            if (_editId == 0)
+            {
+                ShowError(Tr.T("MSG_RES_SELECCIONE"));
+                return;
+            }
+            using (var frm = new frmVersionesReserva(_editId))
+            {
+                if (frm.ShowDialog(FindForm()) != DialogResult.OK) return;
+
+                int id = _editId;
+                SafeLoadData();
+                foreach (DataGridViewRow row in _grid.Rows)
+                {
+                    if (row.DataBoundItem is BE_Reserva r && r.Id == id)
+                    {
+                        _grid.CurrentCell = row.Cells[0];
+                        break;
+                    }
+                }
             }
         }
 

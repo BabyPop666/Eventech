@@ -80,18 +80,10 @@ namespace EvenTech.UI
             var card = new CardPanel { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, Theme.SpaceMd), Padding = new Padding(Theme.SpaceSm) };
             _grid = new DataGridView { Dock = DockStyle.Fill };
             UiGrid.Style(_grid);
-            // La cantidad se edita en la grilla (asi se puede BAJAR sin quitar/re-agregar,
-            // que perderia el precio congelado). El resto es de solo lectura.
-            _grid.ReadOnly = false;
-            _grid.EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2;
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "cServicio", HeaderText = T("COL_SERVICIO", "Servicio"), FillWeight = 100, ReadOnly = true });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "cServicio", HeaderText = T("COL_SERVICIO", "Servicio"), FillWeight = 100 });
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "cCantidad", HeaderText = T("COL_CANTIDAD", "Cantidad"), FillWeight = 35, DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleRight } });
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "cPrecio", HeaderText = T("COL_PRECIO", "Precio"), FillWeight = 45, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "cSubtotal", HeaderText = T("COL_SUBTOTAL", "Subtotal"), FillWeight = 50, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
-            // Sin ordenamiento por encabezado: el indice de fila mapea 1:1 con Items,
-            // asi "Quitar" borra la linea correcta y la edicion actualiza la correcta.
-            foreach (DataGridViewColumn col in _grid.Columns) col.SortMode = DataGridViewColumnSortMode.NotSortable;
-            _grid.CellEndEdit += Grid_CellEndEdit;
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "cPrecio", HeaderText = T("COL_PRECIO", "Precio"), FillWeight = 45, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "cSubtotal", HeaderText = T("COL_SUBTOTAL", "Subtotal"), FillWeight = 50, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
             card.Controls.Add(_grid);
 
             // --- Footer: total + aceptar ---
@@ -130,25 +122,6 @@ namespace EvenTech.UI
             if (_grid.CurrentRow == null) return;
             int idx = _grid.CurrentRow.Index;
             if (idx >= 0 && idx < Items.Count) { Items.RemoveAt(idx); Refrescar(); }
-        }
-
-        // Edicion de la cantidad en la grilla: actualiza el item conservando su
-        // PrecioUnitario congelado y recalcula subtotal/total. Clampa a 1..9999.
-        private void Grid_CellEndEdit(object sender, DataGridViewCellEventArgs e)
-        {
-            if (e.RowIndex < 0 || e.RowIndex >= Items.Count) return;
-            if (_grid.Columns[e.ColumnIndex].Name != "cCantidad") return;
-
-            int cant = Items[e.RowIndex].Cantidad;
-            var val = _grid.Rows[e.RowIndex].Cells["cCantidad"].Value;
-            if (val == null || !int.TryParse(val.ToString(), out cant)) cant = Items[e.RowIndex].Cantidad;
-            if (cant < 1) cant = 1;
-            if (cant > 9999) cant = 9999;
-
-            Items[e.RowIndex].Cantidad = cant;
-            _grid.Rows[e.RowIndex].Cells["cCantidad"].Value = cant;
-            _grid.Rows[e.RowIndex].Cells["cSubtotal"].Value = Items[e.RowIndex].Subtotal;
-            _lblTotal.Text = T("LBL_TOTAL", "Total") + ": " + Items.Sum(i => i.Subtotal).ToString("N2");
         }
 
         private void Refrescar()

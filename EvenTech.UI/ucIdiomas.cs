@@ -304,10 +304,8 @@ namespace EvenTech.UI
                 }
                 BLL_Idioma.GuardarTraducciones(idiomaId, textos);
                 RefrescarSelectorPrincipal();
-                // Fuerza el re-render de todas las vistas con el idioma actual (editar
-                // el idioma ACTIVO no cambia de idioma, asi que CambiarIdioma(mismo) no
-                // notificaba y los textos viejos quedaban en pantalla).
-                GestorDeIdioma.GetInstance.RefrescarIdiomaActual();
+                // Si edite el idioma activo, refrescar esta misma vista.
+                GestorDeIdioma.GetInstance.CambiarIdioma(GestorDeIdioma.GetInstance.IdiomaActual);
                 Mensaje(Tr.T("MSG_IDI_GUARDADO"), false);
             }
             catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Idiomas", "Guardar traducciones"); Mensaje(Tr.T("MSG_ERROR_PREFIJO") + ex.Message, true); }
