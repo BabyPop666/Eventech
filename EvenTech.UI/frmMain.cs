@@ -37,9 +37,7 @@ namespace EvenTech.UI
         }
 
         // Control de acceso (T04): muestra/oculta secciones segun los permisos
-        // efectivos del perfil del usuario. Toda seccion administrativa exige su
-        // permiso: antes Perfiles/Clientes/Servicios eran siempre visibles, lo que
-        // permitia a cualquier usuario auto-asignarse el perfil Administrador.
+        // efectivos del perfil del usuario. Sin perfil => acceso total.
         private void AplicarPermisos()
         {
             if (!SessionManager.IsSessionActive) return;
@@ -47,12 +45,9 @@ namespace EvenTech.UI
             _itReservas.Visible  = s.TienePermiso("RESERVA_CREAR")
                                 || s.TienePermiso("RESERVA_EDITAR")
                                 || s.TienePermiso("RESERVA_HISTORIAL");
-            _itClientes.Visible  = s.TienePermiso("CLIENTES_GESTION");
-            _itServicios.Visible = s.TienePermiso("SERVICIOS_GESTION");
-            _itPerfiles.Visible  = s.TienePermiso("PERFILES_GESTION");
             _itAuditoria.Visible = s.TienePermiso("BITACORA_VER")
                                 || s.TienePermiso("AUDIT_LOGIN_VER");
-            // Inicio: siempre visible (portada, sin datos sensibles).
+            // Inicio / Perfiles: siempre visibles (administracion).
         }
 
         private void BuildUi()
@@ -177,10 +172,7 @@ namespace EvenTech.UI
             footerGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             footerGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             footerGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            // La gestion de idiomas (alta/edicion de traducciones) tambien exige permiso.
-            bool puedeGestionarIdiomas = SessionManager.IsSessionActive
-                && SessionManager.GetInstance.TienePermiso("IDIOMAS_GESTION");
-            _lang = new LangSelector(dark: false, allowManage: puedeGestionarIdiomas) { Anchor = AnchorStyles.Right };
+            _lang = new LangSelector(dark: false, allowManage: true) { Anchor = AnchorStyles.Right };
             footerGrid.Controls.Add(_lang, 1, 0);
             footer.Controls.Add(footerGrid);
             footer.Controls.Add(footerSep);
@@ -206,15 +198,7 @@ namespace EvenTech.UI
         private void Navegar(SideMenuItem item)
         {
             SetActive(item);
-
-            // Dispose explicito de la vista saliente: Controls.Clear() NO la libera,
-            // y como los UserControls se desuscriben del GestorDeIdioma en Disposed,
-            // sin esto quedaban suscriptos para siempre (fuga de memoria creciente y
-            // notificaciones sobre vistas huerfanas en cada cambio de idioma).
-            var salientes = new List<Control>();
-            foreach (Control c in _pnlContent.Controls) salientes.Add(c);
             _pnlContent.Controls.Clear();
-            foreach (var c in salientes) c.Dispose();
 
             Control vista;
             if (item == _itInicio)         vista = BuildInicio();

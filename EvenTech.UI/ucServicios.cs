@@ -18,7 +18,6 @@ namespace EvenTech.UI
         private CheckBox _chkActivo;
         private AppButton _btnNuevo, _btnGuardar;
         private int _editId;
-        private bool _cargandoGrilla; // evita que ClearSelection/rebind reactive la edicion
 
         public ucServicios()
         {
@@ -189,15 +188,11 @@ namespace EvenTech.UI
             try
             {
                 _lblError.Visible = false;
-                _cargandoGrilla = true;
                 _grid.DataSource = BLL_Servicio.GetAll();
-                _grid.ClearSelection();
-                _cargandoGrilla = false;
                 ActualizarCount();
             }
             catch (Exception ex)
             {
-                _cargandoGrilla = false;
                 BLL_Bitacora.RegistrarExcepcion(ex, "Servicios", "Cargar servicios");
                 _lblError.Text = Tr.T("MSG_ERROR_PREFIJO") + ex.GetType().Name + " - " + ex.Message;
                 _lblError.Visible = true;
@@ -207,9 +202,6 @@ namespace EvenTech.UI
 
         private void Grid_SelectionChanged(object sender, EventArgs e)
         {
-            // Guard: "Nuevo" y el rebind disparan SelectionChanged con la fila aun
-            // apuntada; sin esto, Guardar terminaba actualizando el registro corriente.
-            if (_cargandoGrilla) return;
             if (_grid.CurrentRow?.DataBoundItem is BE_Servicio s) CargarEnForm(s);
         }
 
@@ -232,9 +224,7 @@ namespace EvenTech.UI
             _txtNombre.Text = _txtDescripcion.Text = "";
             _txtPrecio.Text = "0";
             _chkActivo.Checked = true;
-            _cargandoGrilla = true;
             _grid.ClearSelection();
-            _cargandoGrilla = false;
         }
 
         private void Guardar()
@@ -257,26 +247,17 @@ namespace EvenTech.UI
                 Precio = precio,
                 Activo = _chkActivo.Checked
             };
-            try
+            ServicioResult r = _editId == 0 ? BLL_Servicio.Crear(s, out _) : BLL_Servicio.Actualizar(s);
+            if (r == ServicioResult.Success)
             {
-                ServicioResult r = _editId == 0 ? BLL_Servicio.Crear(s, out _) : BLL_Servicio.Actualizar(s);
-                if (r == ServicioResult.Success)
-                {
-                    LimpiarForm();
-                    SafeLoadData();
-                    _lblOk.Text = Tr.T("MSG_SRV_OK");
-                    _lblOk.Visible = true;
-                }
-                else
-                {
-                    _lblError.Text = MensajeError(r);
-                    _lblError.Visible = true;
-                }
+                LimpiarForm();
+                SafeLoadData();
+                _lblOk.Text = Tr.T("MSG_SRV_OK");
+                _lblOk.Visible = true;
             }
-            catch (Exception ex)
+            else
             {
-                BLL_Bitacora.RegistrarExcepcion(ex, "Servicios", "Guardar servicio");
-                _lblError.Text = Tr.T("MSG_ERROR_PREFIJO") + ex.Message;
+                _lblError.Text = MensajeError(r);
                 _lblError.Visible = true;
             }
         }

@@ -10,8 +10,7 @@ namespace EvenTech.BLL
         MontoInvalido,
         MetodoInvalido,
         ExcedeSaldo,
-        ReservaInvalida,
-        EstadoNoPermitido   // la reserva esta CANCELADA o es solo una COTIZACION
+        ReservaInvalida
     }
 
     // Reglas de negocio de pagos (Proceso 1, paso 5): cobro de adelanto/saldo de
@@ -44,35 +43,21 @@ namespace EvenTech.BLL
             var reserva = DAL_Reserva.GetById(p.ReservaId);
             if (reserva == null) return PagoResult.ReservaInvalida;
 
-            // Solo se cobra sobre reservas reales: una cotizacion todavia no es una
-            // venta y una cancelada no debe recibir pagos.
-            if (reserva.Estado == EstadoReserva.CANCELADA || reserva.Estado == EstadoReserva.COTIZACION)
-                return PagoResult.EstadoNoPermitido;
-
-            // Tope atomico: el chequeo (suma de pagos + monto <= total) y la insercion
-            // corren en una unica transaccion serializable, sin ventana de carrera.
-            nuevoId = DAL_Pago.InsertConTope(p, reserva.Monto);
-            if (nuevoId < 0)
-            {
-                nuevoId = 0;
+            // Tope: no se puede pagar mas que el total de la reserva.
+            if (DAL_Pago.TotalPagado(p.ReservaId) + p.Monto > reserva.Monto)
                 return PagoResult.ExcedeSaldo;
-            }
 
+            nuevoId = DAL_Pago.Insert(p);
             BLL_Bitacora.Registrar("Pagos", "Registro de pago", CriticidadBitacora.Info,
                 $"Pago de {p.Monto:0.00} en reserva #{p.ReservaId} (metodo #{p.MetodoPagoId})");
             return PagoResult.Success;
         }
 
-        // Anula un pago verificando que exista y pertenezca a la reserva. Solo
-        // registra en bitacora si efectivamente se borro algo (evita anotar
-        // "anulaciones" fantasma por doble clic o grillas desactualizadas).
-        public static bool Eliminar(int pagoId, int reservaId)
+        public static void Eliminar(int pagoId, int reservaId)
         {
-            int filas = DAL_Pago.Delete(pagoId, reservaId);
-            if (filas > 0)
-                BLL_Bitacora.Registrar("Pagos", "Anulacion de pago", CriticidadBitacora.Advertencia,
-                    $"Pago #{pagoId} de la reserva #{reservaId} anulado");
-            return filas > 0;
+            DAL_Pago.Delete(pagoId);
+            BLL_Bitacora.Registrar("Pagos", "Anulacion de pago", CriticidadBitacora.Advertencia,
+                $"Pago #{pagoId} de la reserva #{reservaId} anulado");
         }
     }
 }

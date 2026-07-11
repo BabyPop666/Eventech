@@ -15,26 +15,24 @@ namespace EvenTech.BLL
         InvalidPassword
     }
 
-    // Alta de usuarios. Recibe la contrasena en claro, valida username y longitud
-    // minima, y persiste el hash salteado (PBKDF2). El plain no se guarda ni viaja
-    // a la base: solo se usa para derivar el hash.
+    // Alta de usuarios. La password en claro nunca llega aca: la UI manda solo
+    // el hash SHA-256. Se valida formato de username y se delega al DAL.
     public static class BLL_User
     {
         private static readonly Regex UsernameRegex = new Regex(@"^[a-zA-Z0-9_\.\-]{3,50}$");
-        private const int MinPasswordLength = 4;
 
-        public static CreateUserResult CreateUser(string username, string plainPassword)
+        public static CreateUserResult CreateUser(string username, string hashedPassword)
         {
             if (string.IsNullOrWhiteSpace(username) || !UsernameRegex.IsMatch(username))
                 return CreateUserResult.InvalidUsername;
 
-            if (string.IsNullOrEmpty(plainPassword) || plainPassword.Length < MinPasswordLength)
+            if (string.IsNullOrEmpty(hashedPassword) || hashedPassword.Length != 64)
                 return CreateUserResult.InvalidPassword;
 
             if (DAL_User.ExistsUsername(username))
                 return CreateUserResult.UsernameAlreadyExists;
 
-            DAL_User.Insert(username, Encrypt.HashPassword(plainPassword));
+            DAL_User.Insert(username, hashedPassword);
             return CreateUserResult.Success;
         }
 

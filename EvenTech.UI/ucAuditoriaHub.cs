@@ -22,13 +22,8 @@ namespace EvenTech.UI
 
             _tabBitacora.Controls.Add(new ucBitacora { Dock = DockStyle.Fill });
             _tabLogin.Controls.Add(new ucAuditoria { Dock = DockStyle.Fill });
-
-            // Cada pestana exige su permiso: con solo BITACORA_VER no debe verse la
-            // auditoria de login (y viceversa). Antes se mostraban ambas siempre.
-            bool verBitacora = !SessionManager.IsSessionActive || SessionManager.GetInstance.TienePermiso("BITACORA_VER");
-            bool verLogin = !SessionManager.IsSessionActive || SessionManager.GetInstance.TienePermiso("AUDIT_LOGIN_VER");
-            if (verBitacora) _tabs.TabPages.Add(_tabBitacora);
-            if (verLogin) _tabs.TabPages.Add(_tabLogin);
+            _tabs.TabPages.Add(_tabBitacora);
+            _tabs.TabPages.Add(_tabLogin);
             Controls.Add(_tabs);
 
             ActualizarTextos();

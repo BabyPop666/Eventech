@@ -5,29 +5,29 @@ Console.WriteLine("== EvenTech smoke test v2 ==");
 
 // [1] Login OK
 Console.WriteLine("[1] Login admin/admin123:");
-var r1 = BLL_Login.Authenticate("admin", "admin123");
+var r1 = BLL_Login.Authenticate("admin", Encrypt.HashValue("admin123"));
 Console.WriteLine($"  result={r1}, sesionActiva={SessionManager.IsSessionActive}");
 BLL_Login.Logout();
 
 // [2] Crear usuario nuevo (con timestamp para que sea unico entre corridas)
 string newUser = "smoke_" + DateTime.Now.ToString("HHmmss");
 Console.WriteLine($"[2] Crear usuario '{newUser}' password 'pass1234':");
-var rc1 = BLL_User.CreateUser(newUser, "pass1234");
+var rc1 = BLL_User.CreateUser(newUser, Encrypt.HashValue("pass1234"));
 Console.WriteLine($"  result={rc1}");
 
 // [3] Crear duplicado
 Console.WriteLine($"[3] Crear '{newUser}' duplicado:");
-var rc2 = BLL_User.CreateUser(newUser, "otra1234");
+var rc2 = BLL_User.CreateUser(newUser, Encrypt.HashValue("otra"));
 Console.WriteLine($"  result={rc2}");
 
 // [4] Username invalido
 Console.WriteLine("[4] Crear con username '..' (invalido):");
-var rc3 = BLL_User.CreateUser("..", "xxxx1234");
+var rc3 = BLL_User.CreateUser("..", Encrypt.HashValue("xxxx"));
 Console.WriteLine($"  result={rc3}");
 
 // [5] Login con el usuario recien creado
 Console.WriteLine($"[5] Login con '{newUser}':");
-var r5 = BLL_Login.Authenticate(newUser, "pass1234");
+var r5 = BLL_Login.Authenticate(newUser, Encrypt.HashValue("pass1234"));
 Console.WriteLine($"  result={r5}");
 BLL_Login.Logout();
 
@@ -41,16 +41,15 @@ foreach (var e in BLL_LoginAudit.GetAll(5))
 // [7] Reservas: alta valida
 Console.WriteLine("[7] Crear reserva valida:");
 var salones = BLL_Salon.GetAll();
-var clientes = BLL_Cliente.GetAll();
-if (salones.Count == 0 || clientes.Count == 0)
+if (salones.Count == 0)
 {
-    Console.WriteLine("  (faltan salones/clientes seed; corre db/schema.sql)");
+    Console.WriteLine("  (no hay salones seed; corre db/schema.sql)");
 }
 else
 {
     var nueva = new EvenTech.BE.BE_Reserva
     {
-        ClienteId = clientes[0].Id,
+        ClienteNombre = "Cliente " + DateTime.Now.ToString("HHmmss"),
         SalonId = salones[0].Id,
         FechaEvento = DateTime.Today.AddDays(30),
         Estado = EvenTech.BE.EstadoReserva.PENDIENTE,
@@ -63,7 +62,7 @@ else
     Console.WriteLine("[8] Crear reserva con fecha pasada (invalida):");
     var pasada = new EvenTech.BE.BE_Reserva
     {
-        ClienteId = clientes[0].Id,
+        ClienteNombre = "X",
         SalonId = salones[0].Id,
         FechaEvento = DateTime.Today.AddDays(-1),
         Estado = EvenTech.BE.EstadoReserva.PENDIENTE,
@@ -140,5 +139,88 @@ Console.WriteLine("[17] Crear idioma 'PT':");
 var rIdioma = EvenTech.BLL.BLL_Idioma.CrearIdioma("PT", "Portugues", out int idPt);
 Console.WriteLine($"  result={rIdioma}");
 Console.WriteLine($"  idiomas disponibles: {EvenTech.Services.GestorDeIdioma.GetInstance.IdiomasDisponibles.Count}");
+
+// [18] Patron Memento: versionado y restauracion de reservas
+Console.WriteLine("[18] Memento (versiones de reserva):");
+var clientesM = BLL_Cliente.GetAll();
+var salonesM = BLL_Salon.GetAll();
+if (clientesM.Count == 0 || salonesM.Count == 0)
+{
+    Console.WriteLine("  (faltan clientes/salones seed; corre db/schema.sql)");
+}
+else
+{
+    var reservaM = new EvenTech.BE.BE_Reserva
+    {
+        ClienteId = clientesM[0].Id,
+        SalonId = salonesM[0].Id,
+        FechaEvento = DateTime.Today.AddDays(45),
+        Estado = EvenTech.BE.EstadoReserva.PENDIENTE,
+        Monto = 1000m
+    };
+    var rm = BLL_Reserva.Crear(reservaM, out int idM);
+    Console.WriteLine($"  alta: result={rm}, id={idM}");
+
+    var v1 = BLL_Reserva.GetById(idM);
+    v1.Estado = EvenTech.BE.EstadoReserva.CONFIRMADA;
+    v1.Monto = 2000m;
+    Console.WriteLine($"  modificar (PENDIENTE/1000 -> CONFIRMADA/2000): result={BLL_Reserva.Actualizar(v1)}");
+
+    var versiones = CaretakerReserva.GetVersiones(idM);
+    Console.WriteLine($"  versiones guardadas: {versiones.Count} (esperado 1)");
+
+    if (versiones.Count > 0)
+    {
+        var rr = BLL_Reserva.RestaurarVersion(idM, versiones[0].Id);
+        var restaurada = BLL_Reserva.GetById(idM);
+        Console.WriteLine($"  restaurar: result={rr} -> Estado={restaurada.Estado}, Monto={restaurada.Monto} (esperado PENDIENTE, 1000)");
+        Console.WriteLine($"  versiones tras restaurar: {CaretakerReserva.GetVersiones(idM).Count} (esperado 2: la restauracion versiona el estado que piso)");
+    }
+}
+
+// [19] Composite de perfiles: un perfil incluye a otro y hereda sus permisos
+Console.WriteLine("[19] Composite de perfiles (perfil incluye perfil):");
+{
+    string suf = DateTime.Now.ToString("HHmmss");
+    var arbolC = BLL_Perfil.GetArbolPermisos();
+
+    // Busca el id de una hoja por su clave, recorriendo el arbol Composite.
+    int BuscarClave(IEnumerable<EvenTech.BE.BE_IComponentePermiso> nodos, string clave)
+    {
+        foreach (var n in nodos)
+        {
+            if (n is EvenTech.BE.BE_Permiso p && p.Clave == clave) return p.Id;
+            if (n is EvenTech.BE.BE_GrupoPermisos g)
+            {
+                int r = BuscarClave(g.Hijos, clave);
+                if (r > 0) return r;
+            }
+        }
+        return 0;
+    }
+
+    int idCrear = BuscarClave(arbolC, "RESERVA_CREAR");
+    int idEditar = BuscarClave(arbolC, "RESERVA_EDITAR");
+    int idBitacora = BuscarClave(arbolC, "BITACORA_VER");
+
+    BLL_Perfil.CrearPerfil("Vendedor_" + suf, "smoke", out int idVend);
+    BLL_Perfil.CrearPerfil("Gerencial_" + suf, "smoke", out int idGer);
+
+    var rVend = BLL_Perfil.GuardarComposicion(idVend, new[] { idCrear, idEditar }, new int[0]);
+    Console.WriteLine($"  Vendedor (RESERVA_CREAR + RESERVA_EDITAR): result={rVend}");
+
+    var rGer = BLL_Perfil.GuardarComposicion(idGer, new[] { idBitacora }, new[] { idVend });
+    Console.WriteLine($"  Gerencial (BITACORA_VER + incluye Vendedor): result={rGer}");
+
+    var efectivosGer = BLL_Perfil.GetPermisosEfectivosDePerfil(idGer);
+    Console.WriteLine($"  permisos efectivos de Gerencial: {string.Join(", ", efectivosGer.Select(p => p.Clave))}");
+    Console.WriteLine($"  (esperado: BITACORA_VER + RESERVA_CREAR + RESERVA_EDITAR heredados de Vendedor)");
+
+    var rCiclo = BLL_Perfil.GuardarComposicion(idVend, new[] { idCrear, idEditar }, new[] { idGer });
+    Console.WriteLine($"  incluir Gerencial dentro de Vendedor: result={rCiclo} (esperado ReferenciaCircular)");
+
+    var rSelf = BLL_Perfil.GuardarComposicion(idVend, new[] { idCrear }, new[] { idVend });
+    Console.WriteLine($"  incluir Vendedor dentro de si mismo: result={rSelf} (esperado ReferenciaCircular)");
+}
 
 Console.WriteLine("== fin ==");

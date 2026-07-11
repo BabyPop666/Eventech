@@ -258,11 +258,7 @@ namespace EvenTech.UI
                 foreach (var m in BLL_Bitacora.GetModulos()) _cboModulo.Items.Add(m);
                 _cboModulo.SelectedIndex = 0;
             }
-            catch (Exception ex)
-            {
-                BLL_Bitacora.RegistrarExcepcion(ex, "Bitacora", "Cargar modulos");
-                _cboModulo.SelectedIndex = -1;
-            }
+            catch { _cboModulo.SelectedIndex = -1; }
         }
 
         private void LimpiarFiltros()

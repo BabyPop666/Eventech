@@ -32,48 +32,33 @@ namespace EvenTech.DAL
             return list;
         }
 
-        // Reemplaza el set de servicios de la reserva (DELETE + INSERTs).
-        // Si se pasan conn/tx, participa de esa transaccion externa (para que el
-        // guardado de la reserva y sus servicios sea una sola unidad atomica); si no,
-        // abre su propia conexion y transaccion como antes.
-        public static void ReplaceForReserva(int reservaId, IEnumerable<BE_ReservaServicio> items,
-            SqlConnection conn = null, SqlTransaction tx = null)
+        // Reemplaza (en una transaccion) el set de servicios de la reserva.
+        public static void ReplaceForReserva(int reservaId, IEnumerable<BE_ReservaServicio> items)
         {
-            if (conn != null)
-            {
-                EjecutarReemplazo(reservaId, items, conn, tx);
-                return;
-            }
             using (var cn = new DAL_DB_Connection())
             {
-                var ownConn = cn.OpenConnection();
-                using (var ownTx = ownConn.BeginTransaction())
+                var conn = cn.OpenConnection();
+                using (var tx = conn.BeginTransaction())
                 {
-                    EjecutarReemplazo(reservaId, items, ownConn, ownTx);
-                    ownTx.Commit();
-                }
-            }
-        }
-
-        private static void EjecutarReemplazo(int reservaId, IEnumerable<BE_ReservaServicio> items,
-            SqlConnection conn, SqlTransaction tx)
-        {
-            using (var del = new SqlCommand("DELETE FROM dbo.ReservaServicio WHERE ReservaId = @r", conn, tx))
-            {
-                del.Parameters.Add("@r", SqlDbType.Int).Value = reservaId;
-                del.ExecuteNonQuery();
-            }
-            foreach (var it in items)
-            {
-                using (var ins = new SqlCommand(
-                    "INSERT INTO dbo.ReservaServicio (ReservaId, ServicioId, Cantidad, PrecioUnitario) " +
-                    "VALUES (@r, @s, @c, @p)", conn, tx))
-                {
-                    ins.Parameters.Add("@r", SqlDbType.Int).Value = reservaId;
-                    ins.Parameters.Add("@s", SqlDbType.Int).Value = it.ServicioId;
-                    ins.Parameters.Add("@c", SqlDbType.Int).Value = it.Cantidad;
-                    ins.Parameters.Add("@p", SqlDbType.Decimal).Value = it.PrecioUnitario;
-                    ins.ExecuteNonQuery();
+                    using (var del = new SqlCommand("DELETE FROM dbo.ReservaServicio WHERE ReservaId = @r", conn, tx))
+                    {
+                        del.Parameters.Add("@r", SqlDbType.Int).Value = reservaId;
+                        del.ExecuteNonQuery();
+                    }
+                    foreach (var it in items)
+                    {
+                        using (var ins = new SqlCommand(
+                            "INSERT INTO dbo.ReservaServicio (ReservaId, ServicioId, Cantidad, PrecioUnitario) " +
+                            "VALUES (@r, @s, @c, @p)", conn, tx))
+                        {
+                            ins.Parameters.Add("@r", SqlDbType.Int).Value = reservaId;
+                            ins.Parameters.Add("@s", SqlDbType.Int).Value = it.ServicioId;
+                            ins.Parameters.Add("@c", SqlDbType.Int).Value = it.Cantidad;
+                            ins.Parameters.Add("@p", SqlDbType.Decimal).Value = it.PrecioUnitario;
+                            ins.ExecuteNonQuery();
+                        }
+                    }
+                    tx.Commit();
                 }
             }
         }

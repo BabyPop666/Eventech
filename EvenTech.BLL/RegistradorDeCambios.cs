@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Reflection;
 using EvenTech.BE;
 using EvenTech.DAL;
@@ -58,11 +57,9 @@ namespace EvenTech.BLL
         private static string Formatear(object valor)
         {
             if (valor == null) return null;
-            // Cultura invariante: el texto guardado en HistorialCambios no debe
-            // depender del locale del equipo (coma vs punto decimal, etc.).
-            if (valor is DateTime dt) return dt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
-            if (valor is decimal dec) return dec.ToString("0.00", CultureInfo.InvariantCulture);
-            return Convert.ToString(valor, CultureInfo.InvariantCulture);
+            if (valor is DateTime dt) return dt.ToString("yyyy-MM-dd HH:mm");
+            if (valor is decimal dec) return dec.ToString("0.00");
+            return valor.ToString();
         }
 
         private static string UsuarioActual()
