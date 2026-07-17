@@ -388,6 +388,50 @@ END
 GO
 
 -- ===========================================================================
+-- Permisos agregados despues del seed inicial (idempotente): el bloque de
+-- arriba solo corre con la tabla vacia, asi que los permisos nuevos se
+-- insertan aca solo si faltan. El perfil Administrador recibe todo lo nuevo.
+-- ===========================================================================
+DECLARE @raizP INT = (SELECT TOP 1 Id FROM dbo.Permisos WHERE Nombre = N'Administracion' AND EsGrupo = 1);
+
+DECLARE @gAdminSys INT = (SELECT TOP 1 Id FROM dbo.Permisos WHERE Nombre = N'Administracion del sistema' AND EsGrupo = 1);
+IF @gAdminSys IS NULL
+BEGIN
+    INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
+        VALUES (N'Administracion del sistema', N'Gestion de catalogos y configuracion', 1, NULL, @raizP);
+    SET @gAdminSys = SCOPE_IDENTITY();
+END
+
+IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'CLIENTES_GESTION')
+    INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
+        VALUES (N'Gestion de Clientes', NULL, 0, N'CLIENTES_GESTION', @gAdminSys);
+IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'SERVICIOS_GESTION')
+    INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
+        VALUES (N'Gestion de Servicios', NULL, 0, N'SERVICIOS_GESTION', @gAdminSys);
+IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'PERFILES_GESTION')
+    INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
+        VALUES (N'Gestion de Perfiles', NULL, 0, N'PERFILES_GESTION', @gAdminSys);
+IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'IDIOMAS_GESTION')
+    INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
+        VALUES (N'Gestion de Idiomas', NULL, 0, N'IDIOMAS_GESTION', @gAdminSys);
+
+-- Recalculo de linea base de DV (T08): accion administrativa, cuelga de Auditoria.
+DECLARE @gAuditP INT = (SELECT TOP 1 Id FROM dbo.Permisos WHERE Nombre = N'Auditoria' AND EsGrupo = 1);
+IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'INTEGRIDAD_RECALC')
+    INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
+        VALUES (N'Recalcular linea base', N'Reestablecer digitos verificadores tras corregir datos', 0, N'INTEGRIDAD_RECALC', @gAuditP);
+
+-- Acceso total del Administrador: se le asigna todo permiso que le falte.
+INSERT INTO dbo.PerfilPermiso (PerfilId, PermisoId)
+SELECT p.Id, pe.Id
+FROM dbo.Perfiles p
+CROSS JOIN dbo.Permisos pe
+WHERE p.Nombre = N'Administrador'
+  AND NOT EXISTS (SELECT 1 FROM dbo.PerfilPermiso pp
+                  WHERE pp.PerfilId = p.Id AND pp.PermisoId = pe.Id);
+GO
+
+-- ===========================================================================
 -- Multiples idiomas (T05 - patron Observer). Modelo propio en BD, sin .resx.
 -- ===========================================================================
 
@@ -733,7 +777,11 @@ GO
         (N'ES', N'CMP_FILENAME', N'Comprobante_Reserva_'), (N'EN', N'CMP_FILENAME', N'Reservation_Receipt_'), (N'PT', N'CMP_FILENAME', N'Comprovante_Reserva_'),
         -- Auditoria unificada (tabs)
         (N'ES', N'AUD_TAB_BITACORA', N'Bitacora general'),            (N'EN', N'AUD_TAB_BITACORA', N'General audit log'),           (N'PT', N'AUD_TAB_BITACORA', N'Registro geral'),
-        (N'ES', N'AUD_TAB_LOGIN', N'Auditoria de login'),             (N'EN', N'AUD_TAB_LOGIN', N'Login audit'),                    (N'PT', N'AUD_TAB_LOGIN', N'Auditoria de login')
+        (N'ES', N'AUD_TAB_LOGIN', N'Auditoria de login'),             (N'EN', N'AUD_TAB_LOGIN', N'Login audit'),                    (N'PT', N'AUD_TAB_LOGIN', N'Auditoria de login'),
+        -- Integridad (T08): recalculo de linea base desde Auditoria
+        (N'ES', N'AUD_RECALC_BTN', N'Recalcular linea base'), (N'EN', N'AUD_RECALC_BTN', N'Recalculate baseline'), (N'PT', N'AUD_RECALC_BTN', N'Recalcular linha de base'),
+        (N'ES', N'AUD_RECALC_CONFIRMA', N'Recalcular los digitos verificadores de todas las reservas? Usar despues de corregir datos alterados: la linea base nueva pasa a ser la referencia de integridad.'), (N'EN', N'AUD_RECALC_CONFIRMA', N'Recalculate the verification digits of all reservations? Use after fixing altered data: the new baseline becomes the integrity reference.'), (N'PT', N'AUD_RECALC_CONFIRMA', N'Recalcular os digitos verificadores de todas as reservas? Usar apos corrigir dados alterados: a nova linha de base passa a ser a referencia de integridade.'),
+        (N'ES', N'AUD_RECALC_OK', N'Linea base recalculada ({0} reservas). Verificacion posterior: {1} inconsistencia(s).'), (N'EN', N'AUD_RECALC_OK', N'Baseline recalculated ({0} reservations). Post-check: {1} inconsistency(ies).'), (N'PT', N'AUD_RECALC_OK', N'Linha de base recalculada ({0} reservas). Verificacao posterior: {1} inconsistencia(s).')
     ) AS v(Codigo, Clave, Texto)
 )
 INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
