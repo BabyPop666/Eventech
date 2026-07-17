@@ -18,6 +18,16 @@ sqlcmd -S localhost\SQLEXPRESS -d EvenTechDB -E -C -i schema.sql
 
 Usuario inicial: **admin / admin123** (perfil Administrador, acceso total).
 
+## Datos cifrados (Email/Telefono de Clientes)
+
+Email y Telefono de `Clientes` se guardan cifrados con AES-256 (prefijo `ENC:`,
+ver `EvenTech.Services/CryptoService.cs`). La clave se genera sola en el primer
+uso y queda en `%ProgramData%\EvenTech\crypto.key`, protegida con DPAPI de la
+**máquina**. Consecuencia: si se restaura un `.bak` en otra PC, los valores
+`ENC:` de origen no se pueden descifrar ahí (se muestran tal cual); los valores
+legados en texto plano se leen normal y todo se re-cifra con la clave local al
+guardar el cliente.
+
 ## Opción B — Restaurar el snapshot completo (con datos)
 
 `EvenTechDB.bak` es un backup full con los datos actuales (reservas, perfiles,

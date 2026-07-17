@@ -38,18 +38,19 @@ foreach (var e in BLL_LoginAudit.GetAll(5))
     Console.WriteLine($"  #{e.Id} {e.Timestamp:HH:mm:ss} {e.Username,-20} {e.Action,-12} {e.Details}");
 }
 
-// [7] Reservas: alta valida
+// [7] Reservas: alta valida (la reserva referencia al cliente por Id)
 Console.WriteLine("[7] Crear reserva valida:");
 var salones = BLL_Salon.GetAll();
-if (salones.Count == 0)
+var clientes = BLL_Cliente.GetAll();
+if (salones.Count == 0 || clientes.Count == 0)
 {
-    Console.WriteLine("  (no hay salones seed; corre db/schema.sql)");
+    Console.WriteLine("  (no hay salones/clientes seed; corre db/schema.sql)");
 }
 else
 {
     var nueva = new EvenTech.BE.BE_Reserva
     {
-        ClienteNombre = "Cliente " + DateTime.Now.ToString("HHmmss"),
+        ClienteId = clientes[0].Id,
         SalonId = salones[0].Id,
         FechaEvento = DateTime.Today.AddDays(30),
         Estado = EvenTech.BE.EstadoReserva.PENDIENTE,
@@ -62,7 +63,7 @@ else
     Console.WriteLine("[8] Crear reserva con fecha pasada (invalida):");
     var pasada = new EvenTech.BE.BE_Reserva
     {
-        ClienteNombre = "X",
+        ClienteId = clientes[0].Id,
         SalonId = salones[0].Id,
         FechaEvento = DateTime.Today.AddDays(-1),
         Estado = EvenTech.BE.EstadoReserva.PENDIENTE,
@@ -221,6 +222,42 @@ Console.WriteLine("[19] Composite de perfiles (perfil incluye perfil):");
 
     var rSelf = BLL_Perfil.GuardarComposicion(idVend, new[] { idCrear }, new[] { idVend });
     Console.WriteLine($"  incluir Vendedor dentro de si mismo: result={rSelf} (esperado ReferenciaCircular)");
+}
+
+// [20] Cifrado reversible (AES) de datos sensibles del cliente
+Console.WriteLine("[20] Cifrado reversible de Email/Telefono de clientes:");
+{
+    string suf = DateTime.Now.ToString("HHmmss");
+    var cli = new EvenTech.BE.BE_Cliente
+    {
+        Nombre = "SmokeCrypto",
+        Apellido = suf,
+        Email = $"crypto_{suf}@test.com",
+        Telefono = "11-5555-" + suf
+    };
+    var rCli = BLL_Cliente.Crear(cli, out int idCli);
+    Console.WriteLine($"  alta: result={rCli}, id={idCli}");
+
+    var leido = BLL_Cliente.GetById(idCli);
+    bool roundtripOk = leido.Email == cli.Email && leido.Telefono == cli.Telefono;
+    Console.WriteLine($"  leido por la app: Email='{leido.Email}', Telefono='{leido.Telefono}'");
+    Console.WriteLine($"  roundtrip cifrar->descifrar: {(roundtripOk ? "OK" : "FALLO")} (esperado OK)");
+
+    // Lectura cruda, salteando la DAL: en la DB tiene que estar cifrado.
+    using (var cn = new EvenTech.DAL.DAL_DB_Connection())
+    using (var cmd = new Microsoft.Data.SqlClient.SqlCommand(
+        "SELECT Email, Telefono FROM dbo.Clientes WHERE Id = @id", cn.OpenConnection()))
+    {
+        cmd.Parameters.AddWithValue("@id", idCli);
+        using var r = cmd.ExecuteReader();
+        if (r.Read())
+        {
+            string rawE = r.GetString(0), rawT = r.GetString(1);
+            Console.WriteLine($"  crudo en DB: Email='{rawE[..Math.Min(44, rawE.Length)]}...'");
+            Console.WriteLine($"  cifrado en DB: Email={CryptoService.EstaProtegido(rawE)}, " +
+                              $"Telefono={CryptoService.EstaProtegido(rawT)} (esperado True, True)");
+        }
+    }
 }
 
 Console.WriteLine("== fin ==");

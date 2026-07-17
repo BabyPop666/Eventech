@@ -108,13 +108,24 @@ BEGIN
         Nombre    NVARCHAR(60)      NOT NULL,
         Apellido  NVARCHAR(60)      NULL,
         Dni       NVARCHAR(20)      NULL,
-        Email     NVARCHAR(120)     NULL,
-        Telefono  NVARCHAR(30)      NULL,
+        Email     NVARCHAR(400)     NULL,  -- cifrado AES + Base64 (CryptoService)
+        Telefono  NVARCHAR(200)     NULL,  -- cifrado AES + Base64 (CryptoService)
         CreatedAt DATETIME          NOT NULL CONSTRAINT DF_Clientes_CreatedAt DEFAULT GETDATE()
     );
     -- DNI unico solo cuando esta cargado (permite varios clientes sin DNI).
     CREATE UNIQUE INDEX UX_Clientes_Dni ON dbo.Clientes(Dni) WHERE Dni IS NOT NULL;
 END
+GO
+
+-- Email/Telefono se almacenan cifrados (AES-256 + Base64, prefijo 'ENC:'), lo que
+-- requiere mas ancho que el texto plano. Idempotente: solo amplia si estan cortas.
+-- max_length de sys.columns esta en bytes (NVARCHAR usa 2 por caracter).
+IF EXISTS (SELECT 1 FROM sys.columns
+           WHERE object_id = OBJECT_ID('dbo.Clientes') AND name = 'Email' AND max_length < 800)
+    ALTER TABLE dbo.Clientes ALTER COLUMN Email NVARCHAR(400) NULL;
+IF EXISTS (SELECT 1 FROM sys.columns
+           WHERE object_id = OBJECT_ID('dbo.Clientes') AND name = 'Telefono' AND max_length < 400)
+    ALTER TABLE dbo.Clientes ALTER COLUMN Telefono NVARCHAR(200) NULL;
 GO
 
 -- Reservas.ClienteId (FK -> Clientes)
