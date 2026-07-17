@@ -19,13 +19,21 @@ namespace EvenTech.BLL
         private const string TablaReservas = "Reservas";
 
         // Recalcula el DV horizontal de TODAS las reservas y luego el vertical.
-        // Util tras una migracion que cambia los campos que entran al DV (deja la
-        // linea base consistente para que la verificacion al arranque no falle).
-        public static void RecalcularTodo()
+        // Util tras corregir datos corruptos o tras una migracion que cambia los
+        // campos que entran al DV (deja la linea base consistente para que la
+        // verificacion al arranque no falle). Devuelve cuantas reservas proceso.
+        // Es una accion administrativa: queda registrada en bitacora.
+        public static int RecalcularTodo()
         {
-            foreach (var r in DAL_Reserva.GetAll())
+            var reservas = DAL_Reserva.GetAll();
+            foreach (var r in reservas)
                 DAL_Reserva.UpdateDvh(r.Id, ValidadorDeIntegridad.CalcularDVH(r));
             RecalcularDVVerticalReservas();
+
+            BLL_Bitacora.Registrar("Integridad", "Recalculo de linea base",
+                CriticidadBitacora.Advertencia,
+                $"Se recalculo el DVH de {reservas.Count} reserva(s) y el DVV del conjunto");
+            return reservas.Count;
         }
 
         // Recalcula el DV vertical de Reservas a partir de los DVH almacenados.

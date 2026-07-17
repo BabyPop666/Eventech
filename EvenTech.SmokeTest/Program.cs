@@ -135,6 +135,12 @@ var resInt = EvenTech.BLL.BLL_Integridad.Verificar();
 Console.WriteLine($"  Ok={resInt.Ok}, inconsistencias={resInt.Inconsistencias.Count}");
 foreach (var i in resInt.Inconsistencias) Console.WriteLine("   - " + i);
 
+// Recalculo de linea base (accion administrativa del proceso ante corrupcion):
+// tras recalcular, la verificacion tiene que dar limpia si o si.
+int recalculadas = EvenTech.BLL.BLL_Integridad.RecalcularTodo();
+var resInt2 = EvenTech.BLL.BLL_Integridad.Verificar();
+Console.WriteLine($"  recalculo de linea base: {recalculadas} reservas -> Ok={resInt2.Ok} (esperado True)");
+
 // [17] Alta de idioma desde la capa de negocio (admin agrega idioma)
 Console.WriteLine("[17] Crear idioma 'PT':");
 var rIdioma = EvenTech.BLL.BLL_Idioma.CrearIdioma("PT", "Portugues", out int idPt);
