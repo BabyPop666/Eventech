@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using Microsoft.Data.SqlClient;
 using EvenTech.BE;
+using EvenTech.Services;
 
 namespace EvenTech.DAL
 {
@@ -82,17 +83,24 @@ namespace EvenTech.DAL
             }
         }
 
+        // Email y Telefono se persisten cifrados (AES reversible, CryptoService):
+        // son datos de contacto sensibles que la app necesita leer de vuelta.
+        // DNI queda en claro porque participa del indice unico y de busquedas por
+        // igualdad en SQL (el cifrado con IV aleatorio rompe ambas cosas).
         private static void Bind(SqlCommand cmd, BE_Cliente c)
         {
             cmd.Parameters.Add("@n", SqlDbType.NVarChar, 60).Value = c.Nombre ?? string.Empty;
             cmd.Parameters.Add("@a", SqlDbType.NVarChar, 60).Value = Nz(c.Apellido);
             cmd.Parameters.Add("@d", SqlDbType.NVarChar, 20).Value = Nz(c.Dni);
-            cmd.Parameters.Add("@e", SqlDbType.NVarChar, 120).Value = Nz(c.Email);
-            cmd.Parameters.Add("@t", SqlDbType.NVarChar, 30).Value = Nz(c.Telefono);
+            cmd.Parameters.Add("@e", SqlDbType.NVarChar, 400).Value = NzCifrado(c.Email);
+            cmd.Parameters.Add("@t", SqlDbType.NVarChar, 200).Value = NzCifrado(c.Telefono);
         }
 
         // string vacio/blanco -> NULL (para respetar el indice unico filtrado de DNI).
         private static object Nz(string s) => string.IsNullOrWhiteSpace(s) ? (object)DBNull.Value : s.Trim();
+
+        private static object NzCifrado(string s) =>
+            string.IsNullOrWhiteSpace(s) ? (object)DBNull.Value : CryptoService.Proteger(s.Trim());
 
         private static BE_Cliente Map(SqlDataReader r) => new BE_Cliente
         {
@@ -100,8 +108,8 @@ namespace EvenTech.DAL
             Nombre = r.GetString(1),
             Apellido = r.IsDBNull(2) ? null : r.GetString(2),
             Dni = r.IsDBNull(3) ? null : r.GetString(3),
-            Email = r.IsDBNull(4) ? null : r.GetString(4),
-            Telefono = r.IsDBNull(5) ? null : r.GetString(5),
+            Email = r.IsDBNull(4) ? null : CryptoService.Desproteger(r.GetString(4)),
+            Telefono = r.IsDBNull(5) ? null : CryptoService.Desproteger(r.GetString(5)),
             CreatedAt = r.GetDateTime(6)
         };
     }

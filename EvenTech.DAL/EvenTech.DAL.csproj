@@ -11,5 +11,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\EvenTech.BE\EvenTech.BE.csproj" />
+    <ProjectReference Include="..\EvenTech.Services\EvenTech.Services.csproj" />
   </ItemGroup>
 </Project>
