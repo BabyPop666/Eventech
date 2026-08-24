@@ -90,7 +90,7 @@ namespace EvenTech.BLL
             // Permisos efectivos del perfil (Composite) hacia la sesion.
             HashSet<string> permisos = null;
             bool sinPerfil = !user.PerfilId.HasValue;
-            bool accesoTotal = false;
+            bool permisosNoDisponibles = false;
             if (user.PerfilId.HasValue)
             {
                 try
@@ -103,12 +103,19 @@ namespace EvenTech.BLL
                 }
                 catch (Exception ex)
                 {
-                    accesoTotal = true;
+                    // Denegar por defecto: si los permisos no se pueden resolver la
+                    // sesion arranca SIN ninguno. Conceder acceso total ante el fallo
+                    // convertiria una caida de base en una escalada de privilegios.
+                    permisosNoDisponibles = true;
+                    permisos = null;
                     BLL_Bitacora.RegistrarExcepcion(ex, "Login", "Carga de permisos del perfil");
+                    BLL_Bitacora.Registrar("Seguridad", "Permisos no disponibles", CriticidadBitacora.Error,
+                        $"No se pudieron resolver los permisos del perfil #{user.PerfilId.Value} de '{username}': " +
+                        "la sesion queda sin permisos hasta que se restablezca el acceso.");
                 }
             }
 
-            SessionManager.Login(user, permisos, accesoTotal, sinPerfil);
+            SessionManager.Login(user, permisos, permisosNoDisponibles, sinPerfil);
             BLL_LoginAudit.Register(username, LoginAuditAction.LOGIN_OK, "Ingreso correcto");
             resp.Result = LoginResult.Success;
             return resp;

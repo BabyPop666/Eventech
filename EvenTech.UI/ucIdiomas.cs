@@ -267,6 +267,8 @@ namespace EvenTech.UI
 
         private void CrearIdioma()
         {
+            // Segunda capa del control de acceso (ver Permisos.cs).
+            if (!Permisos.Exigir("IDIOMAS_GESTION", FindForm(), "crear un idioma")) return;
             try
             {
                 IdiomaResult res = BLL_Idioma.CrearIdioma(_txtCodigo.Text, _txtNombre.Text, out int nuevoId);
@@ -292,6 +294,7 @@ namespace EvenTech.UI
                 Mensaje(Tr.T("MSG_IDI_SELECCIONE"), true);
                 return;
             }
+            if (!Permisos.Exigir("IDIOMAS_GESTION", FindForm(), "guardar traducciones")) return;
             try
             {
                 _grid.EndEdit();

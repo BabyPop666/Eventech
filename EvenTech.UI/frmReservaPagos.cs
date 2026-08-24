@@ -68,6 +68,8 @@ namespace EvenTech.UI
             _txtObs = Ui.Input(); _txtObs.Width = 150; _txtObs.Margin = new Padding(0, 0, Theme.SpaceSm, 0);
             var btnRegistrar = Ui.Primary(T("BTN_REGISTRAR", "Registrar"), Theme.IcoAdd); btnRegistrar.BehindColor = Theme.BgContent; btnRegistrar.Size = new Size(130, 30); btnRegistrar.Click += (s, e) => Registrar();
             var btnQuitar = Ui.Secondary(T("BTN_QUITAR", "Quitar"), Theme.IcoClear); btnQuitar.BehindColor = Theme.BgContent; btnQuitar.Size = new Size(100, 30); btnQuitar.Margin = new Padding(Theme.SpaceSm, 0, 0, 0); btnQuitar.Click += (s, e) => Quitar();
+            // Anular un pago es una operacion sensible: se oculta a quien no la tiene.
+            btnQuitar.Visible = Permisos.Tiene("PAGOS_ANULAR");
             alta.Controls.Add(_cboMetodo); alta.Controls.Add(_numMonto); alta.Controls.Add(_txtObs); alta.Controls.Add(btnRegistrar); alta.Controls.Add(btnQuitar);
 
             // --- Grilla ---
@@ -101,6 +103,9 @@ namespace EvenTech.UI
 
         private void Registrar()
         {
+            // Registrar un cobro mueve el saldo de la reserva: es una escritura y
+            // exige su permiso, igual que la anulacion.
+            if (!Permisos.Exigir("PAGOS_REGISTRAR", this, "registrar un pago en la reserva #" + _reservaId)) return;
             if (!(_cboMetodo.SelectedItem is BE_MetodoPago m)) return;
             var pago = new BE_Pago
             {
@@ -121,16 +126,32 @@ namespace EvenTech.UI
                     Aviso(T("MSG_PAGO_EXCEDE", "El pago supera el saldo pendiente.")); return;
                 case PagoResult.ReservaInvalida:
                     Aviso(T("MSG_PAGO_RESERVA", "Reserva invalida.")); return;
+                case PagoResult.ReservaCancelada:
+                    Aviso(T("MSG_RES_NO_MODIFICABLE", "La reserva esta cancelada: no admite modificaciones.")); return;
             }
             _numMonto.Value = 0;
             _txtObs.Clear();
             Refrescar();
         }
 
+        // Anulacion de un pago. Es destructiva e irreversible (no hay versionado de
+        // pagos como si lo hay de reservas), asi que exige permiso propio y una
+        // confirmacion explicita que nombra el importe que se va a anular.
         private void Quitar()
         {
             if (_grid.CurrentRow == null) return;
             if (!(_grid.CurrentRow.Tag is int pagoId)) return;
+
+            if (!Permisos.Exigir("PAGOS_ANULAR", this, "anular el pago #" + pagoId + " de la reserva #" + _reservaId))
+                return;
+
+            decimal monto = _grid.CurrentRow.Cells["cMonto"].Value is decimal m ? m : 0m;
+            var confirma = MessageBox.Show(this,
+                string.Format(T("MSG_PAGO_ANULAR_CONF",
+                    "Anular el pago de {0}? La operacion no se puede deshacer."), monto.ToString("N2")),
+                "EvenTech", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (confirma != DialogResult.Yes) return;
+
             BLL_Pago.Eliminar(pagoId, _reservaId);
             Refrescar();
         }

@@ -421,6 +421,24 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'INTEGRIDAD_RECALC')
     INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
         VALUES (N'Recalcular linea base', N'Reestablecer digitos verificadores tras corregir datos', 0, N'INTEGRIDAD_RECALC', @gAuditP);
 
+-- Ventas: operaciones de cobro. Anular un pago es destructivo (no hay versionado
+-- de pagos), asi que se separa del alta y se concede aparte.
+DECLARE @gVentas INT = (SELECT TOP 1 Id FROM dbo.Permisos WHERE Nombre = N'Ventas' AND EsGrupo = 1);
+IF @gVentas IS NULL
+BEGIN
+    INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
+        VALUES (N'Ventas', N'Permisos de cobro y facturacion', 1, NULL, @raizP);
+    SET @gVentas = SCOPE_IDENTITY();
+END
+
+IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'PAGOS_REGISTRAR')
+    INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
+        VALUES (N'Registrar Pagos', N'Cobrar adelantos y saldos de una reserva', 0, N'PAGOS_REGISTRAR', @gVentas);
+
+IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'PAGOS_ANULAR')
+    INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
+        VALUES (N'Anular Pagos', N'Eliminar un pago ya registrado de una reserva', 0, N'PAGOS_ANULAR', @gVentas);
+
 -- Acceso total del Administrador: se le asigna todo permiso que le falte.
 INSERT INTO dbo.PerfilPermiso (PerfilId, PermisoId)
 SELECT p.Id, pe.Id
@@ -888,6 +906,40 @@ GO
         (N'ES', N'VER_VACIO', N'Sin versiones guardadas. Se crea una automaticamente al modificar la reserva.'), (N'EN', N'VER_VACIO', N'No saved versions. One is created automatically when the reservation is modified.'), (N'PT', N'VER_VACIO', N'Sem versoes salvas. Uma e criada automaticamente ao modificar a reserva.'),
         (N'ES', N'VER_CONFIRMA', N'Restaurar la reserva al estado de la version seleccionada? El estado actual se guardara como una nueva version.'), (N'EN', N'VER_CONFIRMA', N'Restore the reservation to the selected version? The current state will be saved as a new version.'), (N'PT', N'VER_CONFIRMA', N'Restaurar a reserva ao estado da versao selecionada? O estado atual sera salvo como uma nova versao.'),
         (N'ES', N'MSG_VER_OK', N'Version restaurada.'), (N'EN', N'MSG_VER_OK', N'Version restored.'), (N'PT', N'MSG_VER_OK', N'Versao restaurada.')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, t.Texto
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+);
+GO
+
+-- ===========================================================================
+-- Control de acceso reforzado y configuracion de conexion
+-- (idempotente: solo inserta las claves que falten).
+-- ===========================================================================
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        -- Segunda capa de permisos
+        (N'ES', N'MSG_SIN_PERMISO', N'No tenes permiso para realizar esta accion.'), (N'EN', N'MSG_SIN_PERMISO', N'You do not have permission to perform this action.'), (N'PT', N'MSG_SIN_PERMISO', N'Voce nao tem permissao para realizar esta acao.'),
+        (N'ES', N'MAIN_PERMISOS_ERROR', N'No se pudieron cargar los permisos de tu perfil, asi que la sesion quedo sin acceso a las secciones. Volve a iniciar sesion; si el problema sigue, avisale a un administrador.'), (N'EN', N'MAIN_PERMISOS_ERROR', N'Your profile permissions could not be loaded, so this session has no access to the sections. Sign in again; if the problem persists, contact an administrator.'), (N'PT', N'MAIN_PERMISOS_ERROR', N'Nao foi possivel carregar as permissoes do seu perfil, entao a sessao ficou sem acesso as secoes. Entre novamente; se o problema continuar, avise um administrador.'),
+        -- Reserva cancelada (estado terminal)
+        (N'ES', N'MSG_RES_NO_MODIFICABLE', N'La reserva esta cancelada: no admite modificaciones.'), (N'EN', N'MSG_RES_NO_MODIFICABLE', N'The reservation is cancelled: it cannot be modified.'), (N'PT', N'MSG_RES_NO_MODIFICABLE', N'A reserva esta cancelada: nao admite modificacoes.'),
+        -- Anulacion de pagos
+        (N'ES', N'MSG_PAGO_ANULAR_CONF', N'Anular el pago de {0}? La operacion no se puede deshacer.'), (N'EN', N'MSG_PAGO_ANULAR_CONF', N'Void the payment of {0}? This action cannot be undone.'), (N'PT', N'MSG_PAGO_ANULAR_CONF', N'Anular o pagamento de {0}? A operacao nao pode ser desfeita.'),
+        -- Configuracion de conexion (pre-login)
+        (N'ES', N'CONN_TITULO', N'Configuracion de conexion'), (N'EN', N'CONN_TITULO', N'Connection settings'), (N'PT', N'CONN_TITULO', N'Configuracao de conexao'),
+        (N'ES', N'CONN_AYUDA', N'No se pudo conectar a la base de datos. Indica donde esta la instancia de SQL Server y el nombre de la base. La configuracion se guarda cifrada en tu perfil de Windows.'), (N'EN', N'CONN_AYUDA', N'Could not connect to the database. Enter the SQL Server instance and the database name. The setting is stored encrypted in your Windows profile.'), (N'PT', N'CONN_AYUDA', N'Nao foi possivel conectar ao banco de dados. Informe a instancia do SQL Server e o nome do banco. A configuracao e salva criptografada no seu perfil do Windows.'),
+        (N'ES', N'CONN_SERVIDOR', N'Instancia de SQL Server'), (N'EN', N'CONN_SERVIDOR', N'SQL Server instance'), (N'PT', N'CONN_SERVIDOR', N'Instancia do SQL Server'),
+        (N'ES', N'CONN_BASE', N'Base de datos'), (N'EN', N'CONN_BASE', N'Database'), (N'PT', N'CONN_BASE', N'Banco de dados'),
+        (N'ES', N'CONN_PROBAR', N'Probar'), (N'EN', N'CONN_PROBAR', N'Test'), (N'PT', N'CONN_PROBAR', N'Testar'),
+        (N'ES', N'CONN_GUARDAR', N'Guardar'), (N'EN', N'CONN_GUARDAR', N'Save'), (N'PT', N'CONN_GUARDAR', N'Salvar'),
+        (N'ES', N'CONN_SALIR', N'Salir'), (N'EN', N'CONN_SALIR', N'Exit'), (N'PT', N'CONN_SALIR', N'Sair'),
+        (N'ES', N'CONN_PROBANDO', N'Probando conexion...'), (N'EN', N'CONN_PROBANDO', N'Testing connection...'), (N'PT', N'CONN_PROBANDO', N'Testando conexao...'),
+        (N'ES', N'CONN_OK', N'Conexion correcta.'), (N'EN', N'CONN_OK', N'Connection successful.'), (N'PT', N'CONN_OK', N'Conexao correta.')
     ) AS v(Codigo, Clave, Texto)
 )
 INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)

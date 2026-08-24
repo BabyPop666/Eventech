@@ -1,4 +1,4 @@
-using EvenTech.BLL;
+﻿using EvenTech.BLL;
 using EvenTech.Services;
 
 Console.WriteLine("== EvenTech smoke test v2 ==");
@@ -263,6 +263,170 @@ Console.WriteLine("[20] Cifrado reversible de Email/Telefono de clientes:");
             Console.WriteLine($"  cifrado en DB: Email={CryptoService.EstaProtegido(rawE)}, " +
                               $"Telefono={CryptoService.EstaProtegido(rawT)} (esperado True, True)");
         }
+    }
+}
+
+// [21] Control de acceso: los permisos se conceden solo si estan en el perfil
+// (denegar por defecto). Se valida sobre la sesion real de admin.
+Console.WriteLine("[21] Permisos de la sesion (denegar por defecto):");
+{
+    BLL_Login.Authenticate("admin", Encrypt.HashValue("admin123"));
+    var s = SessionManager.GetInstance;
+    Console.WriteLine($"  permisosNoDisponibles={s.PermisosNoDisponibles} (esperado False)");
+    Console.WriteLine($"  admin tiene RESERVA_CREAR: {s.TienePermiso("RESERVA_CREAR")} (esperado True)");
+    Console.WriteLine($"  admin tiene PAGOS_ANULAR: {s.TienePermiso("PAGOS_ANULAR")} (esperado True)");
+    Console.WriteLine($"  clave inexistente NO_EXISTE: {s.TienePermiso("NO_EXISTE")} (esperado False)");
+    Console.WriteLine($"  clave nula: {s.TienePermiso(null)} (esperado False)");
+    BLL_Login.Logout();
+}
+
+// [22] Todas las claves que la UI exige tienen que existir en el arbol: si una
+// falta, la seccion queda invisible para todos y el problema pasa inadvertido.
+Console.WriteLine("[22] Claves de permiso usadas por la UI presentes en el arbol:");
+{
+    string[] usadas = { "RESERVA_CREAR", "RESERVA_EDITAR", "RESERVA_HISTORIAL",
+                        "CLIENTES_GESTION", "SERVICIOS_GESTION", "PERFILES_GESTION",
+                        "IDIOMAS_GESTION", "BITACORA_VER", "AUDIT_LOGIN_VER",
+                        "INTEGRIDAD_RECALC", "PAGOS_REGISTRAR", "PAGOS_ANULAR" };
+    var enArbol = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    void Recorrer(IEnumerable<EvenTech.BE.BE_IComponentePermiso> nodos)
+    {
+        foreach (var n in nodos)
+        {
+            if (n is EvenTech.BE.BE_Permiso hoja && !string.IsNullOrEmpty(hoja.Clave)) enArbol.Add(hoja.Clave);
+            if (n is EvenTech.BE.BE_GrupoPermisos g) Recorrer(g.Hijos);
+        }
+    }
+    Recorrer(BLL_Perfil.GetArbolPermisos());
+    var faltan = usadas.Where(c => !enArbol.Contains(c)).ToList();
+    Console.WriteLine($"  claves en el arbol: {enArbol.Count}; faltantes: " +
+                      (faltan.Count == 0 ? "ninguna (esperado)" : string.Join(", ", faltan)));
+}
+
+// [23] Una reserva cancelada es estado terminal: no admite modificaciones.
+Console.WriteLine("[23] Reserva cancelada no modificable:");
+{
+    var sal = BLL_Salon.GetAll();
+    var cli = BLL_Cliente.GetAll();
+    if (sal.Count == 0 || cli.Count == 0)
+    {
+        Console.WriteLine("  (no hay salones/clientes seed; corre db/schema.sql)");
+    }
+    else
+    {
+        var res = new EvenTech.BE.BE_Reserva
+        {
+            ClienteId = cli[0].Id,
+            SalonId = sal[0].Id,
+            FechaEvento = DateTime.Today.AddDays(45),
+            Estado = EvenTech.BE.EstadoReserva.CANCELADA,
+            Monto = 1000m
+        };
+        var rAlta = BLL_Reserva.Crear(res, out int idCancel);
+        Console.WriteLine($"  alta cancelada: result={rAlta}, id={idCancel}");
+
+        var guardada = BLL_Reserva.GetById(idCancel);
+        Console.WriteLine($"  PuedeModificar: {BLL_Reserva.PuedeModificar(guardada)} (esperado False)");
+
+        guardada.Monto = 2000m;
+        var rMod = BLL_Reserva.Actualizar(guardada);
+        Console.WriteLine($"  intento de modificar: result={rMod} (esperado NoModificable)");
+
+        // Una reserva viva si se modifica.
+        var viva = BLL_Reserva.GetById(idCancel);
+        viva.Estado = EvenTech.BE.EstadoReserva.PENDIENTE;
+        Console.WriteLine($"  PuedeModificar sobre PENDIENTE: {BLL_Reserva.PuedeModificar(viva)} (esperado True)");
+
+        // Los pagos persisten en el acto, sin pasar por BLL_Reserva.Actualizar:
+        // la regla del estado terminal tiene que rechazarlos tambien.
+        var metodos = BLL_Pago.GetMetodos();
+        if (metodos.Count > 0)
+        {
+            var pago = new EvenTech.BE.BE_Pago { ReservaId = idCancel, MetodoPagoId = metodos[0].Id, Monto = 10m };
+            var rPago = BLL_Pago.Registrar(pago, out _);
+            Console.WriteLine($"  cobrar sobre cancelada: result={rPago} (esperado ReservaCancelada)");
+        }
+    }
+}
+
+// [24] Configuracion de conexion: la cadena sale del gestor (no hardcodeada) y
+// el diagnostico distingue servidor caido de base inexistente.
+Console.WriteLine("[24] Configuracion de conexion:");
+{
+    Console.WriteLine($"  configurada por el usuario: {BLL_Conexion.EstaConfigurada}");
+    Console.WriteLine($"  servidor='{BLL_Conexion.ServidorActual}', base='{BLL_Conexion.BaseDatosActual}'");
+
+    bool ok = BLL_Conexion.VerificarActual(out string msgOk);
+    Console.WriteLine($"  verificar actual: {ok} (esperado True){(ok ? "" : " -> " + msgOk)}");
+
+    bool inexistente = BLL_Conexion.Probar(EvenTech.Services.ConfiguracionConexion.ServidorPorDefecto,
+                                           "BaseQueNoExiste_" + DateTime.Now.ToString("HHmmss"), out string msgNo);
+    Console.WriteLine($"  base inexistente: {inexistente} (esperado False)");
+    Console.WriteLine($"    diagnostico: {msgNo}");
+
+    Console.WriteLine($"  instancias detectadas: {BLL_Conexion.GetInstancias().Count}");
+
+    // Roundtrip del archivo cifrado con DPAPI: si guardar/leer fallara, la app
+    // quedaria sin poder conectar en el proximo arranque. Se prueba con la
+    // configuracion que ya funciona y se deja el entorno como estaba.
+    bool estabaConfigurada = BLL_Conexion.EstaConfigurada;
+    string servidorPrevio = BLL_Conexion.ServidorActual, basePrevia = BLL_Conexion.BaseDatosActual;
+
+    bool guardo = BLL_Conexion.Guardar(servidorPrevio, basePrevia, out string msgGuardar);
+    Console.WriteLine($"  guardar cifrado (DPAPI): {guardo} (esperado True){(guardo ? "" : " -> " + msgGuardar)}");
+    Console.WriteLine($"  persistida: {BLL_Conexion.EstaConfigurada} (esperado True)");
+
+    bool releeOk = BLL_Conexion.VerificarActual(out _);
+    Console.WriteLine($"  releida y conecta: {releeOk} (esperado True)");
+    Console.WriteLine($"  servidor releido='{BLL_Conexion.ServidorActual}', base='{BLL_Conexion.BaseDatosActual}' " +
+                      $"(esperado '{servidorPrevio}', '{basePrevia}')");
+
+    if (!estabaConfigurada)
+    {
+        BLL_Conexion.Restablecer();
+        Console.WriteLine($"  entorno restaurado (sin archivo): {!BLL_Conexion.EstaConfigurada} (esperado True)");
+    }
+}
+
+// [25] Diagnostico de conexion: una base sin el esquema tiene que rechazarse, si
+// no la app quedaria conectada a una base inservible sin volver a ofrecer configurar.
+Console.WriteLine("[25] Base existente pero sin esquema:");
+{
+    const string tmpDb = "EvenTechSmokeVacia";
+    string cs = EvenTech.Services.ConfiguracionConexion.Construir(
+        EvenTech.Services.ConfiguracionConexion.ServidorActual, tmpDb);
+    try
+    {
+        using (var cn = new Microsoft.Data.SqlClient.SqlConnection(
+            EvenTech.Services.ConfiguracionConexion.Construir(EvenTech.Services.ConfiguracionConexion.ServidorActual, "master")))
+        {
+            cn.Open();
+            using var crear = new Microsoft.Data.SqlClient.SqlCommand(
+                $"IF DB_ID('{tmpDb}') IS NULL CREATE DATABASE [{tmpDb}]", cn);
+            crear.ExecuteNonQuery();
+        }
+
+        bool ok = EvenTech.DAL.DAL_DB_Connection.Probar(cs, out string msg);
+        Console.WriteLine($"  aceptada: {ok} (esperado False)");
+        Console.WriteLine($"    diagnostico: {msg}");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"  (no se pudo crear la base de prueba: {ex.Message})");
+    }
+    finally
+    {
+        try
+        {
+            using var cn = new Microsoft.Data.SqlClient.SqlConnection(
+                EvenTech.Services.ConfiguracionConexion.Construir(EvenTech.Services.ConfiguracionConexion.ServidorActual, "master"));
+            cn.Open();
+            using var borrar = new Microsoft.Data.SqlClient.SqlCommand(
+                $"IF DB_ID('{tmpDb}') IS NOT NULL BEGIN ALTER DATABASE [{tmpDb}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{tmpDb}]; END", cn);
+            borrar.ExecuteNonQuery();
+            Console.WriteLine("  base de prueba eliminada");
+        }
+        catch (Exception ex) { Console.WriteLine($"  (no se pudo limpiar la base de prueba: {ex.Message})"); }
     }
 }
 
