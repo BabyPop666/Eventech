@@ -209,6 +209,7 @@ namespace EvenTech.UI
             _btnNuevoCliente.Dock = DockStyle.Fill;
             _btnNuevoCliente.Margin = new Padding(0);
             _btnNuevoCliente.Click += (s, e) => NuevoCliente();
+            _btnNuevoCliente.Enabled = Permisos.Tiene("CLIENTES_GESTION");
             var clientePanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.Transparent, Margin = new Padding(0) };
             clientePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             clientePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 36));
@@ -407,8 +408,12 @@ namespace EvenTech.UI
         }
 
         // Alta rapida de cliente desde la ficha (Proceso 1: "si es nuevo, registrarlo").
+        // El alta rapida de cliente desde la ficha de reserva persiste igual que la
+        // pantalla de Clientes, asi que exige el mismo permiso: si no, seria una
+        // via para eludir el gating de CLIENTES_GESTION.
         private void NuevoCliente()
         {
+            if (!Permisos.Exigir("CLIENTES_GESTION", FindForm(), "crear un cliente desde la ficha de reserva")) return;
             using (var dlg = new frmNuevoCliente())
             {
                 if (dlg.ShowDialog(FindForm()) == DialogResult.OK)
@@ -460,10 +465,33 @@ namespace EvenTech.UI
             try { _serviciosReserva = BLL_ReservaServicio.GetByReserva(r.Id); }
             catch (Exception ex) { BLL_Bitacora.RegistrarExcepcion(ex, "Reservas", "Cargar servicios de reserva"); _serviciosReserva = new List<BE_ReservaServicio>(); }
             ActualizarMonto();
+            AplicarModificabilidad(r);
+        }
+
+        // Una reserva cancelada no admite ediciones: se avisa en la ficha y se
+        // desactivan Guardar y Pagos. Los pagos importan aparte porque persisten
+        // en el acto (no esperan a Guardar), asi que sin bloquearlos se podria
+        // seguir moviendo el saldo de una reserva cancelada. La BLL igual rechaza
+        // el intento; Versiones queda habilitado porque restaurar es la via de
+        // recuperacion prevista para un estado terminal.
+        private void AplicarModificabilidad(BE_Reserva r)
+        {
+            bool editable = BLL_Reserva.PuedeModificar(r);
+            _btnGuardar.Enabled = editable;
+            _btnPagos.Enabled = editable;
+            if (!editable)
+                ShowError(T("MSG_RES_NO_MODIFICABLE", "La reserva esta cancelada: no admite modificaciones."));
+            else
+                _lblError.Visible = false;
         }
 
         private void LimpiarForm()
         {
+            // ClearSelection va PRIMERO: puede disparar Grid_SelectionChanged ->
+            // CargarEnForm y repoblar la ficha con la fila que quede seleccionada.
+            // Limpiando despues, el estado "nueva reserva" es el que sobrevive.
+            _grid.ClearSelection();
+
             _editId = 0;
             ActualizarTituloForm();
             if (_cboCliente.Items.Count > 0) _cboCliente.SelectedIndex = 0;
@@ -472,7 +500,9 @@ namespace EvenTech.UI
             _cboEstado.SelectedItem = EstadoReserva.COTIZACION;
             _serviciosReserva = new List<BE_ReservaServicio>();
             ActualizarMonto();
-            _grid.ClearSelection();
+            _btnGuardar.Enabled = true;
+            _btnPagos.Enabled = true;
+            _lblError.Visible = false;
         }
 
         // Refleja el total (suma de servicios) en el campo Monto y el conteo en el boton.
@@ -601,6 +631,13 @@ namespace EvenTech.UI
 
         private void Guardar()
         {
+            // Segunda capa del control de acceso: el alta y la edicion exigen su
+            // propio permiso al ejecutarse, no solo al mostrar la seccion.
+            string requerido = _editId == 0 ? "RESERVA_CREAR" : "RESERVA_EDITAR";
+            if (!Permisos.Exigir(requerido, FindForm(),
+                    _editId == 0 ? "crear una reserva" : "editar la reserva #" + _editId))
+                return;
+
             _lblError.Visible = false;
 
             // El monto es la suma de los servicios contratados (no se ingresa a mano).
@@ -643,6 +680,7 @@ namespace EvenTech.UI
                 case ReservaResult.InvalidFecha:   return Tr.T("MSG_RES_FECHA");
                 case ReservaResult.InvalidMonto:   return Tr.T("MSG_RES_MONTO");
                 case ReservaResult.SalonOcupado:   return Tr.T("MSG_RES_SALON_OCUPADO");
+                case ReservaResult.NoModificable:  return T("MSG_RES_NO_MODIFICABLE", "La reserva esta cancelada: no admite modificaciones.");
                 case ReservaResult.NotFound:       return Tr.T("MSG_RES_NOTFOUND");
                 default:                           return Tr.T("MSG_RES_ERROR");
             }
@@ -655,6 +693,7 @@ namespace EvenTech.UI
                 ShowError(Tr.T("MSG_RES_SELECCIONE"));
                 return;
             }
+            if (!Permisos.Exigir("RESERVA_HISTORIAL", FindForm(), "ver el historial de la reserva #" + _editId)) return;
             using (var frm = new frmHistorialReserva(_editId))
             {
                 frm.ShowDialog(FindForm());
@@ -671,6 +710,8 @@ namespace EvenTech.UI
                 ShowError(Tr.T("MSG_RES_SELECCIONE"));
                 return;
             }
+            // Restaurar repone el estado de negocio: se exige el permiso de edicion.
+            if (!Permisos.Exigir("RESERVA_EDITAR", FindForm(), "restaurar una version de la reserva #" + _editId)) return;
             using (var frm = new frmVersionesReserva(_editId))
             {
                 if (frm.ShowDialog(FindForm()) != DialogResult.OK) return;
@@ -692,6 +733,13 @@ namespace EvenTech.UI
         {
             _lblError.Text = msg;
             _lblError.Visible = true;
+        }
+
+        // Devuelve la traduccion de 'clave' o, si falta, el texto por defecto dado.
+        private static string T(string clave, string defecto)
+        {
+            string t = Tr.T(clave);
+            return t == clave ? defecto : t;
         }
     }
 }

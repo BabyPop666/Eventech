@@ -10,7 +10,8 @@ namespace EvenTech.BLL
         MontoInvalido,
         MetodoInvalido,
         ExcedeSaldo,
-        ReservaInvalida
+        ReservaInvalida,
+        ReservaCancelada   // estado terminal: no admite movimientos de cobro
     }
 
     // Reglas de negocio de pagos (Proceso 1, paso 5): cobro de adelanto/saldo de
@@ -42,6 +43,16 @@ namespace EvenTech.BLL
 
             var reserva = DAL_Reserva.GetById(p.ReservaId);
             if (reserva == null) return PagoResult.ReservaInvalida;
+
+            // Una reserva cancelada es estado terminal: tampoco admite cobros.
+            // La regla vive aca (y no solo en la UI) porque los pagos persisten en
+            // el acto, sin pasar por la validacion de BLL_Reserva.Actualizar.
+            if (!BLL_Reserva.PuedeModificar(reserva))
+            {
+                BLL_Bitacora.Registrar("Pagos", "Pago rechazado", CriticidadBitacora.Advertencia,
+                    $"Reserva #{p.ReservaId} cancelada: no admite movimientos de cobro.");
+                return PagoResult.ReservaCancelada;
+            }
 
             // Tope: no se puede pagar mas que el total de la reserva.
             if (DAL_Pago.TotalPagado(p.ReservaId) + p.Monto > reserva.Monto)

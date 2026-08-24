@@ -14,6 +14,7 @@ namespace EvenTech.BLL
         InvalidFecha,
         InvalidMonto,
         SalonOcupado,   // ya hay otra reserva activa para ese salon y fecha
+        NoModificable,  // la reserva esta cancelada: es un estado terminal
         NotFound
     }
 
@@ -46,10 +47,26 @@ namespace EvenTech.BLL
             return ReservaResult.Success;
         }
 
+        // Una reserva cancelada es un estado terminal: no admite mas ediciones.
+        // (La fecha pasada no se contempla aca a proposito: Validar ya rechaza
+        // guardar con fecha anterior a hoy, y bloquear por la fecha VIEJA
+        // impediria reprogramar un evento vencido, que si es una operacion valida.)
+        public static bool PuedeModificar(BE_Reserva reserva)
+            => reserva != null && reserva.Estado != EstadoReserva.CANCELADA;
+
         public static ReservaResult Actualizar(BE_Reserva reserva)
         {
             BE_Reserva antes = reserva.Id > 0 ? DAL_Reserva.GetById(reserva.Id) : null;
             if (antes == null) return ReservaResult.NotFound;
+
+            // Se evalua sobre el estado PERSISTIDO: lo que el usuario mando en el
+            // formulario no puede habilitar la edicion de una reserva ya cancelada.
+            if (!PuedeModificar(antes))
+            {
+                BLL_Bitacora.Registrar("Reservas", "Modificacion rechazada", CriticidadBitacora.Advertencia,
+                    $"Reserva #{reserva.Id} cancelada: no admite modificaciones.");
+                return ReservaResult.NoModificable;
+            }
 
             var validacion = Validar(reserva);
             if (validacion != ReservaResult.Success) return validacion;

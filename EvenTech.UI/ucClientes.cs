@@ -215,6 +215,11 @@ namespace EvenTech.UI
 
         private void Guardar()
         {
+            // Segunda capa del control de acceso (ver Permisos.cs).
+            if (!Permisos.Exigir("CLIENTES_GESTION", FindForm(),
+                    _editId == 0 ? "crear un cliente" : "editar el cliente #" + _editId))
+                return;
+
             _lblError.Visible = false;
             _lblOk.Visible = false;
             var c = new BE_Cliente

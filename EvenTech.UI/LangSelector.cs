@@ -13,15 +13,19 @@ namespace EvenTech.UI
     public class LangSelector : UserControl, IObservadorIdioma
     {
         private readonly Label _globe;
-        private readonly bool _allowManage;
         private readonly Color _baseColor;
         private readonly Color _hoverColor;
+
+        // Habilita la opcion "Gestionar idiomas" del menu. La ventana principal
+        // la ajusta segun el permiso IDIOMAS_GESTION del perfil; el login la deja
+        // siempre en false (todavia no hay sesion).
+        public bool PermitirGestion { get; set; }
 
         public LangSelector() : this(false, false) { }
 
         public LangSelector(bool dark, bool allowManage)
         {
-            _allowManage = allowManage;
+            PermitirGestion = allowManage;
             Size = new Size(34, 30);
             BackColor = Color.Transparent;
             Cursor = Cursors.Hand;
@@ -61,15 +65,21 @@ namespace EvenTech.UI
                 {
                     Checked = be.Codigo.Equals(g.IdiomaActual, StringComparison.OrdinalIgnoreCase)
                 };
-                item.Click += (s, e) => g.CambiarIdioma(be.Codigo);
+                // El idioma elegido se recuerda para el proximo arranque.
+                item.Click += (s, e) => { g.CambiarIdioma(be.Codigo); LoginPrefs.GuardarIdioma(be.Codigo); };
                 menu.Items.Add(item);
             }
 
-            if (_allowManage)
+            if (PermitirGestion)
             {
                 menu.Items.Add(new ToolStripSeparator());
                 var gestionar = new ToolStripMenuItem(T("IDI_GESTION", "Gestionar idiomas") + "...");
-                gestionar.Click += (s, e) => { using (var dlg = new frmIdiomas()) dlg.ShowDialog(FindForm()); };
+                // Segunda capa: el permiso se vuelve a exigir al abrir el ABM.
+                gestionar.Click += (s, e) =>
+                {
+                    if (!Permisos.Exigir("IDIOMAS_GESTION", FindForm(), "gestionar idiomas")) return;
+                    using (var dlg = new frmIdiomas()) dlg.ShowDialog(FindForm());
+                };
                 menu.Items.Add(gestionar);
             }
 

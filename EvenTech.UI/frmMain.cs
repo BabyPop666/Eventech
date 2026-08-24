@@ -29,25 +29,59 @@ namespace EvenTech.UI
         {
             BuildUi();
             bool bloqueado = SessionManager.IsSessionActive && SessionManager.GetInstance.SinPerfil;
-            if (bloqueado) { foreach (var it in _items) it.Visible = false; }
+            if (bloqueado)
+            {
+                foreach (var it in _items) it.Visible = false;
+                // Sin perfil no hay ningun permiso: el globo no debe ofrecer el ABM
+                // de idiomas (se construye con allowManage:true por defecto).
+                if (_lang != null) _lang.PermitirGestion = false;
+            }
             else AplicarPermisos();
             ActualizarTextos();              // si esta bloqueado, muestra el mensaje
             if (!bloqueado) Navegar(_itInicio);
             GestorDeIdioma.GetInstance.Suscribir(this);
+            AvisarPermisosNoDisponibles();
         }
 
-        // Control de acceso (T04): muestra/oculta secciones segun los permisos
-        // efectivos del perfil del usuario. Sin perfil => acceso total.
+        // Si los permisos del perfil no se pudieron resolver, la sesion quedo sin
+        // ninguno (denegar por defecto). Se avisa para que el usuario entienda por
+        // que no ve sus secciones y no lo confunda con una baja de permisos.
+        private void AvisarPermisosNoDisponibles()
+        {
+            if (!SessionManager.IsSessionActive || !SessionManager.GetInstance.PermisosNoDisponibles) return;
+            Shown += (s, e) => MessageBox.Show(this,
+                T("MAIN_PERMISOS_ERROR",
+                  "No se pudieron cargar los permisos de tu perfil, asi que la sesion quedo sin acceso a las secciones. " +
+                  "Volve a iniciar sesion; si el problema sigue, avisale a un administrador."),
+                "EvenTech", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+
+        // Control de acceso (T04), primera capa: muestra/oculta cada seccion segun
+        // los permisos efectivos del perfil. Toda seccion exige su permiso; la
+        // unica sin restriccion es Inicio (portada de la sesion). La segunda capa
+        // vive en Navegar(), que vuelve a exigir el permiso al abrir la vista.
         private void AplicarPermisos()
         {
             if (!SessionManager.IsSessionActive) return;
-            var s = SessionManager.GetInstance;
-            _itReservas.Visible  = s.TienePermiso("RESERVA_CREAR")
-                                || s.TienePermiso("RESERVA_EDITAR")
-                                || s.TienePermiso("RESERVA_HISTORIAL");
-            _itAuditoria.Visible = s.TienePermiso("BITACORA_VER")
-                                || s.TienePermiso("AUDIT_LOGIN_VER");
-            // Inicio / Perfiles: siempre visibles (administracion).
+            _itReservas.Visible  = Permisos.TieneAlguno("RESERVA_CREAR", "RESERVA_EDITAR", "RESERVA_HISTORIAL");
+            _itClientes.Visible  = Permisos.Tiene("CLIENTES_GESTION");
+            _itServicios.Visible = Permisos.Tiene("SERVICIOS_GESTION");
+            _itPerfiles.Visible  = Permisos.Tiene("PERFILES_GESTION");
+            _itAuditoria.Visible = Permisos.TieneAlguno("BITACORA_VER", "AUDIT_LOGIN_VER");
+            // La gestion de idiomas (ABM de traducciones) cuelga del globo del pie.
+            if (_lang != null) _lang.PermitirGestion = Permisos.Tiene("IDIOMAS_GESTION");
+        }
+
+        // Permisos que habilitan cada seccion del menu (fuente unica para la
+        // primera y la segunda capa: evita que se desincronicen).
+        private string[] PermisosDe(SideMenuItem item)
+        {
+            if (item == _itReservas)  return new[] { "RESERVA_CREAR", "RESERVA_EDITAR", "RESERVA_HISTORIAL" };
+            if (item == _itClientes)  return new[] { "CLIENTES_GESTION" };
+            if (item == _itServicios) return new[] { "SERVICIOS_GESTION" };
+            if (item == _itPerfiles)  return new[] { "PERFILES_GESTION" };
+            if (item == _itAuditoria) return new[] { "BITACORA_VER", "AUDIT_LOGIN_VER" };
+            return null;   // Inicio: sin restriccion
         }
 
         private void BuildUi()
@@ -197,6 +231,14 @@ namespace EvenTech.UI
         // -------- Navegacion --------
         private void Navegar(SideMenuItem item)
         {
+            // Segunda capa del control de acceso: el permiso se vuelve a exigir
+            // aca y no solo al armar el menu. Si el item quedo visible por error
+            // o la vista se alcanza por otra via, la navegacion se corta igual.
+            string[] requeridos = PermisosDe(item);
+            if (requeridos != null &&
+                !Permisos.ExigirAlguno(this, "abrir la seccion " + Tr.T(item.Key), requeridos))
+                return;
+
             SetActive(item);
             _pnlContent.Controls.Clear();
 

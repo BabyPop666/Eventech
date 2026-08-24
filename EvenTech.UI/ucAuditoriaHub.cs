@@ -15,8 +15,8 @@ namespace EvenTech.UI
     public class ucAuditoriaHub : UserControl, IObservadorIdioma
     {
         private readonly TabControl _tabs;
-        private readonly TabPage _tabBitacora;
-        private readonly TabPage _tabLogin;
+        private readonly TabPage _tabBitacora;   // null si el usuario no tiene BITACORA_VER
+        private readonly TabPage _tabLogin;      // null si el usuario no tiene AUDIT_LOGIN_VER
         private readonly AppButton _btnRecalc;   // null si el usuario no tiene permiso
 
         public ucAuditoriaHub()
@@ -24,17 +24,26 @@ namespace EvenTech.UI
             BackColor = Theme.BgContent;
 
             _tabs = new TabControl { Dock = DockStyle.Fill, Font = Theme.FontBody };
-            _tabBitacora = new TabPage { BackColor = Theme.BgContent, Padding = new Padding(0, Theme.SpaceSm, 0, 0), UseVisualStyleBackColor = true };
-            _tabLogin = new TabPage { BackColor = Theme.BgContent, Padding = new Padding(0, Theme.SpaceSm, 0, 0), UseVisualStyleBackColor = true };
 
-            _tabBitacora.Controls.Add(new ucBitacora { Dock = DockStyle.Fill });
-            _tabLogin.Controls.Add(new ucAuditoria { Dock = DockStyle.Fill });
-            _tabs.TabPages.Add(_tabBitacora);
-            _tabs.TabPages.Add(_tabLogin);
+            // La seccion se abre con CUALQUIERA de los dos permisos, asi que cada
+            // pestana se agrega solo si el usuario tiene el suyo: tener uno no
+            // puede conceder el contenido del otro (la bitacora general y la
+            // auditoria de login exponen datos distintos).
+            if (Permisos.Tiene("BITACORA_VER"))
+            {
+                _tabBitacora = new TabPage { BackColor = Theme.BgContent, Padding = new Padding(0, Theme.SpaceSm, 0, 0), UseVisualStyleBackColor = true };
+                _tabBitacora.Controls.Add(new ucBitacora { Dock = DockStyle.Fill });
+                _tabs.TabPages.Add(_tabBitacora);
+            }
+            if (Permisos.Tiene("AUDIT_LOGIN_VER"))
+            {
+                _tabLogin = new TabPage { BackColor = Theme.BgContent, Padding = new Padding(0, Theme.SpaceSm, 0, 0), UseVisualStyleBackColor = true };
+                _tabLogin.Controls.Add(new ucAuditoria { Dock = DockStyle.Fill });
+                _tabs.TabPages.Add(_tabLogin);
+            }
             Controls.Add(_tabs);
 
-            if (SessionManager.IsSessionActive &&
-                SessionManager.GetInstance.TienePermiso("INTEGRIDAD_RECALC"))
+            if (Permisos.Tiene("INTEGRIDAD_RECALC"))
             {
                 var toolbar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = Theme.BgContent };
                 _btnRecalc = Ui.Primary(T("AUD_RECALC_BTN", "Recalcular linea base"));
@@ -57,6 +66,10 @@ namespace EvenTech.UI
         // restaura una version) y desde aca reestablece la linea base de DV.
         private void RecalcularLineaBase()
         {
+            // Segunda capa: el boton solo se crea con permiso, pero la accion
+            // vuelve a exigirlo antes de reescribir la linea base de integridad.
+            if (!Permisos.Exigir("INTEGRIDAD_RECALC", FindForm(), "recalcular la linea base de DV")) return;
+
             var confirma = MessageBox.Show(
                 T("AUD_RECALC_CONFIRMA",
                   "Recalcular los digitos verificadores de todas las reservas? Usar despues de corregir datos alterados: la linea base nueva pasa a ser la referencia de integridad."),
@@ -90,8 +103,8 @@ namespace EvenTech.UI
 
         public void ActualizarTextos()
         {
-            _tabBitacora.Text = Tr.T("AUD_TAB_BITACORA");
-            _tabLogin.Text = Tr.T("AUD_TAB_LOGIN");
+            if (_tabBitacora != null) _tabBitacora.Text = Tr.T("AUD_TAB_BITACORA");
+            if (_tabLogin != null) _tabLogin.Text = Tr.T("AUD_TAB_LOGIN");
             if (_btnRecalc != null) _btnRecalc.Text = T("AUD_RECALC_BTN", "Recalcular linea base");
         }
     }

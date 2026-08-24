@@ -13,15 +13,19 @@ namespace EvenTech.Services
         public DateTime EndDate { get; private set; }
 
         // Permisos efectivos (claves de hoja del Composite) del usuario actual.
-        // AccesoTotal=true cuando el usuario no tiene perfil asignado (superusuario)
-        // o no se pudieron cargar los permisos: en ese caso TienePermiso da true.
+        //
+        // Politica: DENEGAR POR DEFECTO. Un permiso se concede unicamente si su
+        // clave esta en el conjunto resuelto desde el perfil. Si la resolucion
+        // falla (base caida, perfil inconsistente), la sesion queda sin ningun
+        // permiso y se marca PermisosNoDisponibles: un error de infraestructura
+        // no debe transformarse en una escalada de privilegios.
         private readonly HashSet<string> _permisos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        public bool AccesoTotal { get; private set; }   // solo true ante fallo de carga (no por falta de perfil)
-        public bool SinPerfil { get; private set; }     // true = usuario sin perfil asignado -> bloqueado
+        public bool PermisosNoDisponibles { get; private set; } // true = no se pudieron resolver -> sin permisos
+        public bool SinPerfil { get; private set; }             // true = usuario sin perfil asignado -> bloqueado
         public IReadOnlyCollection<string> Permisos => _permisos;
 
         public bool TienePermiso(string clave)
-            => AccesoTotal || (clave != null && _permisos.Contains(clave));
+            => clave != null && _permisos.Contains(clave);
 
         private static SessionManager _session;
         private static readonly object _lock = new object();
@@ -38,7 +42,7 @@ namespace EvenTech.Services
             }
         }
 
-        public static void Login(BE_User user, IEnumerable<string> permisos, bool accesoTotal, bool sinPerfil)
+        public static void Login(BE_User user, IEnumerable<string> permisos, bool permisosNoDisponibles, bool sinPerfil)
         {
             lock (_lock)
             {
@@ -49,7 +53,7 @@ namespace EvenTech.Services
                 {
                     User = user,
                     StartDate = DateTime.Now,
-                    AccesoTotal = accesoTotal,
+                    PermisosNoDisponibles = permisosNoDisponibles,
                     SinPerfil = sinPerfil
                 };
                 if (permisos != null)

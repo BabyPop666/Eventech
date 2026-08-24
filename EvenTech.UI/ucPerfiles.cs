@@ -224,6 +224,7 @@ namespace EvenTech.UI
             if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
             if (_gridUsuarios.Columns[e.ColumnIndex].Name != "cDesbloq") return;
             if (!(_gridUsuarios.Rows[e.RowIndex].Tag is BE_User u) || !u.Blocked) return;
+            if (!Permisos.Exigir("PERFILES_GESTION", FindForm(), "desbloquear la cuenta '" + u.Username + "'")) return;
             try
             {
                 BLL_User.Desbloquear(u.Id);
@@ -484,6 +485,10 @@ namespace EvenTech.UI
 
         private void Guardar()
         {
+            // Segunda capa del control de acceso: editar la composicion de un
+            // perfil redefine que puede hacer el resto del sistema.
+            if (!Permisos.Exigir("PERFILES_GESTION", FindForm(), "guardar la composicion de un perfil")) return;
+
             _lblOk.Visible = false;
             _lblError.Visible = false;
             if (!(_cboPerfil.SelectedValue is int perfilId))
@@ -536,6 +541,7 @@ namespace EvenTech.UI
 
         private void NuevoPerfil()
         {
+            if (!Permisos.Exigir("PERFILES_GESTION", FindForm(), "crear un perfil")) return;
             using (var dlg = new frmNuevoPerfil())
             {
                 if (dlg.ShowDialog(FindForm()) == DialogResult.OK)

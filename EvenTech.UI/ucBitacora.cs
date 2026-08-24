@@ -272,6 +272,16 @@ namespace EvenTech.UI
 
         private void SafeBuscar()
         {
+            // Segunda capa: la vista carga sola al abrirse, asi que el permiso se
+            // exige aca y no solo donde se decide mostrarla.
+            if (!Permisos.Tiene("BITACORA_VER"))
+            {
+                _lblCount.Visible = false;
+                _lblError.Text = Tr.T("MSG_SIN_PERMISO");
+                _lblError.Visible = true;
+                return;
+            }
+
             try
             {
                 _lblError.Visible = false;

@@ -229,6 +229,11 @@ namespace EvenTech.UI
 
         private void Guardar()
         {
+            // Segunda capa del control de acceso (ver Permisos.cs).
+            if (!Permisos.Exigir("SERVICIOS_GESTION", FindForm(),
+                    _editId == 0 ? "crear un servicio" : "editar el servicio #" + _editId))
+                return;
+
             _lblError.Visible = false;
             _lblOk.Visible = false;
 
