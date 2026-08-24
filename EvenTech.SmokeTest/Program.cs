@@ -1,267 +1,270 @@
-﻿using EvenTech.BLL;
+using EvenTech.BLL;
 using EvenTech.Services;
 
 Console.WriteLine("== EvenTech smoke test v2 ==");
 
 // [1] Login OK
 Console.WriteLine("[1] Login admin/admin123:");
-var r1 = BLL_Login.Authenticate("admin", Encrypt.HashValue("admin123"));
-Console.WriteLine($"  result={r1}, sesionActiva={SessionManager.IsSessionActive}");
-BLL_Login.Logout();
+var r1_704ILR = BLL_Login_704ILR.Authenticate_704ILR("admin", Encrypt_704ILR.HashValue_704ILR("admin123"));
+Console.WriteLine($"  result={r1_704ILR}, sesionActiva={SessionManager_704ILR.IsSessionActive_704ILR}");
+BLL_Login_704ILR.Logout_704ILR();
 
 // [2] Crear usuario nuevo (con timestamp para que sea unico entre corridas)
-string newUser = "smoke_" + DateTime.Now.ToString("HHmmss");
-Console.WriteLine($"[2] Crear usuario '{newUser}' password 'pass1234':");
-var rc1 = BLL_User.CreateUser(newUser, Encrypt.HashValue("pass1234"));
-Console.WriteLine($"  result={rc1}");
+string newUser_704ILR = "smoke_" + DateTime.Now.ToString("HHmmss");
+Console.WriteLine($"[2] Crear usuario '{newUser_704ILR}' password 'pass1234':");
+var rc1_704ILR = BLL_User_704ILR.CreateUser_704ILR(newUser_704ILR, Encrypt_704ILR.HashValue_704ILR("pass1234"));
+Console.WriteLine($"  result={rc1_704ILR}");
 
 // [3] Crear duplicado
-Console.WriteLine($"[3] Crear '{newUser}' duplicado:");
-var rc2 = BLL_User.CreateUser(newUser, Encrypt.HashValue("otra"));
-Console.WriteLine($"  result={rc2}");
+Console.WriteLine($"[3] Crear '{newUser_704ILR}' duplicado:");
+var rc2_704ILR = BLL_User_704ILR.CreateUser_704ILR(newUser_704ILR, Encrypt_704ILR.HashValue_704ILR("otra"));
+Console.WriteLine($"  result={rc2_704ILR}");
 
 // [4] Username invalido
 Console.WriteLine("[4] Crear con username '..' (invalido):");
-var rc3 = BLL_User.CreateUser("..", Encrypt.HashValue("xxxx"));
-Console.WriteLine($"  result={rc3}");
+var rc3_704ILR = BLL_User_704ILR.CreateUser_704ILR("..", Encrypt_704ILR.HashValue_704ILR("xxxx"));
+Console.WriteLine($"  result={rc3_704ILR}");
 
 // [5] Login con el usuario recien creado
-Console.WriteLine($"[5] Login con '{newUser}':");
-var r5 = BLL_Login.Authenticate(newUser, Encrypt.HashValue("pass1234"));
-Console.WriteLine($"  result={r5}");
-BLL_Login.Logout();
+Console.WriteLine($"[5] Login con '{newUser_704ILR}':");
+var r5_704ILR = BLL_Login_704ILR.Authenticate_704ILR(newUser_704ILR, Encrypt_704ILR.HashValue_704ILR("pass1234"));
+Console.WriteLine($"  result={r5_704ILR}");
+BLL_Login_704ILR.Logout_704ILR();
 
 // [6] Leer auditoria (ultimas 5)
 Console.WriteLine("[6] Ultimas 5 entradas de auditoria:");
-foreach (var e in BLL_LoginAudit.GetAll(5))
+foreach (var e_704ILR in BLL_LoginAudit_704ILR.GetAll_704ILR(5))
 {
-    Console.WriteLine($"  #{e.Id} {e.Timestamp:HH:mm:ss} {e.Username,-20} {e.Action,-12} {e.Details}");
+    Console.WriteLine($"  #{e_704ILR.Id_704ILR} {e_704ILR.Timestamp_704ILR:HH:mm:ss} {e_704ILR.Username_704ILR,-20} {e_704ILR.Action_704ILR,-12} {e_704ILR.Details_704ILR}");
 }
 
 // [7] Reservas: alta valida (la reserva referencia al cliente por Id)
 Console.WriteLine("[7] Crear reserva valida:");
-var salones = BLL_Salon.GetAll();
-var clientes = BLL_Cliente.GetAll();
-if (salones.Count == 0 || clientes.Count == 0)
+var salones_704ILR = BLL_Salon_704ILR.GetAll_704ILR();
+var clientes_704ILR = BLL_Cliente_704ILR.GetAll_704ILR();
+if (salones_704ILR.Count == 0 || clientes_704ILR.Count == 0)
 {
     Console.WriteLine("  (no hay salones/clientes seed; corre db/schema.sql)");
 }
 else
 {
-    var nueva = new EvenTech.BE.BE_Reserva
+    // Fecha semi-unica por corrida (como el username del caso [2]): el caso [10]
+    // confirma esta reserva y una fecha fija chocaria por SalonOcupado contra la
+    // corrida anterior del mismo dia. Ventana 1000-1900 para no pisar la del [26].
+    var nueva_704ILR = new EvenTech.BE.BE_Reserva_704ILR
     {
-        ClienteId = clientes[0].Id,
-        SalonId = salones[0].Id,
-        FechaEvento = DateTime.Today.AddDays(30),
-        Estado = EvenTech.BE.EstadoReserva.PENDIENTE,
-        Monto = 150000m
+        ClienteId_704ILR = clientes_704ILR[0].Id_704ILR,
+        SalonId_704ILR = salones_704ILR[0].Id_704ILR,
+        FechaEvento_704ILR = DateTime.Today.AddDays(1000 + (int)DateTime.Now.TimeOfDay.TotalSeconds % 900),
+        Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.PENDIENTE,
+        Monto_704ILR = 150000m
     };
-    var rr1 = BLL_Reserva.Crear(nueva, out int nuevoId);
-    Console.WriteLine($"  result={rr1}, nuevoId={nuevoId}");
+    var rr1_704ILR = BLL_Reserva_704ILR.Crear_704ILR(nueva_704ILR, out int nuevoId_704ILR);
+    Console.WriteLine($"  result={rr1_704ILR}, nuevoId={nuevoId_704ILR}");
 
     // [8] Reserva con fecha pasada (debe fallar)
     Console.WriteLine("[8] Crear reserva con fecha pasada (invalida):");
-    var pasada = new EvenTech.BE.BE_Reserva
+    var pasada_704ILR = new EvenTech.BE.BE_Reserva_704ILR
     {
-        ClienteId = clientes[0].Id,
-        SalonId = salones[0].Id,
-        FechaEvento = DateTime.Today.AddDays(-1),
-        Estado = EvenTech.BE.EstadoReserva.PENDIENTE,
-        Monto = 1000m
+        ClienteId_704ILR = clientes_704ILR[0].Id_704ILR,
+        SalonId_704ILR = salones_704ILR[0].Id_704ILR,
+        FechaEvento_704ILR = DateTime.Today.AddDays(-1),
+        Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.PENDIENTE,
+        Monto_704ILR = 1000m
     };
-    var rr2 = BLL_Reserva.Crear(pasada, out _);
-    Console.WriteLine($"  result={rr2}");
+    var rr2_704ILR = BLL_Reserva_704ILR.Crear_704ILR(pasada_704ILR, out _);
+    Console.WriteLine($"  result={rr2_704ILR}");
 
     // [9] Listado
     Console.WriteLine("[9] Total de reservas:");
-    Console.WriteLine($"  {BLL_Reserva.GetAll().Count} reservas");
+    Console.WriteLine($"  {BLL_Reserva_704ILR.GetAll_704ILR().Count} reservas");
 
     // [10] Control de cambios: modificar la reserva recien creada
-    if (rr1 == ReservaResult.Success)
+    if (rr1_704ILR == ReservaResult_704ILR.Success)
     {
-        Console.WriteLine($"[10] Modificar reserva #{nuevoId} (estado + monto):");
-        var editada = BLL_Reserva.GetById(nuevoId);
-        editada.Estado = EvenTech.BE.EstadoReserva.CONFIRMADA;
-        editada.Monto = 175000m;
-        var ru = BLL_Reserva.Actualizar(editada);
-        Console.WriteLine($"  result={ru}");
+        Console.WriteLine($"[10] Modificar reserva #{nuevoId_704ILR} (estado + monto):");
+        var editada_704ILR = BLL_Reserva_704ILR.GetById_704ILR(nuevoId_704ILR);
+        editada_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
+        editada_704ILR.Monto_704ILR = 175000m;
+        var ru_704ILR = BLL_Reserva_704ILR.Actualizar_704ILR(editada_704ILR);
+        Console.WriteLine($"  result={ru_704ILR}");
 
-        Console.WriteLine($"[11] Historial de cambios de la reserva #{nuevoId}:");
-        foreach (var c in EvenTech.BLL.RegistradorDeCambios.GetHistorial("Reserva", nuevoId))
-            Console.WriteLine($"  {c.Fecha:HH:mm:ss} {c.NombreCampo,-14} '{c.ValorAnterior}' -> '{c.ValorNuevo}'");
+        Console.WriteLine($"[11] Historial de cambios de la reserva #{nuevoId_704ILR}:");
+        foreach (var c_704ILR in EvenTech.BLL.RegistradorDeCambios_704ILR.GetHistorial_704ILR("Reserva", nuevoId_704ILR))
+            Console.WriteLine($"  {c_704ILR.Fecha_704ILR:HH:mm:ss} {c_704ILR.NombreCampo_704ILR,-14} '{c_704ILR.ValorAnterior_704ILR}' -> '{c_704ILR.ValorNuevo_704ILR}'");
     }
 
     // [12] Bitacora general (ultimas 5)
     Console.WriteLine("[12] Ultimas 5 entradas de bitacora:");
-    int mostradas = 0;
-    foreach (var b in EvenTech.BLL.BLL_Bitacora.Buscar(new EvenTech.BE.BitacoraFiltros()))
+    int mostradas_704ILR = 0;
+    foreach (var b_704ILR in EvenTech.BLL.BLL_Bitacora_704ILR.Buscar_704ILR(new EvenTech.BE.BitacoraFiltros_704ILR()))
     {
-        Console.WriteLine($"  #{b.Id} {b.Fecha:HH:mm:ss} {b.Modulo,-10} {b.Accion,-26} {b.Criticidad}");
-        if (++mostradas >= 5) break;
+        Console.WriteLine($"  #{b_704ILR.Id_704ILR} {b_704ILR.Fecha_704ILR:HH:mm:ss} {b_704ILR.Modulo_704ILR,-10} {b_704ILR.Accion_704ILR,-26} {b_704ILR.Criticidad_704ILR}");
+        if (++mostradas_704ILR >= 5) break;
     }
 }
 
 // [13] Composite de perfiles: recorrer arbol y permisos efectivos
 Console.WriteLine("[13] Arbol de permisos (Composite):");
-var arbol = BLL_Perfil.GetArbolPermisos();
-void Imprimir(EvenTech.BE.BE_IComponentePermiso n, int nivel)
+var arbol_704ILR = BLL_Perfil_704ILR.GetArbolPermisos_704ILR();
+void Imprimir_704ILR(EvenTech.BE.BE_IComponentePermiso_704ILR n_704ILR, int nivel_704ILR)
 {
-    Console.WriteLine($"  {new string(' ', nivel * 2)}{(n.EsGrupo ? "[G]" : "[P]")} {n.Nombre}");
-    if (n is EvenTech.BE.BE_GrupoPermisos g)
-        foreach (var h in g.Hijos) Imprimir(h, nivel + 1);
+    Console.WriteLine($"  {new string(' ', nivel_704ILR * 2)}{(n_704ILR.EsGrupo_704ILR ? "[G]" : "[P]")} {n_704ILR.Nombre_704ILR}");
+    if (n_704ILR is EvenTech.BE.BE_GrupoPermisos_704ILR g_704ILR)
+        foreach (var h_704ILR in g_704ILR.Hijos_704ILR) Imprimir_704ILR(h_704ILR, nivel_704ILR + 1);
 }
-foreach (var raiz in arbol) Imprimir(raiz, 0);
+foreach (var raiz_704ILR in arbol_704ILR) Imprimir_704ILR(raiz_704ILR, 0);
 
-var perfiles = BLL_Perfil.GetPerfiles();
-if (perfiles.Count > 0)
+var perfiles_704ILR = BLL_Perfil_704ILR.GetPerfiles_704ILR();
+if (perfiles_704ILR.Count > 0)
 {
-    var asignados = BLL_Perfil.GetPermisosAsignados(perfiles[0].Id);
-    var efectivos = BLL_Perfil.CalcularPermisosEfectivos(arbol, asignados);
-    Console.WriteLine($"[14] Perfil '{perfiles[0].Nombre}': {efectivos.Count} permisos efectivos (hojas).");
+    var asignados_704ILR = BLL_Perfil_704ILR.GetPermisosAsignados_704ILR(perfiles_704ILR[0].Id_704ILR);
+    var efectivos_704ILR = BLL_Perfil_704ILR.CalcularPermisosEfectivos_704ILR(arbol_704ILR, asignados_704ILR);
+    Console.WriteLine($"[14] Perfil '{perfiles_704ILR[0].Nombre_704ILR}': {efectivos_704ILR.Count} permisos efectivos (hojas).");
 }
 
 // [15] Idiomas (Observer): cambio dinamico de traducciones
 Console.WriteLine("[15] Idiomas (Observer):");
-EvenTech.BLL.BLL_Idioma.Inicializar();
-var gi = EvenTech.Services.GestorDeIdioma.GetInstance;
-Console.WriteLine($"  idioma={gi.IdiomaActual}, MENU_RESERVAS='{gi.Traducir("MENU_RESERVAS")}'");
-gi.CambiarIdioma("EN");
-Console.WriteLine($"  idioma={gi.IdiomaActual}, MENU_RESERVAS='{gi.Traducir("MENU_RESERVAS")}'");
-gi.CambiarIdioma("ES");
+EvenTech.BLL.BLL_Idioma_704ILR.Inicializar_704ILR();
+var gi_704ILR = EvenTech.Services.GestorDeIdioma_704ILR.GetInstance_704ILR;
+Console.WriteLine($"  idioma={gi_704ILR.IdiomaActual_704ILR}, MENU_RESERVAS='{gi_704ILR.Traducir_704ILR("MENU_RESERVAS")}'");
+gi_704ILR.CambiarIdioma_704ILR("EN");
+Console.WriteLine($"  idioma={gi_704ILR.IdiomaActual_704ILR}, MENU_RESERVAS='{gi_704ILR.Traducir_704ILR("MENU_RESERVAS")}'");
+gi_704ILR.CambiarIdioma_704ILR("ES");
 
 // [16] Digitos verificadores (T07/T08)
 Console.WriteLine("[16] Integridad (digitos verificadores):");
-var resInt = EvenTech.BLL.BLL_Integridad.Verificar();
-Console.WriteLine($"  Ok={resInt.Ok}, inconsistencias={resInt.Inconsistencias.Count}");
-foreach (var i in resInt.Inconsistencias) Console.WriteLine("   - " + i);
+var resInt_704ILR = EvenTech.BLL.BLL_Integridad_704ILR.Verificar_704ILR();
+Console.WriteLine($"  Ok={resInt_704ILR.Ok_704ILR}, inconsistencias={resInt_704ILR.Inconsistencias_704ILR.Count}");
+foreach (var i_704ILR in resInt_704ILR.Inconsistencias_704ILR) Console.WriteLine("   - " + i_704ILR);
 
 // Recalculo de linea base (accion administrativa del proceso ante corrupcion):
 // tras recalcular, la verificacion tiene que dar limpia si o si.
-int recalculadas = EvenTech.BLL.BLL_Integridad.RecalcularTodo();
-var resInt2 = EvenTech.BLL.BLL_Integridad.Verificar();
-Console.WriteLine($"  recalculo de linea base: {recalculadas} reservas -> Ok={resInt2.Ok} (esperado True)");
+int recalculadas_704ILR = EvenTech.BLL.BLL_Integridad_704ILR.RecalcularTodo_704ILR();
+var resInt2_704ILR = EvenTech.BLL.BLL_Integridad_704ILR.Verificar_704ILR();
+Console.WriteLine($"  recalculo de linea base: {recalculadas_704ILR} reservas -> Ok={resInt2_704ILR.Ok_704ILR} (esperado True)");
 
 // [17] Alta de idioma desde la capa de negocio (admin agrega idioma)
 Console.WriteLine("[17] Crear idioma 'PT':");
-var rIdioma = EvenTech.BLL.BLL_Idioma.CrearIdioma("PT", "Portugues", out int idPt);
-Console.WriteLine($"  result={rIdioma}");
-Console.WriteLine($"  idiomas disponibles: {EvenTech.Services.GestorDeIdioma.GetInstance.IdiomasDisponibles.Count}");
+var rIdioma_704ILR = EvenTech.BLL.BLL_Idioma_704ILR.CrearIdioma_704ILR("PT", "Portugues", out int idPt_704ILR);
+Console.WriteLine($"  result={rIdioma_704ILR}");
+Console.WriteLine($"  idiomas disponibles: {EvenTech.Services.GestorDeIdioma_704ILR.GetInstance_704ILR.IdiomasDisponibles_704ILR.Count}");
 
 // [18] Patron Memento: versionado y restauracion de reservas
 Console.WriteLine("[18] Memento (versiones de reserva):");
-var clientesM = BLL_Cliente.GetAll();
-var salonesM = BLL_Salon.GetAll();
-if (clientesM.Count == 0 || salonesM.Count == 0)
+var clientesM_704ILR = BLL_Cliente_704ILR.GetAll_704ILR();
+var salonesM_704ILR = BLL_Salon_704ILR.GetAll_704ILR();
+if (clientesM_704ILR.Count == 0 || salonesM_704ILR.Count == 0)
 {
     Console.WriteLine("  (faltan clientes/salones seed; corre db/schema.sql)");
 }
 else
 {
-    var reservaM = new EvenTech.BE.BE_Reserva
+    var reservaM_704ILR = new EvenTech.BE.BE_Reserva_704ILR
     {
-        ClienteId = clientesM[0].Id,
-        SalonId = salonesM[0].Id,
-        FechaEvento = DateTime.Today.AddDays(45),
-        Estado = EvenTech.BE.EstadoReserva.PENDIENTE,
-        Monto = 1000m
+        ClienteId_704ILR = clientesM_704ILR[0].Id_704ILR,
+        SalonId_704ILR = salonesM_704ILR[0].Id_704ILR,
+        FechaEvento_704ILR = DateTime.Today.AddDays(45),
+        Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.PENDIENTE,
+        Monto_704ILR = 1000m
     };
-    var rm = BLL_Reserva.Crear(reservaM, out int idM);
-    Console.WriteLine($"  alta: result={rm}, id={idM}");
+    var rm_704ILR = BLL_Reserva_704ILR.Crear_704ILR(reservaM_704ILR, out int idM_704ILR);
+    Console.WriteLine($"  alta: result={rm_704ILR}, id={idM_704ILR}");
 
-    var v1 = BLL_Reserva.GetById(idM);
-    v1.Estado = EvenTech.BE.EstadoReserva.CONFIRMADA;
-    v1.Monto = 2000m;
-    Console.WriteLine($"  modificar (PENDIENTE/1000 -> CONFIRMADA/2000): result={BLL_Reserva.Actualizar(v1)}");
+    var v1_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idM_704ILR);
+    v1_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
+    v1_704ILR.Monto_704ILR = 2000m;
+    Console.WriteLine($"  modificar (PENDIENTE/1000 -> CONFIRMADA/2000): result={BLL_Reserva_704ILR.Actualizar_704ILR(v1_704ILR)}");
 
-    var versiones = CaretakerReserva.GetVersiones(idM);
-    Console.WriteLine($"  versiones guardadas: {versiones.Count} (esperado 1)");
+    var versiones_704ILR = CaretakerReserva_704ILR.GetVersiones_704ILR(idM_704ILR);
+    Console.WriteLine($"  versiones guardadas: {versiones_704ILR.Count} (esperado 1)");
 
-    if (versiones.Count > 0)
+    if (versiones_704ILR.Count > 0)
     {
-        var rr = BLL_Reserva.RestaurarVersion(idM, versiones[0].Id);
-        var restaurada = BLL_Reserva.GetById(idM);
-        Console.WriteLine($"  restaurar: result={rr} -> Estado={restaurada.Estado}, Monto={restaurada.Monto} (esperado PENDIENTE, 1000)");
-        Console.WriteLine($"  versiones tras restaurar: {CaretakerReserva.GetVersiones(idM).Count} (esperado 2: la restauracion versiona el estado que piso)");
+        var rr_704ILR = BLL_Reserva_704ILR.RestaurarVersion_704ILR(idM_704ILR, versiones_704ILR[0].Id_704ILR);
+        var restaurada_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idM_704ILR);
+        Console.WriteLine($"  restaurar: result={rr_704ILR} -> Estado={restaurada_704ILR.Estado_704ILR}, Monto={restaurada_704ILR.Monto_704ILR} (esperado PENDIENTE, 1000)");
+        Console.WriteLine($"  versiones tras restaurar: {CaretakerReserva_704ILR.GetVersiones_704ILR(idM_704ILR).Count} (esperado 2: la restauracion versiona el estado que piso)");
     }
 }
 
 // [19] Composite de perfiles: un perfil incluye a otro y hereda sus permisos
 Console.WriteLine("[19] Composite de perfiles (perfil incluye perfil):");
 {
-    string suf = DateTime.Now.ToString("HHmmss");
-    var arbolC = BLL_Perfil.GetArbolPermisos();
+    string suf_704ILR = DateTime.Now.ToString("HHmmss");
+    var arbolC_704ILR = BLL_Perfil_704ILR.GetArbolPermisos_704ILR();
 
     // Busca el id de una hoja por su clave, recorriendo el arbol Composite.
-    int BuscarClave(IEnumerable<EvenTech.BE.BE_IComponentePermiso> nodos, string clave)
+    int BuscarClave_704ILR(IEnumerable<EvenTech.BE.BE_IComponentePermiso_704ILR> nodos_704ILR, string clave_704ILR)
     {
-        foreach (var n in nodos)
+        foreach (var n_704ILR in nodos_704ILR)
         {
-            if (n is EvenTech.BE.BE_Permiso p && p.Clave == clave) return p.Id;
-            if (n is EvenTech.BE.BE_GrupoPermisos g)
+            if (n_704ILR is EvenTech.BE.BE_Permiso_704ILR p_704ILR && p_704ILR.Clave_704ILR == clave_704ILR) return p_704ILR.Id_704ILR;
+            if (n_704ILR is EvenTech.BE.BE_GrupoPermisos_704ILR g_704ILR)
             {
-                int r = BuscarClave(g.Hijos, clave);
-                if (r > 0) return r;
+                int r_704ILR = BuscarClave_704ILR(g_704ILR.Hijos_704ILR, clave_704ILR);
+                if (r_704ILR > 0) return r_704ILR;
             }
         }
         return 0;
     }
 
-    int idCrear = BuscarClave(arbolC, "RESERVA_CREAR");
-    int idEditar = BuscarClave(arbolC, "RESERVA_EDITAR");
-    int idBitacora = BuscarClave(arbolC, "BITACORA_VER");
+    int idCrear_704ILR = BuscarClave_704ILR(arbolC_704ILR, "RESERVA_CREAR");
+    int idEditar_704ILR = BuscarClave_704ILR(arbolC_704ILR, "RESERVA_EDITAR");
+    int idBitacora_704ILR = BuscarClave_704ILR(arbolC_704ILR, "BITACORA_VER");
 
-    BLL_Perfil.CrearPerfil("Vendedor_" + suf, "smoke", out int idVend);
-    BLL_Perfil.CrearPerfil("Gerencial_" + suf, "smoke", out int idGer);
+    BLL_Perfil_704ILR.CrearPerfil_704ILR("Vendedor_" + suf_704ILR, "smoke", out int idVend_704ILR);
+    BLL_Perfil_704ILR.CrearPerfil_704ILR("Gerencial_" + suf_704ILR, "smoke", out int idGer_704ILR);
 
-    var rVend = BLL_Perfil.GuardarComposicion(idVend, new[] { idCrear, idEditar }, new int[0]);
-    Console.WriteLine($"  Vendedor (RESERVA_CREAR + RESERVA_EDITAR): result={rVend}");
+    var rVend_704ILR = BLL_Perfil_704ILR.GuardarComposicion_704ILR(idVend_704ILR, new[] { idCrear_704ILR, idEditar_704ILR }, new int[0]);
+    Console.WriteLine($"  Vendedor (RESERVA_CREAR + RESERVA_EDITAR): result={rVend_704ILR}");
 
-    var rGer = BLL_Perfil.GuardarComposicion(idGer, new[] { idBitacora }, new[] { idVend });
-    Console.WriteLine($"  Gerencial (BITACORA_VER + incluye Vendedor): result={rGer}");
+    var rGer_704ILR = BLL_Perfil_704ILR.GuardarComposicion_704ILR(idGer_704ILR, new[] { idBitacora_704ILR }, new[] { idVend_704ILR });
+    Console.WriteLine($"  Gerencial (BITACORA_VER + incluye Vendedor): result={rGer_704ILR}");
 
-    var efectivosGer = BLL_Perfil.GetPermisosEfectivosDePerfil(idGer);
-    Console.WriteLine($"  permisos efectivos de Gerencial: {string.Join(", ", efectivosGer.Select(p => p.Clave))}");
+    var efectivosGer_704ILR = BLL_Perfil_704ILR.GetPermisosEfectivosDePerfil_704ILR(idGer_704ILR);
+    Console.WriteLine($"  permisos efectivos de Gerencial: {string.Join(", ", efectivosGer_704ILR.Select(p_704ILR => p_704ILR.Clave_704ILR))}");
     Console.WriteLine($"  (esperado: BITACORA_VER + RESERVA_CREAR + RESERVA_EDITAR heredados de Vendedor)");
 
-    var rCiclo = BLL_Perfil.GuardarComposicion(idVend, new[] { idCrear, idEditar }, new[] { idGer });
-    Console.WriteLine($"  incluir Gerencial dentro de Vendedor: result={rCiclo} (esperado ReferenciaCircular)");
+    var rCiclo_704ILR = BLL_Perfil_704ILR.GuardarComposicion_704ILR(idVend_704ILR, new[] { idCrear_704ILR, idEditar_704ILR }, new[] { idGer_704ILR });
+    Console.WriteLine($"  incluir Gerencial dentro de Vendedor: result={rCiclo_704ILR} (esperado ReferenciaCircular)");
 
-    var rSelf = BLL_Perfil.GuardarComposicion(idVend, new[] { idCrear }, new[] { idVend });
-    Console.WriteLine($"  incluir Vendedor dentro de si mismo: result={rSelf} (esperado ReferenciaCircular)");
+    var rSelf_704ILR = BLL_Perfil_704ILR.GuardarComposicion_704ILR(idVend_704ILR, new[] { idCrear_704ILR }, new[] { idVend_704ILR });
+    Console.WriteLine($"  incluir Vendedor dentro de si mismo: result={rSelf_704ILR} (esperado ReferenciaCircular)");
 }
 
 // [20] Cifrado reversible (AES) de datos sensibles del cliente
 Console.WriteLine("[20] Cifrado reversible de Email/Telefono de clientes:");
 {
-    string suf = DateTime.Now.ToString("HHmmss");
-    var cli = new EvenTech.BE.BE_Cliente
+    string suf_704ILR = DateTime.Now.ToString("HHmmss");
+    var cli_704ILR = new EvenTech.BE.BE_Cliente_704ILR
     {
-        Nombre = "SmokeCrypto",
-        Apellido = suf,
-        Email = $"crypto_{suf}@test.com",
-        Telefono = "11-5555-" + suf
+        Nombre_704ILR = "SmokeCrypto",
+        Apellido_704ILR = suf_704ILR,
+        Email_704ILR = $"crypto_{suf_704ILR}@test.com",
+        Telefono_704ILR = "11-5555-" + suf_704ILR
     };
-    var rCli = BLL_Cliente.Crear(cli, out int idCli);
-    Console.WriteLine($"  alta: result={rCli}, id={idCli}");
+    var rCli_704ILR = BLL_Cliente_704ILR.Crear_704ILR(cli_704ILR, out int idCli_704ILR);
+    Console.WriteLine($"  alta: result={rCli_704ILR}, id={idCli_704ILR}");
 
-    var leido = BLL_Cliente.GetById(idCli);
-    bool roundtripOk = leido.Email == cli.Email && leido.Telefono == cli.Telefono;
-    Console.WriteLine($"  leido por la app: Email='{leido.Email}', Telefono='{leido.Telefono}'");
-    Console.WriteLine($"  roundtrip cifrar->descifrar: {(roundtripOk ? "OK" : "FALLO")} (esperado OK)");
+    var leido_704ILR = BLL_Cliente_704ILR.GetById_704ILR(idCli_704ILR);
+    bool roundtripOk_704ILR = leido_704ILR.Email_704ILR == cli_704ILR.Email_704ILR && leido_704ILR.Telefono_704ILR == cli_704ILR.Telefono_704ILR;
+    Console.WriteLine($"  leido por la app: Email='{leido_704ILR.Email_704ILR}', Telefono='{leido_704ILR.Telefono_704ILR}'");
+    Console.WriteLine($"  roundtrip cifrar->descifrar: {(roundtripOk_704ILR ? "OK" : "FALLO")} (esperado OK)");
 
     // Lectura cruda, salteando la DAL: en la DB tiene que estar cifrado.
-    using (var cn = new EvenTech.DAL.DAL_DB_Connection())
-    using (var cmd = new Microsoft.Data.SqlClient.SqlCommand(
-        "SELECT Email, Telefono FROM dbo.Clientes WHERE Id = @id", cn.OpenConnection()))
+    using (var cn_704ILR = new EvenTech.DAL.DAL_DB_Connection_704ILR())
+    using (var cmd_704ILR = new Microsoft.Data.SqlClient.SqlCommand(
+        "SELECT Email, Telefono FROM dbo.Clientes WHERE Id = @id", cn_704ILR.OpenConnection_704ILR()))
     {
-        cmd.Parameters.AddWithValue("@id", idCli);
-        using var r = cmd.ExecuteReader();
-        if (r.Read())
+        cmd_704ILR.Parameters.AddWithValue("@id", idCli_704ILR);
+        using var r_704ILR = cmd_704ILR.ExecuteReader();
+        if (r_704ILR.Read())
         {
-            string rawE = r.GetString(0), rawT = r.GetString(1);
-            Console.WriteLine($"  crudo en DB: Email='{rawE[..Math.Min(44, rawE.Length)]}...'");
-            Console.WriteLine($"  cifrado en DB: Email={CryptoService.EstaProtegido(rawE)}, " +
-                              $"Telefono={CryptoService.EstaProtegido(rawT)} (esperado True, True)");
+            string rawE_704ILR = r_704ILR.GetString(0), rawT_704ILR = r_704ILR.GetString(1);
+            Console.WriteLine($"  crudo en DB: Email='{rawE_704ILR[..Math.Min(44, rawE_704ILR.Length)]}...'");
+            Console.WriteLine($"  cifrado en DB: Email={CryptoService_704ILR.EstaProtegido_704ILR(rawE_704ILR)}, " +
+                              $"Telefono={CryptoService_704ILR.EstaProtegido_704ILR(rawT_704ILR)} (esperado True, True)");
         }
     }
 }
@@ -270,82 +273,82 @@ Console.WriteLine("[20] Cifrado reversible de Email/Telefono de clientes:");
 // (denegar por defecto). Se valida sobre la sesion real de admin.
 Console.WriteLine("[21] Permisos de la sesion (denegar por defecto):");
 {
-    BLL_Login.Authenticate("admin", Encrypt.HashValue("admin123"));
-    var s = SessionManager.GetInstance;
-    Console.WriteLine($"  permisosNoDisponibles={s.PermisosNoDisponibles} (esperado False)");
-    Console.WriteLine($"  admin tiene RESERVA_CREAR: {s.TienePermiso("RESERVA_CREAR")} (esperado True)");
-    Console.WriteLine($"  admin tiene PAGOS_ANULAR: {s.TienePermiso("PAGOS_ANULAR")} (esperado True)");
-    Console.WriteLine($"  clave inexistente NO_EXISTE: {s.TienePermiso("NO_EXISTE")} (esperado False)");
-    Console.WriteLine($"  clave nula: {s.TienePermiso(null)} (esperado False)");
-    BLL_Login.Logout();
+    BLL_Login_704ILR.Authenticate_704ILR("admin", Encrypt_704ILR.HashValue_704ILR("admin123"));
+    var s_704ILR = SessionManager_704ILR.GetInstance_704ILR;
+    Console.WriteLine($"  permisosNoDisponibles={s_704ILR.PermisosNoDisponibles_704ILR} (esperado False)");
+    Console.WriteLine($"  admin tiene RESERVA_CREAR: {s_704ILR.TienePermiso_704ILR("RESERVA_CREAR")} (esperado True)");
+    Console.WriteLine($"  admin tiene PAGOS_ANULAR: {s_704ILR.TienePermiso_704ILR("PAGOS_ANULAR")} (esperado True)");
+    Console.WriteLine($"  clave inexistente NO_EXISTE: {s_704ILR.TienePermiso_704ILR("NO_EXISTE")} (esperado False)");
+    Console.WriteLine($"  clave nula: {s_704ILR.TienePermiso_704ILR(null)} (esperado False)");
+    BLL_Login_704ILR.Logout_704ILR();
 }
 
 // [22] Todas las claves que la UI exige tienen que existir en el arbol: si una
 // falta, la seccion queda invisible para todos y el problema pasa inadvertido.
 Console.WriteLine("[22] Claves de permiso usadas por la UI presentes en el arbol:");
 {
-    string[] usadas = { "RESERVA_CREAR", "RESERVA_EDITAR", "RESERVA_HISTORIAL",
+    string[] usadas_704ILR = { "RESERVA_CREAR", "RESERVA_EDITAR", "RESERVA_HISTORIAL",
                         "CLIENTES_GESTION", "SERVICIOS_GESTION", "PERFILES_GESTION",
                         "IDIOMAS_GESTION", "BITACORA_VER", "AUDIT_LOGIN_VER",
                         "INTEGRIDAD_RECALC", "PAGOS_REGISTRAR", "PAGOS_ANULAR",
                         "DISPONIBILIDAD_CONSULTAR" };
-    var enArbol = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    void Recorrer(IEnumerable<EvenTech.BE.BE_IComponentePermiso> nodos)
+    var enArbol_704ILR = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    void Recorrer_704ILR(IEnumerable<EvenTech.BE.BE_IComponentePermiso_704ILR> nodos_704ILR)
     {
-        foreach (var n in nodos)
+        foreach (var n_704ILR in nodos_704ILR)
         {
-            if (n is EvenTech.BE.BE_Permiso hoja && !string.IsNullOrEmpty(hoja.Clave)) enArbol.Add(hoja.Clave);
-            if (n is EvenTech.BE.BE_GrupoPermisos g) Recorrer(g.Hijos);
+            if (n_704ILR is EvenTech.BE.BE_Permiso_704ILR hoja_704ILR && !string.IsNullOrEmpty(hoja_704ILR.Clave_704ILR)) enArbol_704ILR.Add(hoja_704ILR.Clave_704ILR);
+            if (n_704ILR is EvenTech.BE.BE_GrupoPermisos_704ILR g_704ILR) Recorrer_704ILR(g_704ILR.Hijos_704ILR);
         }
     }
-    Recorrer(BLL_Perfil.GetArbolPermisos());
-    var faltan = usadas.Where(c => !enArbol.Contains(c)).ToList();
-    Console.WriteLine($"  claves en el arbol: {enArbol.Count}; faltantes: " +
-                      (faltan.Count == 0 ? "ninguna (esperado)" : string.Join(", ", faltan)));
+    Recorrer_704ILR(BLL_Perfil_704ILR.GetArbolPermisos_704ILR());
+    var faltan_704ILR = usadas_704ILR.Where(c_704ILR => !enArbol_704ILR.Contains(c_704ILR)).ToList();
+    Console.WriteLine($"  claves en el arbol: {enArbol_704ILR.Count}; faltantes: " +
+                      (faltan_704ILR.Count == 0 ? "ninguna (esperado)" : string.Join(", ", faltan_704ILR)));
 }
 
 // [23] Una reserva cancelada es estado terminal: no admite modificaciones.
 Console.WriteLine("[23] Reserva cancelada no modificable:");
 {
-    var sal = BLL_Salon.GetAll();
-    var cli = BLL_Cliente.GetAll();
-    if (sal.Count == 0 || cli.Count == 0)
+    var sal_704ILR = BLL_Salon_704ILR.GetAll_704ILR();
+    var cli_704ILR = BLL_Cliente_704ILR.GetAll_704ILR();
+    if (sal_704ILR.Count == 0 || cli_704ILR.Count == 0)
     {
         Console.WriteLine("  (no hay salones/clientes seed; corre db/schema.sql)");
     }
     else
     {
-        var res = new EvenTech.BE.BE_Reserva
+        var res_704ILR = new EvenTech.BE.BE_Reserva_704ILR
         {
-            ClienteId = cli[0].Id,
-            SalonId = sal[0].Id,
-            FechaEvento = DateTime.Today.AddDays(45),
-            Estado = EvenTech.BE.EstadoReserva.CANCELADA,
-            Monto = 1000m
+            ClienteId_704ILR = cli_704ILR[0].Id_704ILR,
+            SalonId_704ILR = sal_704ILR[0].Id_704ILR,
+            FechaEvento_704ILR = DateTime.Today.AddDays(45),
+            Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CANCELADA,
+            Monto_704ILR = 1000m
         };
-        var rAlta = BLL_Reserva.Crear(res, out int idCancel);
-        Console.WriteLine($"  alta cancelada: result={rAlta}, id={idCancel}");
+        var rAlta_704ILR = BLL_Reserva_704ILR.Crear_704ILR(res_704ILR, out int idCancel_704ILR);
+        Console.WriteLine($"  alta cancelada: result={rAlta_704ILR}, id={idCancel_704ILR}");
 
-        var guardada = BLL_Reserva.GetById(idCancel);
-        Console.WriteLine($"  PuedeModificar: {BLL_Reserva.PuedeModificar(guardada)} (esperado False)");
+        var guardada_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCancel_704ILR);
+        Console.WriteLine($"  PuedeModificar: {BLL_Reserva_704ILR.PuedeModificar_704ILR(guardada_704ILR)} (esperado False)");
 
-        guardada.Monto = 2000m;
-        var rMod = BLL_Reserva.Actualizar(guardada);
-        Console.WriteLine($"  intento de modificar: result={rMod} (esperado NoModificable)");
+        guardada_704ILR.Monto_704ILR = 2000m;
+        var rMod_704ILR = BLL_Reserva_704ILR.Actualizar_704ILR(guardada_704ILR);
+        Console.WriteLine($"  intento de modificar: result={rMod_704ILR} (esperado NoModificable)");
 
         // Una reserva viva si se modifica.
-        var viva = BLL_Reserva.GetById(idCancel);
-        viva.Estado = EvenTech.BE.EstadoReserva.PENDIENTE;
-        Console.WriteLine($"  PuedeModificar sobre PENDIENTE: {BLL_Reserva.PuedeModificar(viva)} (esperado True)");
+        var viva_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCancel_704ILR);
+        viva_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.PENDIENTE;
+        Console.WriteLine($"  PuedeModificar sobre PENDIENTE: {BLL_Reserva_704ILR.PuedeModificar_704ILR(viva_704ILR)} (esperado True)");
 
         // Los pagos persisten en el acto, sin pasar por BLL_Reserva.Actualizar:
         // la regla del estado terminal tiene que rechazarlos tambien.
-        var metodos = BLL_Pago.GetMetodos();
-        if (metodos.Count > 0)
+        var metodos_704ILR = BLL_Pago_704ILR.GetMetodos_704ILR();
+        if (metodos_704ILR.Count > 0)
         {
-            var pago = new EvenTech.BE.BE_Pago { ReservaId = idCancel, MetodoPagoId = metodos[0].Id, Monto = 10m };
-            var rPago = BLL_Pago.Registrar(pago, out _);
-            Console.WriteLine($"  cobrar sobre cancelada: result={rPago} (esperado ReservaCancelada)");
+            var pago_704ILR = new EvenTech.BE.BE_Pago_704ILR { ReservaId_704ILR = idCancel_704ILR, MetodoPagoId_704ILR = metodos_704ILR[0].Id_704ILR, Monto_704ILR = 10m };
+            var rPago_704ILR = BLL_Pago_704ILR.Registrar_704ILR(pago_704ILR, out _);
+            Console.WriteLine($"  cobrar sobre cancelada: result={rPago_704ILR} (esperado ReservaCancelada)");
         }
     }
 }
@@ -354,38 +357,38 @@ Console.WriteLine("[23] Reserva cancelada no modificable:");
 // el diagnostico distingue servidor caido de base inexistente.
 Console.WriteLine("[24] Configuracion de conexion:");
 {
-    Console.WriteLine($"  configurada por el usuario: {BLL_Conexion.EstaConfigurada}");
-    Console.WriteLine($"  servidor='{BLL_Conexion.ServidorActual}', base='{BLL_Conexion.BaseDatosActual}'");
+    Console.WriteLine($"  configurada por el usuario: {BLL_Conexion_704ILR.EstaConfigurada_704ILR}");
+    Console.WriteLine($"  servidor='{BLL_Conexion_704ILR.ServidorActual_704ILR}', base='{BLL_Conexion_704ILR.BaseDatosActual_704ILR}'");
 
-    bool ok = BLL_Conexion.VerificarActual(out string msgOk);
-    Console.WriteLine($"  verificar actual: {ok} (esperado True){(ok ? "" : " -> " + msgOk)}");
+    bool ok_704ILR = BLL_Conexion_704ILR.VerificarActual_704ILR(out string msgOk_704ILR);
+    Console.WriteLine($"  verificar actual: {ok_704ILR} (esperado True){(ok_704ILR ? "" : " -> " + msgOk_704ILR)}");
 
-    bool inexistente = BLL_Conexion.Probar(EvenTech.Services.ConfiguracionConexion.ServidorPorDefecto,
-                                           "BaseQueNoExiste_" + DateTime.Now.ToString("HHmmss"), out string msgNo);
-    Console.WriteLine($"  base inexistente: {inexistente} (esperado False)");
-    Console.WriteLine($"    diagnostico: {msgNo}");
+    bool inexistente_704ILR = BLL_Conexion_704ILR.Probar_704ILR(EvenTech.Services.ConfiguracionConexion_704ILR.ServidorPorDefecto_704ILR,
+                                           "BaseQueNoExiste_" + DateTime.Now.ToString("HHmmss"), out string msgNo_704ILR);
+    Console.WriteLine($"  base inexistente: {inexistente_704ILR} (esperado False)");
+    Console.WriteLine($"    diagnostico: {msgNo_704ILR}");
 
-    Console.WriteLine($"  instancias detectadas: {BLL_Conexion.GetInstancias().Count}");
+    Console.WriteLine($"  instancias detectadas: {BLL_Conexion_704ILR.GetInstancias_704ILR().Count}");
 
     // Roundtrip del archivo cifrado con DPAPI: si guardar/leer fallara, la app
     // quedaria sin poder conectar en el proximo arranque. Se prueba con la
     // configuracion que ya funciona y se deja el entorno como estaba.
-    bool estabaConfigurada = BLL_Conexion.EstaConfigurada;
-    string servidorPrevio = BLL_Conexion.ServidorActual, basePrevia = BLL_Conexion.BaseDatosActual;
+    bool estabaConfigurada_704ILR = BLL_Conexion_704ILR.EstaConfigurada_704ILR;
+    string servidorPrevio_704ILR = BLL_Conexion_704ILR.ServidorActual_704ILR, basePrevia_704ILR = BLL_Conexion_704ILR.BaseDatosActual_704ILR;
 
-    bool guardo = BLL_Conexion.Guardar(servidorPrevio, basePrevia, out string msgGuardar);
-    Console.WriteLine($"  guardar cifrado (DPAPI): {guardo} (esperado True){(guardo ? "" : " -> " + msgGuardar)}");
-    Console.WriteLine($"  persistida: {BLL_Conexion.EstaConfigurada} (esperado True)");
+    bool guardo_704ILR = BLL_Conexion_704ILR.Guardar_704ILR(servidorPrevio_704ILR, basePrevia_704ILR, out string msgGuardar_704ILR);
+    Console.WriteLine($"  guardar cifrado (DPAPI): {guardo_704ILR} (esperado True){(guardo_704ILR ? "" : " -> " + msgGuardar_704ILR)}");
+    Console.WriteLine($"  persistida: {BLL_Conexion_704ILR.EstaConfigurada_704ILR} (esperado True)");
 
-    bool releeOk = BLL_Conexion.VerificarActual(out _);
-    Console.WriteLine($"  releida y conecta: {releeOk} (esperado True)");
-    Console.WriteLine($"  servidor releido='{BLL_Conexion.ServidorActual}', base='{BLL_Conexion.BaseDatosActual}' " +
-                      $"(esperado '{servidorPrevio}', '{basePrevia}')");
+    bool releeOk_704ILR = BLL_Conexion_704ILR.VerificarActual_704ILR(out _);
+    Console.WriteLine($"  releida y conecta: {releeOk_704ILR} (esperado True)");
+    Console.WriteLine($"  servidor releido='{BLL_Conexion_704ILR.ServidorActual_704ILR}', base='{BLL_Conexion_704ILR.BaseDatosActual_704ILR}' " +
+                      $"(esperado '{servidorPrevio_704ILR}', '{basePrevia_704ILR}')");
 
-    if (!estabaConfigurada)
+    if (!estabaConfigurada_704ILR)
     {
-        BLL_Conexion.Restablecer();
-        Console.WriteLine($"  entorno restaurado (sin archivo): {!BLL_Conexion.EstaConfigurada} (esperado True)");
+        BLL_Conexion_704ILR.Restablecer_704ILR();
+        Console.WriteLine($"  entorno restaurado (sin archivo): {!BLL_Conexion_704ILR.EstaConfigurada_704ILR} (esperado True)");
     }
 }
 
@@ -393,41 +396,41 @@ Console.WriteLine("[24] Configuracion de conexion:");
 // no la app quedaria conectada a una base inservible sin volver a ofrecer configurar.
 Console.WriteLine("[25] Base existente pero sin esquema:");
 {
-    const string tmpDb = "EvenTechSmokeVacia";
-    string cs = EvenTech.Services.ConfiguracionConexion.Construir(
-        EvenTech.Services.ConfiguracionConexion.ServidorActual, tmpDb);
+    const string tmpDb_704ILR = "EvenTechSmokeVacia";
+    string cs_704ILR = EvenTech.Services.ConfiguracionConexion_704ILR.Construir_704ILR(
+        EvenTech.Services.ConfiguracionConexion_704ILR.ServidorActual_704ILR, tmpDb_704ILR);
     try
     {
-        using (var cn = new Microsoft.Data.SqlClient.SqlConnection(
-            EvenTech.Services.ConfiguracionConexion.Construir(EvenTech.Services.ConfiguracionConexion.ServidorActual, "master")))
+        using (var cn_704ILR = new Microsoft.Data.SqlClient.SqlConnection(
+            EvenTech.Services.ConfiguracionConexion_704ILR.Construir_704ILR(EvenTech.Services.ConfiguracionConexion_704ILR.ServidorActual_704ILR, "master")))
         {
-            cn.Open();
-            using var crear = new Microsoft.Data.SqlClient.SqlCommand(
-                $"IF DB_ID('{tmpDb}') IS NULL CREATE DATABASE [{tmpDb}]", cn);
-            crear.ExecuteNonQuery();
+            cn_704ILR.Open();
+            using var crear_704ILR = new Microsoft.Data.SqlClient.SqlCommand(
+                $"IF DB_ID('{tmpDb_704ILR}') IS NULL CREATE DATABASE [{tmpDb_704ILR}]", cn_704ILR);
+            crear_704ILR.ExecuteNonQuery();
         }
 
-        bool ok = EvenTech.DAL.DAL_DB_Connection.Probar(cs, out string msg);
-        Console.WriteLine($"  aceptada: {ok} (esperado False)");
-        Console.WriteLine($"    diagnostico: {msg}");
+        bool ok_704ILR = EvenTech.DAL.DAL_DB_Connection_704ILR.Probar_704ILR(cs_704ILR, out string msg_704ILR);
+        Console.WriteLine($"  aceptada: {ok_704ILR} (esperado False)");
+        Console.WriteLine($"    diagnostico: {msg_704ILR}");
     }
-    catch (Exception ex)
+    catch (Exception ex_704ILR)
     {
-        Console.WriteLine($"  (no se pudo crear la base de prueba: {ex.Message})");
+        Console.WriteLine($"  (no se pudo crear la base de prueba: {ex_704ILR.Message})");
     }
     finally
     {
         try
         {
-            using var cn = new Microsoft.Data.SqlClient.SqlConnection(
-                EvenTech.Services.ConfiguracionConexion.Construir(EvenTech.Services.ConfiguracionConexion.ServidorActual, "master"));
-            cn.Open();
-            using var borrar = new Microsoft.Data.SqlClient.SqlCommand(
-                $"IF DB_ID('{tmpDb}') IS NOT NULL BEGIN ALTER DATABASE [{tmpDb}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{tmpDb}]; END", cn);
-            borrar.ExecuteNonQuery();
+            using var cn_704ILR = new Microsoft.Data.SqlClient.SqlConnection(
+                EvenTech.Services.ConfiguracionConexion_704ILR.Construir_704ILR(EvenTech.Services.ConfiguracionConexion_704ILR.ServidorActual_704ILR, "master"));
+            cn_704ILR.Open();
+            using var borrar_704ILR = new Microsoft.Data.SqlClient.SqlCommand(
+                $"IF DB_ID('{tmpDb_704ILR}') IS NOT NULL BEGIN ALTER DATABASE [{tmpDb_704ILR}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{tmpDb_704ILR}]; END", cn_704ILR);
+            borrar_704ILR.ExecuteNonQuery();
             Console.WriteLine("  base de prueba eliminada");
         }
-        catch (Exception ex) { Console.WriteLine($"  (no se pudo limpiar la base de prueba: {ex.Message})"); }
+        catch (Exception ex_704ILR) { Console.WriteLine($"  (no se pudo limpiar la base de prueba: {ex_704ILR.Message})"); }
     }
 }
 
@@ -436,10 +439,10 @@ Console.WriteLine("[25] Base existente pero sin esquema:");
 // (tope = total). Es el happy path que la UI recorre pantalla por pantalla.
 Console.WriteLine("[26] Flujo RF1 completo (servicios, confirmacion, pagos):");
 {
-    var sal = BLL_Salon.GetAll();
-    var cli = BLL_Cliente.GetAll();
-    var srv = BLL_Servicio.GetActivos();
-    if (sal.Count == 0 || cli.Count == 0 || srv.Count < 2)
+    var sal_704ILR = BLL_Salon_704ILR.GetAll_704ILR();
+    var cli_704ILR = BLL_Cliente_704ILR.GetAll_704ILR();
+    var srv_704ILR = BLL_Servicio_704ILR.GetActivos_704ILR();
+    if (sal_704ILR.Count == 0 || cli_704ILR.Count == 0 || srv_704ILR.Count < 2)
     {
         Console.WriteLine("  (faltan salones/clientes/servicios seed; corre db/schema.sql)");
     }
@@ -448,92 +451,92 @@ Console.WriteLine("[26] Flujo RF1 completo (servicios, confirmacion, pagos):");
         // Fecha propia de la corrida (como el username unico del caso [2]): una
         // corrida anterior deja su reserva confirmada en la base y una fecha
         // fija haria fallar la confirmacion por SalonOcupado.
-        DateTime fechaEvento = DateTime.Today.AddDays(60 + (int)DateTime.Now.TimeOfDay.TotalSeconds % 900);
+        DateTime fechaEvento_704ILR = DateTime.Today.AddDays(60 + (int)DateTime.Now.TimeOfDay.TotalSeconds % 900);
 
         // Cotizacion: no compromete el salon. El monto es la suma de servicios.
-        var servicios = new List<EvenTech.BE.BE_ReservaServicio>
+        var servicios_704ILR = new List<EvenTech.BE.BE_ReservaServicio_704ILR>
         {
-            new EvenTech.BE.BE_ReservaServicio { ServicioId = srv[0].Id, Cantidad = 2, PrecioUnitario = srv[0].Precio },
-            new EvenTech.BE.BE_ReservaServicio { ServicioId = srv[1].Id, Cantidad = 1, PrecioUnitario = srv[1].Precio }
+            new EvenTech.BE.BE_ReservaServicio_704ILR { ServicioId_704ILR = srv_704ILR[0].Id_704ILR, Cantidad_704ILR = 2, PrecioUnitario_704ILR = srv_704ILR[0].Precio_704ILR },
+            new EvenTech.BE.BE_ReservaServicio_704ILR { ServicioId_704ILR = srv_704ILR[1].Id_704ILR, Cantidad_704ILR = 1, PrecioUnitario_704ILR = srv_704ILR[1].Precio_704ILR }
         };
-        decimal total = BLL_ReservaServicio.Total(servicios);
-        decimal esperado = srv[0].Precio * 2 + srv[1].Precio;
-        Console.WriteLine($"  total de servicios: {total:N2} (esperado {esperado:N2})");
+        decimal total_704ILR = BLL_ReservaServicio_704ILR.Total_704ILR(servicios_704ILR);
+        decimal esperado_704ILR = srv_704ILR[0].Precio_704ILR * 2 + srv_704ILR[1].Precio_704ILR;
+        Console.WriteLine($"  total de servicios: {total_704ILR:N2} (esperado {esperado_704ILR:N2})");
 
-        var cot = new EvenTech.BE.BE_Reserva
+        var cot_704ILR = new EvenTech.BE.BE_Reserva_704ILR
         {
-            ClienteId = cli[0].Id,
-            SalonId = sal[0].Id,
-            FechaEvento = fechaEvento,
-            Estado = EvenTech.BE.EstadoReserva.COTIZACION,
-            Monto = total
+            ClienteId_704ILR = cli_704ILR[0].Id_704ILR,
+            SalonId_704ILR = sal_704ILR[0].Id_704ILR,
+            FechaEvento_704ILR = fechaEvento_704ILR,
+            Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.COTIZACION,
+            Monto_704ILR = total_704ILR
         };
-        var rCot = BLL_Reserva.Crear(cot, out int idFlujo);
-        BLL_ReservaServicio.Guardar(idFlujo, servicios);
-        Console.WriteLine($"  alta cotizacion: result={rCot}, id={idFlujo}");
-        Console.WriteLine($"  servicios persistidos: {BLL_ReservaServicio.GetByReserva(idFlujo).Count} (esperado {servicios.Count})");
+        var rCot_704ILR = BLL_Reserva_704ILR.Crear_704ILR(cot_704ILR, out int idFlujo_704ILR);
+        BLL_ReservaServicio_704ILR.Guardar_704ILR(idFlujo_704ILR, servicios_704ILR);
+        Console.WriteLine($"  alta cotizacion: result={rCot_704ILR}, id={idFlujo_704ILR}");
+        Console.WriteLine($"  servicios persistidos: {BLL_ReservaServicio_704ILR.GetByReserva_704ILR(idFlujo_704ILR).Count} (esperado {servicios_704ILR.Count})");
 
         // Confirmar: recien aca se compromete el salon.
-        var reserva = BLL_Reserva.GetById(idFlujo);
-        reserva.Estado = EvenTech.BE.EstadoReserva.CONFIRMADA;
-        var rConf = BLL_Reserva.Actualizar(reserva);
-        Console.WriteLine($"  confirmar: result={rConf} (esperado Success)");
+        var reserva_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idFlujo_704ILR);
+        reserva_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
+        var rConf_704ILR = BLL_Reserva_704ILR.Actualizar_704ILR(reserva_704ILR);
+        Console.WriteLine($"  confirmar: result={rConf_704ILR} (esperado Success)");
 
         // Anti-solapamiento: otra CONFIRMADA para el mismo salon y fecha se rechaza.
-        var choque = new EvenTech.BE.BE_Reserva
+        var choque_704ILR = new EvenTech.BE.BE_Reserva_704ILR
         {
-            ClienteId = cli[0].Id,
-            SalonId = sal[0].Id,
-            FechaEvento = fechaEvento,
-            Estado = EvenTech.BE.EstadoReserva.CONFIRMADA,
-            Monto = 1000m
+            ClienteId_704ILR = cli_704ILR[0].Id_704ILR,
+            SalonId_704ILR = sal_704ILR[0].Id_704ILR,
+            FechaEvento_704ILR = fechaEvento_704ILR,
+            Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA,
+            Monto_704ILR = 1000m
         };
-        var rChoque = BLL_Reserva.Crear(choque, out _);
-        Console.WriteLine($"  segunda confirmada mismo salon/fecha: result={rChoque} (esperado SalonOcupado)");
+        var rChoque_704ILR = BLL_Reserva_704ILR.Crear_704ILR(choque_704ILR, out _);
+        Console.WriteLine($"  segunda confirmada mismo salon/fecha: result={rChoque_704ILR} (esperado SalonOcupado)");
 
         // Cobros: adelanto, intento de exceso y saldo exacto.
-        var metodos = BLL_Pago.GetMetodos();
-        Console.WriteLine($"  metodos de pago: {metodos.Count} (esperado 5)");
-        decimal adelanto = Math.Round(total / 2, 2);
+        var metodos_704ILR = BLL_Pago_704ILR.GetMetodos_704ILR();
+        Console.WriteLine($"  metodos de pago: {metodos_704ILR.Count} (esperado 5)");
+        decimal adelanto_704ILR = Math.Round(total_704ILR / 2, 2);
 
-        var rAde = BLL_Pago.Registrar(new EvenTech.BE.BE_Pago
-        { ReservaId = idFlujo, MetodoPagoId = metodos[0].Id, Monto = adelanto, Observacion = "Adelanto" }, out _);
-        Console.WriteLine($"  adelanto {adelanto:N2}: result={rAde} (esperado Success)");
-        Console.WriteLine($"  saldo tras adelanto: {BLL_Pago.Saldo(idFlujo):N2} (esperado {total - adelanto:N2})");
+        var rAde_704ILR = BLL_Pago_704ILR.Registrar_704ILR(new EvenTech.BE.BE_Pago_704ILR
+        { ReservaId_704ILR = idFlujo_704ILR, MetodoPagoId_704ILR = metodos_704ILR[0].Id_704ILR, Monto_704ILR = adelanto_704ILR, Observacion_704ILR = "Adelanto" }, out _);
+        Console.WriteLine($"  adelanto {adelanto_704ILR:N2}: result={rAde_704ILR} (esperado Success)");
+        Console.WriteLine($"  saldo tras adelanto: {BLL_Pago_704ILR.Saldo_704ILR(idFlujo_704ILR):N2} (esperado {total_704ILR - adelanto_704ILR:N2})");
 
-        var rExceso = BLL_Pago.Registrar(new EvenTech.BE.BE_Pago
-        { ReservaId = idFlujo, MetodoPagoId = metodos[0].Id, Monto = total }, out _);
-        Console.WriteLine($"  pago que excede el saldo: result={rExceso} (esperado ExcedeSaldo)");
+        var rExceso_704ILR = BLL_Pago_704ILR.Registrar_704ILR(new EvenTech.BE.BE_Pago_704ILR
+        { ReservaId_704ILR = idFlujo_704ILR, MetodoPagoId_704ILR = metodos_704ILR[0].Id_704ILR, Monto_704ILR = total_704ILR }, out _);
+        Console.WriteLine($"  pago que excede el saldo: result={rExceso_704ILR} (esperado ExcedeSaldo)");
 
-        var rSaldo = BLL_Pago.Registrar(new EvenTech.BE.BE_Pago
-        { ReservaId = idFlujo, MetodoPagoId = metodos[metodos.Count - 1].Id, Monto = total - adelanto, Observacion = "Saldo" }, out _);
-        Console.WriteLine($"  saldo restante: result={rSaldo} (esperado Success)");
-        Console.WriteLine($"  saldo final: {BLL_Pago.Saldo(idFlujo):N2} (esperado 0,00)");
+        var rSaldo_704ILR = BLL_Pago_704ILR.Registrar_704ILR(new EvenTech.BE.BE_Pago_704ILR
+        { ReservaId_704ILR = idFlujo_704ILR, MetodoPagoId_704ILR = metodos_704ILR[metodos_704ILR.Count - 1].Id_704ILR, Monto_704ILR = total_704ILR - adelanto_704ILR, Observacion_704ILR = "Saldo" }, out _);
+        Console.WriteLine($"  saldo restante: result={rSaldo_704ILR} (esperado Success)");
+        Console.WriteLine($"  saldo final: {BLL_Pago_704ILR.Saldo_704ILR(idFlujo_704ILR):N2} (esperado 0,00)");
 
         // [27] Consulta de disponibilidad (Proceso 1, paso 1): la fecha recien
         // confirmada tiene que figurar ocupada para ese salon, con una fecha
         // alternativa propuesta; una capacidad imposible marca insuficiente.
         Console.WriteLine("[27] Consulta de disponibilidad:");
-        var disp = BLL_Disponibilidad.Consultar(fechaEvento, 0);
-        Console.WriteLine($"  salones evaluados: {disp.Count} (esperado {sal.Count})");
-        var delFlujo = disp.FirstOrDefault(d => d.SalonId == sal[0].Id);
-        Console.WriteLine($"  salon confirmado libre: {delFlujo?.Libre} (esperado False)");
-        Console.WriteLine($"  propuesta alternativa: {(delFlujo?.ProximaFechaLibre.HasValue == true ? delFlujo.ProximaFechaLibre.Value.ToString("yyyy-MM-dd") : "ninguna")} (esperada una fecha)");
+        var disp_704ILR = BLL_Disponibilidad_704ILR.Consultar_704ILR(fechaEvento_704ILR, 0);
+        Console.WriteLine($"  salones evaluados: {disp_704ILR.Count} (esperado {sal_704ILR.Count})");
+        var delFlujo_704ILR = disp_704ILR.FirstOrDefault(d_704ILR => d_704ILR.SalonId_704ILR == sal_704ILR[0].Id_704ILR);
+        Console.WriteLine($"  salon confirmado libre: {delFlujo_704ILR?.Libre_704ILR} (esperado False)");
+        Console.WriteLine($"  propuesta alternativa: {(delFlujo_704ILR?.ProximaFechaLibre_704ILR.HasValue == true ? delFlujo_704ILR.ProximaFechaLibre_704ILR.Value.ToString("yyyy-MM-dd") : "ninguna")} (esperada una fecha)");
 
-        var dispCap = BLL_Disponibilidad.Consultar(fechaEvento, 99999);
-        Console.WriteLine($"  capacidad imposible -> disponibles: {dispCap.Count(d => d.Disponible)} (esperado 0)");
-        Console.WriteLine($"  capacidad imposible -> suficientes: {dispCap.Count(d => d.CapacidadSuficiente)} (esperado 0)");
+        var dispCap_704ILR = BLL_Disponibilidad_704ILR.Consultar_704ILR(fechaEvento_704ILR, 99999);
+        Console.WriteLine($"  capacidad imposible -> disponibles: {dispCap_704ILR.Count(d_704ILR => d_704ILR.Disponible_704ILR)} (esperado 0)");
+        Console.WriteLine($"  capacidad imposible -> suficientes: {dispCap_704ILR.Count(d_704ILR => d_704ILR.CapacidadSuficiente_704ILR)} (esperado 0)");
 
         // Un dia sin reservas confirmadas: todos los salones libres.
-        var dispLibre = BLL_Disponibilidad.Consultar(fechaEvento.AddDays(2000), 0);
-        Console.WriteLine($"  fecha lejana -> disponibles: {dispLibre.Count(d => d.Disponible)}/{dispLibre.Count} (esperado todos)");
+        var dispLibre_704ILR = BLL_Disponibilidad_704ILR.Consultar_704ILR(fechaEvento_704ILR.AddDays(2000), 0);
+        Console.WriteLine($"  fecha lejana -> disponibles: {dispLibre_704ILR.Count(d_704ILR => d_704ILR.Disponible_704ILR)}/{dispLibre_704ILR.Count} (esperado todos)");
 
         // Limpieza: se cancela la reserva del flujo para liberar el salon
         // (la corrida queda repetible aunque la fecha se repitiera).
-        var fin = BLL_Reserva.GetById(idFlujo);
-        fin.Estado = EvenTech.BE.EstadoReserva.CANCELADA;
-        var rFin = BLL_Reserva.Actualizar(fin);
-        Console.WriteLine($"  limpieza (cancelar reserva del flujo): result={rFin} (esperado Success)");
+        var fin_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idFlujo_704ILR);
+        fin_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CANCELADA;
+        var rFin_704ILR = BLL_Reserva_704ILR.Actualizar_704ILR(fin_704ILR);
+        Console.WriteLine($"  limpieza (cancelar reserva del flujo): result={rFin_704ILR} (esperado Success)");
     }
 }
 
