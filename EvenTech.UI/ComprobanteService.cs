@@ -41,9 +41,20 @@ namespace EvenTech.UI
             else if (pagado > 0) { estadoPago = T("CMP_EST_PARCIAL", "Pago parcial"); estadoColor = Gold; }
             else { estadoPago = T("CMP_EST_PENDIENTE", "Pendiente"); estadoColor = Muted; }
 
+            // El documento correspondiente al estado (Proceso 1, paso 6): una
+            // cotizacion emite un presupuesto (sin compromiso del salon); una
+            // reserva emite el comprobante propiamente dicho.
+            bool esPresupuesto = reserva.Estado == EstadoReserva.COTIZACION;
+            string docTitulo = esPresupuesto
+                ? T("CMP_TITULO_PRESUPUESTO", "Presupuesto")
+                : T("CMP_TITULO", "Comprobante de Reserva");
+            string docNro = esPresupuesto
+                ? T("CMP_DOC_NRO_PRESUPUESTO", "Presupuesto N")
+                : T("CMP_DOC_NRO", "Comprobante N");
+
             var sb = new StringBuilder();
             sb.Append("<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"utf-8\">");
-            sb.Append("<title>").Append(E(T("CMP_TITULO", "Comprobante de Reserva")))
+            sb.Append("<title>").Append(E(docTitulo))
               .Append(" #").Append(reservaId).Append("</title>");
             sb.Append("<style>")
               .Append("*{box-sizing:border-box;}")
@@ -78,7 +89,7 @@ namespace EvenTech.UI
             // ---- Encabezado ----
             sb.Append("<div class=\"head\"><div class=\"brand\">EvenTech<small>")
               .Append(E(T("CMP_TAGLINE", "GESTION DE EVENTOS"))).Append("</small></div>");
-            sb.Append("<div class=\"doc\">").Append(E(T("CMP_DOC_NRO", "Comprobante N")))
+            sb.Append("<div class=\"doc\">").Append(E(docNro))
               .Append("<b> #").Append(reservaId).Append("</b><br>")
               .Append(E(T("CMP_EMITIDO", "Emitido"))).Append(": ")
               .Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm")).Append("<br>")
@@ -153,7 +164,11 @@ namespace EvenTech.UI
             }
 
             sb.Append("</div>"); // body
-            sb.Append("<div class=\"foot\">").Append(E(T("CMP_GRACIAS", "Gracias por su reserva."))).Append("</div>");
+            sb.Append("<div class=\"foot\">")
+              .Append(E(esPresupuesto
+                  ? T("CMP_PRESUPUESTO_NOTA", "Presupuesto sin compromiso de reserva. Sujeto a disponibilidad del salon al momento de confirmar.")
+                  : T("CMP_GRACIAS", "Gracias por su reserva.")))
+              .Append("</div>");
             sb.Append("</div></body></html>");
             return sb.ToString();
         }

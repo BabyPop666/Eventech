@@ -19,7 +19,7 @@ namespace EvenTech.UI
         private TextBox _txtMonto;   // solo lectura: total = suma de los servicios contratados
         private ComboBox _cboCliente, _cboSalon, _cboEstado;
         private DateTimePicker _dtFecha;
-        private AppButton _btnNuevo, _btnGuardar, _btnHistorial, _btnNuevoCliente, _btnServicios, _btnPagos, _btnComprobante, _btnEmail, _btnVersiones;
+        private AppButton _btnNuevo, _btnDisponibilidad, _btnGuardar, _btnHistorial, _btnNuevoCliente, _btnServicios, _btnPagos, _btnComprobante, _btnEmail, _btnVersiones;
         private List<BE_ReservaServicio> _serviciosReserva = new List<BE_ReservaServicio>();
 
         private int _editId; // 0 = alta, >0 = edicion
@@ -61,7 +61,7 @@ namespace EvenTech.UI
                 Dock = DockStyle.Top,
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                ColumnCount = 4,
+                ColumnCount = 5,
                 RowCount = 2,
                 BackColor = Theme.BgContent,
                 Margin = new Padding(0),
@@ -69,6 +69,7 @@ namespace EvenTech.UI
             };
             header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));  // titulo
             header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));  // boton nueva
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));  // boton disponibilidad
             header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));  // conteo
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); // relleno
             header.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -87,6 +88,17 @@ namespace EvenTech.UI
             _btnNuevo.Margin = new Padding(0, 0, Theme.SpaceMd, 0);
             _btnNuevo.Click += (s, e) => LimpiarForm();
 
+            // Consulta de disponibilidad (Proceso 1, paso 1): se hace antes de
+            // armar la reserva, por eso vive en el header y no en la ficha.
+            _btnDisponibilidad = Ui.Secondary("Disponibilidad", Theme.IcoCalendar);
+            _btnDisponibilidad.Tag = "T:RES_DISPONIBILIDAD_BTN";
+            _btnDisponibilidad.Size = new Size(160, 36);
+            _btnDisponibilidad.BehindColor = Theme.BgContent;
+            _btnDisponibilidad.Anchor = AnchorStyles.Left;
+            _btnDisponibilidad.Margin = new Padding(0, 0, Theme.SpaceMd, 0);
+            _btnDisponibilidad.Click += (s, e) => ConsultarDisponibilidad();
+            _btnDisponibilidad.Enabled = Permisos.Tiene("DISPONIBILIDAD_CONSULTAR");
+
             _lblCount = Ui.Body();
             _lblCount.ForeColor = Theme.TextMuted;
             _lblCount.Anchor = AnchorStyles.Left;
@@ -103,10 +115,11 @@ namespace EvenTech.UI
 
             header.Controls.Add(lblTitle, 0, 0);
             header.Controls.Add(_btnNuevo, 1, 0);
-            header.Controls.Add(_lblCount, 2, 0);
+            header.Controls.Add(_btnDisponibilidad, 2, 0);
+            header.Controls.Add(_lblCount, 3, 0);
             // El error ocupa toda la fila inferior (debajo del titulo y acciones).
             header.Controls.Add(_lblError, 0, 1);
-            header.SetColumnSpan(_lblError, 4);
+            header.SetColumnSpan(_lblError, 5);
 
             return header;
         }
@@ -522,6 +535,24 @@ namespace EvenTech.UI
                     _serviciosReserva = dlg.Items;
                     ActualizarMonto();
                 }
+            }
+        }
+
+        // Consulta de disponibilidad (Proceso 1, paso 1): abre el dialogo y, si
+        // el vendedor elige un salon (con la fecha pedida o con la propuesta
+        // alternativa), precarga la ficha para continuar la carga de la reserva.
+        private void ConsultarDisponibilidad()
+        {
+            if (!Permisos.Exigir("DISPONIBILIDAD_CONSULTAR", FindForm(), "consultar disponibilidad de salones")) return;
+            using (var dlg = new frmDisponibilidad(_dtFecha.Value.Date))
+            {
+                if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
+
+                // La consulta arranca una reserva nueva: la ficha se limpia y se
+                // precarga con lo elegido (una edicion en curso no se pisa a ciegas).
+                if (_editId != 0) LimpiarForm();
+                _cboSalon.SelectedValue = dlg.SalonSeleccionado;
+                _dtFecha.Value = dlg.FechaSeleccionada < _dtFecha.MinDate ? _dtFecha.MinDate : dlg.FechaSeleccionada;
             }
         }
 

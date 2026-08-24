@@ -287,7 +287,8 @@ Console.WriteLine("[22] Claves de permiso usadas por la UI presentes en el arbol
     string[] usadas = { "RESERVA_CREAR", "RESERVA_EDITAR", "RESERVA_HISTORIAL",
                         "CLIENTES_GESTION", "SERVICIOS_GESTION", "PERFILES_GESTION",
                         "IDIOMAS_GESTION", "BITACORA_VER", "AUDIT_LOGIN_VER",
-                        "INTEGRIDAD_RECALC", "PAGOS_REGISTRAR", "PAGOS_ANULAR" };
+                        "INTEGRIDAD_RECALC", "PAGOS_REGISTRAR", "PAGOS_ANULAR",
+                        "DISPONIBILIDAD_CONSULTAR" };
     var enArbol = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     void Recorrer(IEnumerable<EvenTech.BE.BE_IComponentePermiso> nodos)
     {
@@ -427,6 +428,112 @@ Console.WriteLine("[25] Base existente pero sin esquema:");
             Console.WriteLine("  base de prueba eliminada");
         }
         catch (Exception ex) { Console.WriteLine($"  (no se pudo limpiar la base de prueba: {ex.Message})"); }
+    }
+}
+
+// [26] Flujo completo del Proceso 1 (RF1): cotizacion con servicios -> total =
+// suma de subtotales -> confirmacion (anti-solapamiento) -> adelanto y saldo
+// (tope = total). Es el happy path que la UI recorre pantalla por pantalla.
+Console.WriteLine("[26] Flujo RF1 completo (servicios, confirmacion, pagos):");
+{
+    var sal = BLL_Salon.GetAll();
+    var cli = BLL_Cliente.GetAll();
+    var srv = BLL_Servicio.GetActivos();
+    if (sal.Count == 0 || cli.Count == 0 || srv.Count < 2)
+    {
+        Console.WriteLine("  (faltan salones/clientes/servicios seed; corre db/schema.sql)");
+    }
+    else
+    {
+        // Fecha propia de la corrida (como el username unico del caso [2]): una
+        // corrida anterior deja su reserva confirmada en la base y una fecha
+        // fija haria fallar la confirmacion por SalonOcupado.
+        DateTime fechaEvento = DateTime.Today.AddDays(60 + (int)DateTime.Now.TimeOfDay.TotalSeconds % 900);
+
+        // Cotizacion: no compromete el salon. El monto es la suma de servicios.
+        var servicios = new List<EvenTech.BE.BE_ReservaServicio>
+        {
+            new EvenTech.BE.BE_ReservaServicio { ServicioId = srv[0].Id, Cantidad = 2, PrecioUnitario = srv[0].Precio },
+            new EvenTech.BE.BE_ReservaServicio { ServicioId = srv[1].Id, Cantidad = 1, PrecioUnitario = srv[1].Precio }
+        };
+        decimal total = BLL_ReservaServicio.Total(servicios);
+        decimal esperado = srv[0].Precio * 2 + srv[1].Precio;
+        Console.WriteLine($"  total de servicios: {total:N2} (esperado {esperado:N2})");
+
+        var cot = new EvenTech.BE.BE_Reserva
+        {
+            ClienteId = cli[0].Id,
+            SalonId = sal[0].Id,
+            FechaEvento = fechaEvento,
+            Estado = EvenTech.BE.EstadoReserva.COTIZACION,
+            Monto = total
+        };
+        var rCot = BLL_Reserva.Crear(cot, out int idFlujo);
+        BLL_ReservaServicio.Guardar(idFlujo, servicios);
+        Console.WriteLine($"  alta cotizacion: result={rCot}, id={idFlujo}");
+        Console.WriteLine($"  servicios persistidos: {BLL_ReservaServicio.GetByReserva(idFlujo).Count} (esperado {servicios.Count})");
+
+        // Confirmar: recien aca se compromete el salon.
+        var reserva = BLL_Reserva.GetById(idFlujo);
+        reserva.Estado = EvenTech.BE.EstadoReserva.CONFIRMADA;
+        var rConf = BLL_Reserva.Actualizar(reserva);
+        Console.WriteLine($"  confirmar: result={rConf} (esperado Success)");
+
+        // Anti-solapamiento: otra CONFIRMADA para el mismo salon y fecha se rechaza.
+        var choque = new EvenTech.BE.BE_Reserva
+        {
+            ClienteId = cli[0].Id,
+            SalonId = sal[0].Id,
+            FechaEvento = fechaEvento,
+            Estado = EvenTech.BE.EstadoReserva.CONFIRMADA,
+            Monto = 1000m
+        };
+        var rChoque = BLL_Reserva.Crear(choque, out _);
+        Console.WriteLine($"  segunda confirmada mismo salon/fecha: result={rChoque} (esperado SalonOcupado)");
+
+        // Cobros: adelanto, intento de exceso y saldo exacto.
+        var metodos = BLL_Pago.GetMetodos();
+        Console.WriteLine($"  metodos de pago: {metodos.Count} (esperado 5)");
+        decimal adelanto = Math.Round(total / 2, 2);
+
+        var rAde = BLL_Pago.Registrar(new EvenTech.BE.BE_Pago
+        { ReservaId = idFlujo, MetodoPagoId = metodos[0].Id, Monto = adelanto, Observacion = "Adelanto" }, out _);
+        Console.WriteLine($"  adelanto {adelanto:N2}: result={rAde} (esperado Success)");
+        Console.WriteLine($"  saldo tras adelanto: {BLL_Pago.Saldo(idFlujo):N2} (esperado {total - adelanto:N2})");
+
+        var rExceso = BLL_Pago.Registrar(new EvenTech.BE.BE_Pago
+        { ReservaId = idFlujo, MetodoPagoId = metodos[0].Id, Monto = total }, out _);
+        Console.WriteLine($"  pago que excede el saldo: result={rExceso} (esperado ExcedeSaldo)");
+
+        var rSaldo = BLL_Pago.Registrar(new EvenTech.BE.BE_Pago
+        { ReservaId = idFlujo, MetodoPagoId = metodos[metodos.Count - 1].Id, Monto = total - adelanto, Observacion = "Saldo" }, out _);
+        Console.WriteLine($"  saldo restante: result={rSaldo} (esperado Success)");
+        Console.WriteLine($"  saldo final: {BLL_Pago.Saldo(idFlujo):N2} (esperado 0,00)");
+
+        // [27] Consulta de disponibilidad (Proceso 1, paso 1): la fecha recien
+        // confirmada tiene que figurar ocupada para ese salon, con una fecha
+        // alternativa propuesta; una capacidad imposible marca insuficiente.
+        Console.WriteLine("[27] Consulta de disponibilidad:");
+        var disp = BLL_Disponibilidad.Consultar(fechaEvento, 0);
+        Console.WriteLine($"  salones evaluados: {disp.Count} (esperado {sal.Count})");
+        var delFlujo = disp.FirstOrDefault(d => d.SalonId == sal[0].Id);
+        Console.WriteLine($"  salon confirmado libre: {delFlujo?.Libre} (esperado False)");
+        Console.WriteLine($"  propuesta alternativa: {(delFlujo?.ProximaFechaLibre.HasValue == true ? delFlujo.ProximaFechaLibre.Value.ToString("yyyy-MM-dd") : "ninguna")} (esperada una fecha)");
+
+        var dispCap = BLL_Disponibilidad.Consultar(fechaEvento, 99999);
+        Console.WriteLine($"  capacidad imposible -> disponibles: {dispCap.Count(d => d.Disponible)} (esperado 0)");
+        Console.WriteLine($"  capacidad imposible -> suficientes: {dispCap.Count(d => d.CapacidadSuficiente)} (esperado 0)");
+
+        // Un dia sin reservas confirmadas: todos los salones libres.
+        var dispLibre = BLL_Disponibilidad.Consultar(fechaEvento.AddDays(2000), 0);
+        Console.WriteLine($"  fecha lejana -> disponibles: {dispLibre.Count(d => d.Disponible)}/{dispLibre.Count} (esperado todos)");
+
+        // Limpieza: se cancela la reserva del flujo para liberar el salon
+        // (la corrida queda repetible aunque la fecha se repitiera).
+        var fin = BLL_Reserva.GetById(idFlujo);
+        fin.Estado = EvenTech.BE.EstadoReserva.CANCELADA;
+        var rFin = BLL_Reserva.Actualizar(fin);
+        Console.WriteLine($"  limpieza (cancelar reserva del flujo): result={rFin} (esperado Success)");
     }
 }
 
