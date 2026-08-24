@@ -950,3 +950,57 @@ WHERE NOT EXISTS (
     SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
 );
 GO
+
+-- ===========================================================================
+-- Consulta de disponibilidad (Proceso 1, paso 1) y presupuesto/comprobante
+-- (Proceso 1, paso 6). Idempotente: solo inserta lo que falte.
+-- ===========================================================================
+
+-- Permiso hoja bajo "Gestion de Reservas": la consulta es el arranque del
+-- proceso de venta y se concede por perfil como el resto de las operaciones.
+DECLARE @gReservasDisp INT = (SELECT TOP 1 Id FROM dbo.Permisos WHERE Nombre = N'Gestion de Reservas' AND EsGrupo = 1);
+IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'DISPONIBILIDAD_CONSULTAR')
+    INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
+        VALUES (N'Consultar Disponibilidad', N'Verificar salones libres por fecha y capacidad', 0, N'DISPONIBILIDAD_CONSULTAR', @gReservasDisp);
+
+-- Acceso total del Administrador: se le asigna todo permiso que le falte.
+INSERT INTO dbo.PerfilPermiso (PerfilId, PermisoId)
+SELECT p.Id, pe.Id
+FROM dbo.Perfiles p
+CROSS JOIN dbo.Permisos pe
+WHERE p.Nombre = N'Administrador'
+  AND NOT EXISTS (SELECT 1 FROM dbo.PerfilPermiso pp
+                  WHERE pp.PerfilId = p.Id AND pp.PermisoId = pe.Id);
+GO
+
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        -- Consulta de disponibilidad (Proceso 1, paso 1)
+        (N'ES', N'RES_DISPONIBILIDAD_BTN', N'Disponibilidad'), (N'EN', N'RES_DISPONIBILIDAD_BTN', N'Availability'), (N'PT', N'RES_DISPONIBILIDAD_BTN', N'Disponibilidade'),
+        (N'ES', N'DISP_TITULO', N'Consulta de disponibilidad'), (N'EN', N'DISP_TITULO', N'Availability check'), (N'PT', N'DISP_TITULO', N'Consulta de disponibilidade'),
+        (N'ES', N'DISP_LBL_CAPACIDAD', N'Invitados estimados'), (N'EN', N'DISP_LBL_CAPACIDAD', N'Estimated guests'), (N'PT', N'DISP_LBL_CAPACIDAD', N'Convidados estimados'),
+        (N'ES', N'BTN_CONSULTAR', N'Consultar'), (N'EN', N'BTN_CONSULTAR', N'Check'), (N'PT', N'BTN_CONSULTAR', N'Consultar'),
+        (N'ES', N'COL_CAPACIDAD', N'Capacidad'), (N'EN', N'COL_CAPACIDAD', N'Capacity'), (N'PT', N'COL_CAPACIDAD', N'Capacidade'),
+        (N'ES', N'DISP_COL_PROPUESTA', N'Proxima fecha libre'), (N'EN', N'DISP_COL_PROPUESTA', N'Next free date'), (N'PT', N'DISP_COL_PROPUESTA', N'Proxima data livre'),
+        (N'ES', N'DISP_EST_DISPONIBLE', N'Disponible'), (N'EN', N'DISP_EST_DISPONIBLE', N'Available'), (N'PT', N'DISP_EST_DISPONIBLE', N'Disponivel'),
+        (N'ES', N'DISP_EST_OCUPADO', N'Ocupado'), (N'EN', N'DISP_EST_OCUPADO', N'Booked'), (N'PT', N'DISP_EST_OCUPADO', N'Ocupado'),
+        (N'ES', N'DISP_EST_CAPACIDAD', N'Capacidad insuficiente'), (N'EN', N'DISP_EST_CAPACIDAD', N'Insufficient capacity'), (N'PT', N'DISP_EST_CAPACIDAD', N'Capacidade insuficiente'),
+        (N'ES', N'DISP_USAR', N'Usar en la reserva'), (N'EN', N'DISP_USAR', N'Use in reservation'), (N'PT', N'DISP_USAR', N'Usar na reserva'),
+        (N'ES', N'DISP_RESUMEN_OK', N'{0} salon(es) disponible(s) para la fecha consultada.'), (N'EN', N'DISP_RESUMEN_OK', N'{0} venue(s) available for the requested date.'), (N'PT', N'DISP_RESUMEN_OK', N'{0} salao(oes) disponivel(is) para a data consultada.'),
+        (N'ES', N'DISP_RESUMEN_ALTERNATIVAS', N'Ningun salon disponible para esa fecha: se proponen fechas alternativas.'), (N'EN', N'DISP_RESUMEN_ALTERNATIVAS', N'No venue available for that date: alternative dates are suggested.'), (N'PT', N'DISP_RESUMEN_ALTERNATIVAS', N'Nenhum salao disponivel para essa data: datas alternativas sao propostas.'),
+        (N'ES', N'DISP_SELECCIONE', N'Seleccione un salon de la grilla.'), (N'EN', N'DISP_SELECCIONE', N'Select a venue from the grid.'), (N'PT', N'DISP_SELECCIONE', N'Selecione um salao da grade.'),
+        (N'ES', N'DISP_SIN_PROPUESTA', N'El salon no tiene fechas libres en el horizonte consultado.'), (N'EN', N'DISP_SIN_PROPUESTA', N'The venue has no free dates within the searched range.'), (N'PT', N'DISP_SIN_PROPUESTA', N'O salao nao tem datas livres no periodo consultado.'),
+        -- Presupuesto para cotizaciones (Proceso 1, paso 6)
+        (N'ES', N'CMP_TITULO_PRESUPUESTO', N'Presupuesto'), (N'EN', N'CMP_TITULO_PRESUPUESTO', N'Quote'), (N'PT', N'CMP_TITULO_PRESUPUESTO', N'Orcamento'),
+        (N'ES', N'CMP_DOC_NRO_PRESUPUESTO', N'Presupuesto N'), (N'EN', N'CMP_DOC_NRO_PRESUPUESTO', N'Quote No'), (N'PT', N'CMP_DOC_NRO_PRESUPUESTO', N'Orcamento N'),
+        (N'ES', N'CMP_PRESUPUESTO_NOTA', N'Presupuesto sin compromiso de reserva. Sujeto a disponibilidad del salon al momento de confirmar.'), (N'EN', N'CMP_PRESUPUESTO_NOTA', N'Quote with no booking commitment. Subject to venue availability at confirmation time.'), (N'PT', N'CMP_PRESUPUESTO_NOTA', N'Orcamento sem compromisso de reserva. Sujeito a disponibilidade do salao no momento da confirmacao.')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, t.Texto
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+);
+GO

@@ -63,6 +63,34 @@ namespace EvenTech.DAL
             }
         }
 
+        // Fechas comprometidas por salon en un rango: dias con una reserva
+        // CONFIRMADA. Una sola query para toda la consulta de disponibilidad
+        // (evita ir a la base salon por salon y dia por dia).
+        public static Dictionary<int, HashSet<DateTime>> FechasConfirmadasPorSalon(DateTime desde, DateTime hasta)
+        {
+            var map = new Dictionary<int, HashSet<DateTime>>();
+            using (var cn = new DAL_DB_Connection())
+            using (var cmd = new SqlCommand(
+                "SELECT SalonId, CAST(FechaEvento AS DATE) FROM dbo.Reservas " +
+                "WHERE Estado = 'CONFIRMADA' AND CAST(FechaEvento AS DATE) BETWEEN @d AND @h",
+                cn.OpenConnection()))
+            {
+                cmd.Parameters.Add("@d", SqlDbType.Date).Value = desde.Date;
+                cmd.Parameters.Add("@h", SqlDbType.Date).Value = hasta.Date;
+                using (var r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        int salonId = r.GetInt32(0);
+                        if (!map.TryGetValue(salonId, out var fechas))
+                            map[salonId] = fechas = new HashSet<DateTime>();
+                        fechas.Add(r.GetDateTime(1).Date);
+                    }
+                }
+            }
+            return map;
+        }
+
         public static int Insert(BE_Reserva reserva)
         {
             using (var cn = new DAL_DB_Connection())
