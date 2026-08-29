@@ -29,6 +29,16 @@ namespace EvenTech.BE
         public DateTime CreatedAt_704ILR { get; set; }
         public string Dvh_704ILR { get; set; }            // digito verificador horizontal
 
+        // Vencimiento de la operacion (RN-01). Solo aplica a COTIZACION y PENDIENTE;
+        // en CONFIRMADA y CANCELADA queda en null. Es un dato administrativo y por eso
+        // NO forma parte de ObtenerCamposParaDV: agregarlo invalidaria los digitos
+        // verificadores ya calculados sobre las reservas existentes.
+        public DateTime? VenceEl_704ILR { get; set; }
+
+        // True si la operacion tiene plazo y ya expiro.
+        public bool EstaVencida_704ILR =>
+            VenceEl_704ILR.HasValue && VenceEl_704ILR.Value < DateTime.Now;
+
         // --- Patron Memento (rol Originator) ---
 
         // Crea la foto del estado actual. Los servicios se reciben de afuera

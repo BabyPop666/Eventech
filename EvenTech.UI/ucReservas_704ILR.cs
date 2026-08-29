@@ -164,6 +164,8 @@ namespace EvenTech.UI
             _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cFecha",   HeaderText = "Fecha",   DataPropertyName = "FechaEvento_704ILR",   FillWeight = 60, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd" } });
             _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cEstado",  HeaderText = "Estado",  DataPropertyName = "Estado_704ILR",        FillWeight = 55 });
             _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cMonto",   HeaderText = "Monto",   DataPropertyName = "Monto_704ILR",         FillWeight = 55, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+            // RN-01: vigencia de la cotizacion / reserva pendiente.
+            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cVence",   HeaderText = "Vence",   DataPropertyName = "VenceEl_704ILR",       FillWeight = 60, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd" } });
             _grid_704ILR.SelectionChanged += Grid_SelectionChanged_704ILR;
             _grid_704ILR.CellFormatting += Grid_CellFormatting_704ILR;
 
@@ -364,6 +366,7 @@ namespace EvenTech.UI
                 _grid_704ILR.Columns["cCliente"].HeaderText = Tr_704ILR.T_704ILR("COL_CLIENTE");
                 _grid_704ILR.Columns["cSalon"].HeaderText   = Tr_704ILR.T_704ILR("COL_SALON");
                 _grid_704ILR.Columns["cFecha"].HeaderText   = Tr_704ILR.T_704ILR("COL_FECHA");
+                _grid_704ILR.Columns["cVence"].HeaderText   = T_704ILR("COL_VENCE", "Vence");
                 _grid_704ILR.Columns["cEstado"].HeaderText  = Tr_704ILR.T_704ILR("COL_ESTADO");
                 _grid_704ILR.Columns["cMonto"].HeaderText   = Tr_704ILR.T_704ILR("COL_MONTO");
             }
@@ -685,9 +688,56 @@ namespace EvenTech.UI
             };
 
             int idReserva_704ILR = _editId_704ILR;
+
+            // RN-02: pasar a CANCELADA no es una edicion mas. Se calcula la politica
+            // de cancelacion, se le muestra al vendedor y se confirma antes de aplicarla.
+            if (_editId_704ILR != 0 && reserva_704ILR.Estado_704ILR == EstadoReserva_704ILR.CANCELADA)
+            {
+                BE_Reserva_704ILR actual_704ILR = BLL_Reserva_704ILR.GetById_704ILR(_editId_704ILR);
+                if (actual_704ILR != null && actual_704ILR.Estado_704ILR != EstadoReserva_704ILR.CANCELADA)
+                {
+                    BLL_Reserva_704ILR.CalcularCancelacion_704ILR(actual_704ILR,
+                        out decimal ret_704ILR, out decimal reem_704ILR);
+                    string aviso_704ILR = string.Format(
+                        T_704ILR("MSG_RES_CANCELAR", "Cancelar la reserva #{0}?"), _editId_704ILR);
+                    if (ret_704ILR > 0 || reem_704ILR > 0)
+                        aviso_704ILR += Environment.NewLine + Environment.NewLine + string.Format(
+                            T_704ILR("MSG_RES_CANCELADA", "Reserva cancelada. Retenido {0:N2}, reintegro {1:N2}."),
+                            ret_704ILR, reem_704ILR);
+                    if (MessageBox.Show(aviso_704ILR, "EvenTech",
+                            MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                        return;
+
+                    var rc_704ILR = BLL_Reserva_704ILR.Cancelar_704ILR(_editId_704ILR,
+                        out ret_704ILR, out reem_704ILR);
+                    if (rc_704ILR != ReservaResult_704ILR.Success)
+                    {
+                        ShowError_704ILR(MensajeError_704ILR(rc_704ILR));
+                        return;
+                    }
+                    LimpiarForm_704ILR();
+                    SafeLoadData_704ILR();
+                    return;
+                }
+            }
+
             ReservaResult_704ILR result_704ILR = _editId_704ILR == 0
                 ? BLL_Reserva_704ILR.Crear_704ILR(reserva_704ILR, out idReserva_704ILR)
                 : BLL_Reserva_704ILR.Actualizar_704ILR(reserva_704ILR);
+
+            // RN-01: si la operacion vencio, se ofrece renovar la vigencia en el acto
+            // en vez de dejar al vendedor con una cotizacion trabada.
+            if (result_704ILR == ReservaResult_704ILR.Vencida)
+            {
+                string preg_704ILR = MensajeError_704ILR(result_704ILR) + Environment.NewLine +
+                                     Environment.NewLine + T_704ILR("BTN_RENOVAR", "Renovar") + "?";
+                if (MessageBox.Show(preg_704ILR, "EvenTech",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes &&
+                    BLL_Reserva_704ILR.Renovar_704ILR(_editId_704ILR) == ReservaResult_704ILR.Success)
+                {
+                    result_704ILR = BLL_Reserva_704ILR.Actualizar_704ILR(reserva_704ILR);
+                }
+            }
 
             if (result_704ILR == ReservaResult_704ILR.Success)
             {
@@ -712,6 +762,7 @@ namespace EvenTech.UI
                 case ReservaResult_704ILR.InvalidMonto:   return Tr_704ILR.T_704ILR("MSG_RES_MONTO");
                 case ReservaResult_704ILR.SalonOcupado:   return Tr_704ILR.T_704ILR("MSG_RES_SALON_OCUPADO");
                 case ReservaResult_704ILR.NoModificable:  return T_704ILR("MSG_RES_NO_MODIFICABLE", "La reserva esta cancelada: no admite modificaciones.");
+                case ReservaResult_704ILR.Vencida:        return T_704ILR("MSG_RES_VENCIDA", "La operacion vencio: renovala antes de confirmarla.");
                 case ReservaResult_704ILR.NotFound:       return Tr_704ILR.T_704ILR("MSG_RES_NOTFOUND");
                 default:                           return Tr_704ILR.T_704ILR("MSG_RES_ERROR");
             }

@@ -138,6 +138,13 @@ GO
 -- y luego elimina la columna ClienteNombre (queda normalizado en Clientes / 3FN).
 -- Se usa EXEC (dynamic SQL) para que la referencia a ClienteNombre no se compile
 -- cuando la columna ya no existe (si no, el re-run del script fallaria).
+-- Vencimiento de la operacion (RN-01): una COTIZACION o una reserva PENDIENTE
+-- tienen un plazo de validez. Al confirmarse o cancelarse deja de aplicar y queda
+-- en NULL. Es un dato administrativo: NO entra en el digito verificador.
+IF COL_LENGTH('dbo.Reservas','VenceEl') IS NULL
+    ALTER TABLE dbo.Reservas ADD VenceEl DATETIME NULL;
+GO
+
 IF COL_LENGTH('dbo.Reservas','ClienteNombre') IS NOT NULL
 BEGIN
     EXEC('INSERT INTO dbo.Clientes (Nombre)
@@ -927,6 +934,12 @@ GO
         (N'ES', N'MSG_SIN_PERMISO', N'No tenes permiso para realizar esta accion.'), (N'EN', N'MSG_SIN_PERMISO', N'You do not have permission to perform this action.'), (N'PT', N'MSG_SIN_PERMISO', N'Voce nao tem permissao para realizar esta acao.'),
         (N'ES', N'MAIN_PERMISOS_ERROR', N'No se pudieron cargar los permisos de tu perfil, asi que la sesion quedo sin acceso a las secciones. Volve a iniciar sesion; si el problema sigue, avisale a un administrador.'), (N'EN', N'MAIN_PERMISOS_ERROR', N'Your profile permissions could not be loaded, so this session has no access to the sections. Sign in again; if the problem persists, contact an administrator.'), (N'PT', N'MAIN_PERMISOS_ERROR', N'Nao foi possivel carregar as permissoes do seu perfil, entao a sessao ficou sem acesso as secoes. Entre novamente; se o problema continuar, avise um administrador.'),
         -- Reserva cancelada (estado terminal)
+        (N'ES', N'MSG_RES_VENCIDA', N'La operacion vencio: renovala antes de confirmarla.'), (N'EN', N'MSG_RES_VENCIDA', N'The quote expired: renew it before confirming.'), (N'PT', N'MSG_RES_VENCIDA', N'A operacao venceu: renove antes de confirmar.'),
+        (N'ES', N'COL_VENCE', N'Vence'), (N'EN', N'COL_VENCE', N'Expires'), (N'PT', N'COL_VENCE', N'Vence'),
+        (N'ES', N'BTN_RENOVAR', N'Renovar'), (N'EN', N'BTN_RENOVAR', N'Renew'), (N'PT', N'BTN_RENOVAR', N'Renovar'),
+        (N'ES', N'MSG_RES_RENOVADA', N'Vigencia renovada.'), (N'EN', N'MSG_RES_RENOVADA', N'Validity renewed.'), (N'PT', N'MSG_RES_RENOVADA', N'Vigencia renovada.'),
+        (N'ES', N'MSG_RES_CANCELAR', N'Cancelar la reserva #{0}?'), (N'EN', N'MSG_RES_CANCELAR', N'Cancel reservation #{0}?'), (N'PT', N'MSG_RES_CANCELAR', N'Cancelar a reserva #{0}?'),
+        (N'ES', N'MSG_RES_CANCELADA', N'Reserva cancelada. Retenido {0:N2}, reintegro {1:N2}.'), (N'EN', N'MSG_RES_CANCELADA', N'Reservation cancelled. Retained {0:N2}, refund {1:N2}.'), (N'PT', N'MSG_RES_CANCELADA', N'Reserva cancelada. Retido {0:N2}, reembolso {1:N2}.'),
         (N'ES', N'MSG_RES_NO_MODIFICABLE', N'La reserva esta cancelada: no admite modificaciones.'), (N'EN', N'MSG_RES_NO_MODIFICABLE', N'The reservation is cancelled: it cannot be modified.'), (N'PT', N'MSG_RES_NO_MODIFICABLE', N'A reserva esta cancelada: nao admite modificacoes.'),
         -- Anulacion de pagos
         (N'ES', N'MSG_PAGO_ANULAR_CONF', N'Anular el pago de {0}? La operacion no se puede deshacer.'), (N'EN', N'MSG_PAGO_ANULAR_CONF', N'Void the payment of {0}? This action cannot be undone.'), (N'PT', N'MSG_PAGO_ANULAR_CONF', N'Anular o pagamento de {0}? A operacao nao pode ser desfeita.'),
