@@ -540,4 +540,92 @@ Console.WriteLine("[26] Flujo RF1 completo (servicios, confirmacion, pagos):");
     }
 }
 
+// [28] RN-01 Vigencia de la operacion: una COTIZACION nace con fecha de
+// vencimiento, una CONFIRMADA no; una operacion vencida no se puede confirmar
+// hasta renovarla.
+Console.WriteLine("[28] RN-01 vigencia de la operacion:");
+{
+    int cliRn_704ILR = BLL_Cliente_704ILR.GetAll_704ILR().First().Id_704ILR;
+    int salRn_704ILR = BLL_Salon_704ILR.GetAll_704ILR().First().Id_704ILR;
+    DateTime fechaRn_704ILR = DateTime.Today.AddDays(400);
+
+    var cot_704ILR = new EvenTech.BE.BE_Reserva_704ILR
+    {
+        ClienteId_704ILR = cliRn_704ILR,
+        SalonId_704ILR = salRn_704ILR,
+        FechaEvento_704ILR = fechaRn_704ILR,
+        Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.COTIZACION,
+        Monto_704ILR = 1000m
+    };
+    var rCot_704ILR = BLL_Reserva_704ILR.Crear_704ILR(cot_704ILR, out int idCot_704ILR);
+    var leida_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCot_704ILR);
+    Console.WriteLine($"  alta cotizacion: {rCot_704ILR} (esperado Success)");
+    Console.WriteLine($"  vence: {(leida_704ILR.VenceEl_704ILR.HasValue ? leida_704ILR.VenceEl_704ILR.Value.ToString("yyyy-MM-dd") : "null")} (esperada una fecha)");
+    Console.WriteLine($"  vencida hoy: {leida_704ILR.EstaVencida_704ILR} (esperado False)");
+
+    int diasEsperados_704ILR = BLL_Reserva_704ILR.DiasValidezCotizacion_704ILR;
+    int diasReales_704ILR = leida_704ILR.VenceEl_704ILR.HasValue
+        ? (int)Math.Round((leida_704ILR.VenceEl_704ILR.Value - DateTime.Now).TotalDays) : -1;
+    Console.WriteLine($"  plazo: {diasReales_704ILR} dias (esperado {diasEsperados_704ILR})");
+
+    // Al confirmar, la operacion deja de tener plazo.
+    leida_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
+    var rConf_704ILR = BLL_Reserva_704ILR.Actualizar_704ILR(leida_704ILR);
+    var confirmada_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCot_704ILR);
+    Console.WriteLine($"  confirmar: {rConf_704ILR} (esperado Success)");
+    Console.WriteLine($"  vence tras confirmar: {(confirmada_704ILR.VenceEl_704ILR.HasValue ? "con fecha" : "null")} (esperado null)");
+
+    // Se fuerza el vencimiento hacia atras para probar el rechazo y la renovacion.
+    confirmada_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.COTIZACION;
+    BLL_Reserva_704ILR.Actualizar_704ILR(confirmada_704ILR);
+    var paraVencer_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCot_704ILR);
+    paraVencer_704ILR.VenceEl_704ILR = DateTime.Now.AddDays(-1);
+    EvenTech.DAL.DAL_Reserva_704ILR.Update_704ILR(paraVencer_704ILR);
+
+    var vencida_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCot_704ILR);
+    Console.WriteLine($"  vencida forzada: {vencida_704ILR.EstaVencida_704ILR} (esperado True)");
+    vencida_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
+    var rVenc_704ILR = BLL_Reserva_704ILR.Actualizar_704ILR(vencida_704ILR);
+    Console.WriteLine($"  confirmar vencida: {rVenc_704ILR} (esperado Vencida)");
+
+    var rRen_704ILR = BLL_Reserva_704ILR.Renovar_704ILR(idCot_704ILR);
+    Console.WriteLine($"  renovar: {rRen_704ILR} (esperado Success)");
+    var renovada_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCot_704ILR);
+    Console.WriteLine($"  vencida tras renovar: {renovada_704ILR.EstaVencida_704ILR} (esperado False)");
+    renovada_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
+    Console.WriteLine($"  confirmar tras renovar: {BLL_Reserva_704ILR.Actualizar_704ILR(renovada_704ILR)} (esperado Success)");
+
+    // [29] RN-02 Politica de cancelacion: con antelacion se reintegra todo; sin
+    // antelacion se retiene el porcentaje definido. El calculo queda en bitacora.
+    Console.WriteLine("[29] RN-02 politica de cancelacion:");
+    var conAntelacion_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCot_704ILR);
+    var metodo_704ILR = BLL_Pago_704ILR.GetMetodos_704ILR().First();
+    BLL_Pago_704ILR.Registrar_704ILR(new EvenTech.BE.BE_Pago_704ILR
+    {
+        ReservaId_704ILR = idCot_704ILR,
+        MetodoPagoId_704ILR = metodo_704ILR.Id_704ILR,
+        Monto_704ILR = 400m
+    }, out _);
+
+    BLL_Reserva_704ILR.CalcularCancelacion_704ILR(conAntelacion_704ILR,
+        out decimal retLejos_704ILR, out decimal reemLejos_704ILR);
+    Console.WriteLine($"  evento lejano -> retenido {retLejos_704ILR:0.00} (esperado 0.00), reintegro {reemLejos_704ILR:0.00} (esperado 400.00)");
+
+    // Mismo calculo con el evento dentro de la ventana de penalidad.
+    var cerca_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCot_704ILR);
+    cerca_704ILR.FechaEvento_704ILR = DateTime.Today.AddDays(5);
+    BLL_Reserva_704ILR.CalcularCancelacion_704ILR(cerca_704ILR,
+        out decimal retCerca_704ILR, out decimal reemCerca_704ILR);
+    decimal esperadoRet_704ILR = 400m * BLL_Reserva_704ILR.PorcentajeRetencion_704ILR / 100m;
+    Console.WriteLine($"  evento cercano -> retenido {retCerca_704ILR:0.00} (esperado {esperadoRet_704ILR:0.00}), reintegro {reemCerca_704ILR:0.00}");
+
+    var rCan_704ILR = BLL_Reserva_704ILR.Cancelar_704ILR(idCot_704ILR,
+        out decimal retFinal_704ILR, out decimal reemFinal_704ILR);
+    var cancelada_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCot_704ILR);
+    Console.WriteLine($"  cancelar: {rCan_704ILR} (esperado Success), retenido {retFinal_704ILR:0.00}, reintegro {reemFinal_704ILR:0.00}");
+    Console.WriteLine($"  estado final: {cancelada_704ILR.Estado_704ILR} (esperado CANCELADA)");
+    Console.WriteLine($"  vence tras cancelar: {(cancelada_704ILR.VenceEl_704ILR.HasValue ? "con fecha" : "null")} (esperado null)");
+    Console.WriteLine($"  recancelar: {BLL_Reserva_704ILR.Cancelar_704ILR(idCot_704ILR, out _, out _)} (esperado NoModificable)");
+}
+
 Console.WriteLine("== fin ==");
