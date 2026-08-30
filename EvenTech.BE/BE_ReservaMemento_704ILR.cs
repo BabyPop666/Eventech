@@ -18,6 +18,7 @@ namespace EvenTech.BE
         public DateTime FechaEvento_704ILR { get; }
         public EstadoReserva_704ILR Estado_704ILR { get; }
         public decimal Monto_704ILR { get; }
+        public int CantidadInvitados_704ILR { get; }  // parte del estado de negocio: la RN-06 depende de el
         public string Usuario_704ILR { get; }         // quien provoco el cambio que genero esta version
         public DateTime Fecha_704ILR { get; }         // cuando se tomo la foto
         public string ClienteNombre_704ILR { get; }   // proyectado en lecturas (JOIN), solo para mostrar
@@ -26,7 +27,7 @@ namespace EvenTech.BE
 
         public BE_ReservaMemento_704ILR(int id_704ILR, int reservaId_704ILR, int clienteId_704ILR, int salonId_704ILR,
             DateTime fechaEvento_704ILR, EstadoReserva_704ILR estado_704ILR, decimal monto_704ILR,
-            string usuario_704ILR, DateTime fecha_704ILR,
+            int cantidadInvitados_704ILR, string usuario_704ILR, DateTime fecha_704ILR,
             string clienteNombre_704ILR = null, string salonNombre_704ILR = null,
             IReadOnlyList<BE_ReservaServicio_704ILR> servicios_704ILR = null)
         {
@@ -37,6 +38,7 @@ namespace EvenTech.BE
             FechaEvento_704ILR = fechaEvento_704ILR;
             Estado_704ILR = estado_704ILR;
             Monto_704ILR = monto_704ILR;
+            CantidadInvitados_704ILR = cantidadInvitados_704ILR;
             Usuario_704ILR = usuario_704ILR;
             Fecha_704ILR = fecha_704ILR;
             ClienteNombre_704ILR = clienteNombre_704ILR;

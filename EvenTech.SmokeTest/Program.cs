@@ -3,6 +3,13 @@ using EvenTech.Services;
 
 Console.WriteLine("== EvenTech smoke test v2 ==");
 
+// Desplazamiento propio de esta corrida. Las reservas de prueba se agendan a
+// varios anios vista y con este desfasaje, de modo que NUNCA colisionan con una
+// fecha del negocio ni con el rastro de una corrida anterior (RN-03). Se prefirio
+// esto antes que limpiar la base: una rutina que cancelara reservas CONFIRMADAS
+// por salon+fecha podria dar de baja datos reales sin aviso y sin vuelta atras.
+int desfasaje_704ILR = (int)DateTime.Now.TimeOfDay.TotalSeconds % 900;
+
 // [1] Login OK
 Console.WriteLine("[1] Login admin/admin123:");
 var r1_704ILR = BLL_Login_704ILR.Authenticate_704ILR("admin", Encrypt_704ILR.HashValue_704ILR("admin123"));
@@ -57,6 +64,7 @@ else
         SalonId_704ILR = salones_704ILR[0].Id_704ILR,
         FechaEvento_704ILR = DateTime.Today.AddDays(1000 + (int)DateTime.Now.TimeOfDay.TotalSeconds % 900),
         Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.PENDIENTE,
+        CantidadInvitados_704ILR = 60,   // RN-06: sin este dato no se puede confirmar
         Monto_704ILR = 150000m
     };
     var rr1_704ILR = BLL_Reserva_704ILR.Crear_704ILR(nueva_704ILR, out int nuevoId_704ILR);
@@ -70,6 +78,7 @@ else
         SalonId_704ILR = salones_704ILR[0].Id_704ILR,
         FechaEvento_704ILR = DateTime.Today.AddDays(-1),
         Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.PENDIENTE,
+        CantidadInvitados_704ILR = 60,   // RN-06: sin este dato no se puede confirmar
         Monto_704ILR = 1000m
     };
     var rr2_704ILR = BLL_Reserva_704ILR.Crear_704ILR(pasada_704ILR, out _);
@@ -166,6 +175,7 @@ else
         SalonId_704ILR = salonesM_704ILR[0].Id_704ILR,
         FechaEvento_704ILR = DateTime.Today.AddDays(45),
         Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.PENDIENTE,
+        CantidadInvitados_704ILR = 60,   // RN-06: sin este dato no se puede confirmar
         Monto_704ILR = 1000m
     };
     var rm_704ILR = BLL_Reserva_704ILR.Crear_704ILR(reservaM_704ILR, out int idM_704ILR);
@@ -318,16 +328,30 @@ Console.WriteLine("[23] Reserva cancelada no modificable:");
     }
     else
     {
+        // RN-05: no se puede nacer cancelado. Se da de alta pendiente y se cancela
+        // por la via correcta, que es la unica que liquida la RN-02.
+        var altaDirecta_704ILR = new EvenTech.BE.BE_Reserva_704ILR
+        {
+            ClienteId_704ILR = cli_704ILR[0].Id_704ILR,
+            SalonId_704ILR = sal_704ILR[0].Id_704ILR,
+            FechaEvento_704ILR = DateTime.Today.AddDays(2500 + desfasaje_704ILR),
+            Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CANCELADA,
+            Monto_704ILR = 1000m
+        };
+        Console.WriteLine($"  alta directa en CANCELADA: {BLL_Reserva_704ILR.Crear_704ILR(altaDirecta_704ILR, out _)} (esperado TransicionInvalida)");
+
         var res_704ILR = new EvenTech.BE.BE_Reserva_704ILR
         {
             ClienteId_704ILR = cli_704ILR[0].Id_704ILR,
             SalonId_704ILR = sal_704ILR[0].Id_704ILR,
-            FechaEvento_704ILR = DateTime.Today.AddDays(45),
-            Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CANCELADA,
+            FechaEvento_704ILR = DateTime.Today.AddDays(2500 + desfasaje_704ILR),
+            Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.PENDIENTE,
+            CantidadInvitados_704ILR = 60,   // RN-06: sin este dato no se puede confirmar
             Monto_704ILR = 1000m
         };
         var rAlta_704ILR = BLL_Reserva_704ILR.Crear_704ILR(res_704ILR, out int idCancel_704ILR);
-        Console.WriteLine($"  alta cancelada: result={rAlta_704ILR}, id={idCancel_704ILR}");
+        Console.WriteLine($"  alta pendiente: result={rAlta_704ILR} (esperado Success)");
+        Console.WriteLine($"  cancelar: {BLL_Reserva_704ILR.Cancelar_704ILR(idCancel_704ILR, out _, out _)} (esperado Success)");
 
         var guardada_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCancel_704ILR);
         Console.WriteLine($"  PuedeModificar: {BLL_Reserva_704ILR.PuedeModificar_704ILR(guardada_704ILR)} (esperado False)");
@@ -469,6 +493,7 @@ Console.WriteLine("[26] Flujo RF1 completo (servicios, confirmacion, pagos):");
             SalonId_704ILR = sal_704ILR[0].Id_704ILR,
             FechaEvento_704ILR = fechaEvento_704ILR,
             Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.COTIZACION,
+            CantidadInvitados_704ILR = 50,   // RN-06: sin este dato no se puede confirmar
             Monto_704ILR = total_704ILR
         };
         var rCot_704ILR = BLL_Reserva_704ILR.Crear_704ILR(cot_704ILR, out int idFlujo_704ILR);
@@ -489,6 +514,7 @@ Console.WriteLine("[26] Flujo RF1 completo (servicios, confirmacion, pagos):");
             SalonId_704ILR = sal_704ILR[0].Id_704ILR,
             FechaEvento_704ILR = fechaEvento_704ILR,
             Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA,
+            CantidadInvitados_704ILR = 70,   // RN-06: sin este dato no se puede confirmar
             Monto_704ILR = 1000m
         };
         var rChoque_704ILR = BLL_Reserva_704ILR.Crear_704ILR(choque_704ILR, out _);
@@ -532,10 +558,10 @@ Console.WriteLine("[26] Flujo RF1 completo (servicios, confirmacion, pagos):");
         Console.WriteLine($"  fecha lejana -> disponibles: {dispLibre_704ILR.Count(d_704ILR => d_704ILR.Disponible_704ILR)}/{dispLibre_704ILR.Count} (esperado todos)");
 
         // Limpieza: se cancela la reserva del flujo para liberar el salon
-        // (la corrida queda repetible aunque la fecha se repitiera).
-        var fin_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idFlujo_704ILR);
-        fin_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CANCELADA;
-        var rFin_704ILR = BLL_Reserva_704ILR.Actualizar_704ILR(fin_704ILR);
+        // (la corrida queda repetible aunque la fecha se repitiera). Se usa la via
+        // de cancelacion, que es la unica admitida para entrar a CANCELADA (RN-05)
+        // y la que liquida la politica de reintegro (RN-02).
+        var rFin_704ILR = BLL_Reserva_704ILR.Cancelar_704ILR(idFlujo_704ILR, out _, out _);
         Console.WriteLine($"  limpieza (cancelar reserva del flujo): result={rFin_704ILR} (esperado Success)");
     }
 }
@@ -547,7 +573,7 @@ Console.WriteLine("[28] RN-01 vigencia de la operacion:");
 {
     int cliRn_704ILR = BLL_Cliente_704ILR.GetAll_704ILR().First().Id_704ILR;
     int salRn_704ILR = BLL_Salon_704ILR.GetAll_704ILR().First().Id_704ILR;
-    DateTime fechaRn_704ILR = DateTime.Today.AddDays(400);
+    DateTime fechaRn_704ILR = DateTime.Today.AddDays(3000 + desfasaje_704ILR);
 
     var cot_704ILR = new EvenTech.BE.BE_Reserva_704ILR
     {
@@ -555,6 +581,7 @@ Console.WriteLine("[28] RN-01 vigencia de la operacion:");
         SalonId_704ILR = salRn_704ILR,
         FechaEvento_704ILR = fechaRn_704ILR,
         Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.COTIZACION,
+        CantidadInvitados_704ILR = 50,   // RN-06: sin este dato no se puede confirmar
         Monto_704ILR = 1000m
     };
     var rCot_704ILR = BLL_Reserva_704ILR.Crear_704ILR(cot_704ILR, out int idCot_704ILR);
@@ -575,25 +602,36 @@ Console.WriteLine("[28] RN-01 vigencia de la operacion:");
     Console.WriteLine($"  confirmar: {rConf_704ILR} (esperado Success)");
     Console.WriteLine($"  vence tras confirmar: {(confirmada_704ILR.VenceEl_704ILR.HasValue ? "con fecha" : "null")} (esperado null)");
 
-    // Se fuerza el vencimiento hacia atras para probar el rechazo y la renovacion.
-    confirmada_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.COTIZACION;
-    BLL_Reserva_704ILR.Actualizar_704ILR(confirmada_704ILR);
-    var paraVencer_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCot_704ILR);
+    // El vencimiento se prueba sobre una SEGUNDA cotizacion: una vez confirmada,
+    // la RN-05 ya no admite volver a COTIZACION (no se puede "desconfirmar").
+    var cot2_704ILR = new EvenTech.BE.BE_Reserva_704ILR
+    {
+        ClienteId_704ILR = cliRn_704ILR,
+        SalonId_704ILR = salRn_704ILR,
+        FechaEvento_704ILR = fechaRn_704ILR.AddDays(1),
+        Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.COTIZACION,
+        CantidadInvitados_704ILR = 50,   // RN-06: sin este dato no se puede confirmar
+        Monto_704ILR = 500m
+    };
+    BLL_Reserva_704ILR.Crear_704ILR(cot2_704ILR, out int idCot2_704ILR);
+
+    var paraVencer_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCot2_704ILR);
     paraVencer_704ILR.VenceEl_704ILR = DateTime.Now.AddDays(-1);
     EvenTech.DAL.DAL_Reserva_704ILR.Update_704ILR(paraVencer_704ILR);
 
-    var vencida_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCot_704ILR);
+    var vencida_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCot2_704ILR);
     Console.WriteLine($"  vencida forzada: {vencida_704ILR.EstaVencida_704ILR} (esperado True)");
     vencida_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
     var rVenc_704ILR = BLL_Reserva_704ILR.Actualizar_704ILR(vencida_704ILR);
     Console.WriteLine($"  confirmar vencida: {rVenc_704ILR} (esperado Vencida)");
 
-    var rRen_704ILR = BLL_Reserva_704ILR.Renovar_704ILR(idCot_704ILR);
+    var rRen_704ILR = BLL_Reserva_704ILR.Renovar_704ILR(idCot2_704ILR);
     Console.WriteLine($"  renovar: {rRen_704ILR} (esperado Success)");
-    var renovada_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCot_704ILR);
+    var renovada_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCot2_704ILR);
     Console.WriteLine($"  vencida tras renovar: {renovada_704ILR.EstaVencida_704ILR} (esperado False)");
     renovada_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
     Console.WriteLine($"  confirmar tras renovar: {BLL_Reserva_704ILR.Actualizar_704ILR(renovada_704ILR)} (esperado Success)");
+    BLL_Reserva_704ILR.Cancelar_704ILR(idCot2_704ILR, out _, out _);   // limpieza: libera el salon
 
     // [29] RN-02 Politica de cancelacion: con antelacion se reintegra todo; sin
     // antelacion se retiene el porcentaje definido. El calculo queda en bitacora.
@@ -626,6 +664,139 @@ Console.WriteLine("[28] RN-01 vigencia de la operacion:");
     Console.WriteLine($"  estado final: {cancelada_704ILR.Estado_704ILR} (esperado CANCELADA)");
     Console.WriteLine($"  vence tras cancelar: {(cancelada_704ILR.VenceEl_704ILR.HasValue ? "con fecha" : "null")} (esperado null)");
     Console.WriteLine($"  recancelar: {BLL_Reserva_704ILR.Cancelar_704ILR(idCot_704ILR, out _, out _)} (esperado NoModificable)");
+}
+
+// [30] RN-05 Transiciones de estado: el ciclo de vida no es libre. COTIZACION
+// avanza a cualquier estado, PENDIENTE solo confirma o cancela, CONFIRMADA solo
+// cancela y CANCELADA es terminal. Ademas, entrar a CANCELADA exige pasar por la
+// via de cancelacion (la unica que liquida la RN-02).
+Console.WriteLine("[30] RN-05 transiciones de estado admitidas:");
+{
+    void Chequear_704ILR(EvenTech.BE.EstadoReserva_704ILR d_704ILR, EvenTech.BE.EstadoReserva_704ILR h_704ILR, bool esperado_704ILR)
+    {
+        bool real_704ILR = BLL_Reserva_704ILR.TransicionValida_704ILR(d_704ILR, h_704ILR);
+        Console.WriteLine($"  {d_704ILR} -> {h_704ILR}: {real_704ILR} (esperado {esperado_704ILR}){(real_704ILR == esperado_704ILR ? "" : "   <-- DIFIERE")}");
+    }
+
+    var COT_704ILR = EvenTech.BE.EstadoReserva_704ILR.COTIZACION;
+    var PEN_704ILR = EvenTech.BE.EstadoReserva_704ILR.PENDIENTE;
+    var CON_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
+    var CAN_704ILR = EvenTech.BE.EstadoReserva_704ILR.CANCELADA;
+
+    Chequear_704ILR(COT_704ILR, PEN_704ILR, true);
+    Chequear_704ILR(COT_704ILR, CON_704ILR, true);
+    Chequear_704ILR(COT_704ILR, CAN_704ILR, true);
+    Chequear_704ILR(PEN_704ILR, CON_704ILR, true);
+    Chequear_704ILR(PEN_704ILR, CAN_704ILR, true);
+    Chequear_704ILR(PEN_704ILR, COT_704ILR, false);
+    Chequear_704ILR(CON_704ILR, CAN_704ILR, true);
+    Chequear_704ILR(CON_704ILR, COT_704ILR, false);
+    Chequear_704ILR(CON_704ILR, PEN_704ILR, false);
+    Chequear_704ILR(CAN_704ILR, COT_704ILR, false);
+    Chequear_704ILR(CAN_704ILR, CAN_704ILR, false);
+
+    // Verificacion end-to-end contra la base: una CONFIRMADA no vuelve atras.
+    var cliT_704ILR = BLL_Cliente_704ILR.GetAll_704ILR();
+    var salT_704ILR = BLL_Salon_704ILR.GetAll_704ILR();
+    if (cliT_704ILR.Count > 0 && salT_704ILR.Count > 0)
+    {
+        var rT_704ILR = new EvenTech.BE.BE_Reserva_704ILR
+        {
+            ClienteId_704ILR = cliT_704ILR[0].Id_704ILR,
+            SalonId_704ILR = salT_704ILR[0].Id_704ILR,
+            FechaEvento_704ILR = DateTime.Today.AddDays(4000 + desfasaje_704ILR),
+            Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.COTIZACION,
+            CantidadInvitados_704ILR = 10,
+            Monto_704ILR = 800m
+        };
+        BLL_Reserva_704ILR.Crear_704ILR(rT_704ILR, out int idT_704ILR);
+
+        var aConfirmar_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idT_704ILR);
+        aConfirmar_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
+        Console.WriteLine($"  confirmar cotizacion: {BLL_Reserva_704ILR.Actualizar_704ILR(aConfirmar_704ILR)} (esperado Success)");
+
+        var aRetroceder_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idT_704ILR);
+        aRetroceder_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.PENDIENTE;
+        Console.WriteLine($"  CONFIRMADA -> PENDIENTE via Actualizar: {BLL_Reserva_704ILR.Actualizar_704ILR(aRetroceder_704ILR)} (esperado TransicionInvalida)");
+
+        var aCancelarMal_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idT_704ILR);
+        aCancelarMal_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CANCELADA;
+        Console.WriteLine($"  cancelar via Actualizar (saltea RN-02): {BLL_Reserva_704ILR.Actualizar_704ILR(aCancelarMal_704ILR)} (esperado TransicionInvalida)");
+        Console.WriteLine($"  cancelar por la via correcta: {BLL_Reserva_704ILR.Cancelar_704ILR(idT_704ILR, out _, out _)} (esperado Success)");
+
+        var estadoFinal_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idT_704ILR);
+        Console.WriteLine($"  estado final: {estadoFinal_704ILR.Estado_704ILR} (esperado CANCELADA)");
+
+        // Restaurar una version tampoco reabre una reserva cancelada (RN-05).
+        var versionesT_704ILR = CaretakerReserva_704ILR.GetVersiones_704ILR(idT_704ILR);
+        if (versionesT_704ILR.Count > 0)
+            Console.WriteLine($"  restaurar version sobre cancelada: {BLL_Reserva_704ILR.RestaurarVersion_704ILR(idT_704ILR, versionesT_704ILR[0].Id_704ILR)} (esperado NoModificable)");
+    }
+}
+
+// [31] RN-06 Capacidad del salon: al confirmar, el salon tiene que poder alojar
+// a los invitados estimados. En COTIZACION no se exige (la propuesta se esta armando).
+Console.WriteLine("[31] RN-06 capacidad del salon al confirmar:");
+{
+    var cliC_704ILR = BLL_Cliente_704ILR.GetAll_704ILR();
+    var salC_704ILR = BLL_Salon_704ILR.GetAll_704ILR();
+    if (cliC_704ILR.Count == 0 || salC_704ILR.Count == 0)
+    {
+        Console.WriteLine("  (faltan clientes/salones seed; corre db/schema.sql)");
+    }
+    else
+    {
+        // El salon mas chico, para que el exceso sea inequivoco.
+        var chico_704ILR = salC_704ILR.OrderBy(s_704ILR => s_704ILR.Capacidad_704ILR).First();
+        int exceso_704ILR = chico_704ILR.Capacidad_704ILR + 10;
+        Console.WriteLine($"  salon '{chico_704ILR.Nombre_704ILR}' capacidad {chico_704ILR.Capacidad_704ILR}; se piden {exceso_704ILR} invitados");
+
+        var rC_704ILR = new EvenTech.BE.BE_Reserva_704ILR
+        {
+            ClienteId_704ILR = cliC_704ILR[0].Id_704ILR,
+            SalonId_704ILR = chico_704ILR.Id_704ILR,
+            FechaEvento_704ILR = DateTime.Today.AddDays(5000 + desfasaje_704ILR),
+            Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.COTIZACION,
+            CantidadInvitados_704ILR = exceso_704ILR,
+            Monto_704ILR = 1500m
+        };
+        var rAltaC_704ILR = BLL_Reserva_704ILR.Crear_704ILR(rC_704ILR, out int idC_704ILR);
+        Console.WriteLine($"  cotizar con exceso de invitados: {rAltaC_704ILR} (esperado Success: en COTIZACION no se exige)");
+
+        var persistidaC_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idC_704ILR);
+        Console.WriteLine($"  invitados persistidos: {persistidaC_704ILR.CantidadInvitados_704ILR} (esperado {exceso_704ILR})");
+
+        persistidaC_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
+        Console.WriteLine($"  confirmar con exceso: {BLL_Reserva_704ILR.Actualizar_704ILR(persistidaC_704ILR)} (esperado CapacidadInsuficiente)");
+
+        // Confirmar sin saber cuanta gente viene tampoco se admite.
+        var sinDato_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idC_704ILR);
+        sinDato_704ILR.CantidadInvitados_704ILR = 0;
+        sinDato_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
+        Console.WriteLine($"  confirmar sin invitados: {BLL_Reserva_704ILR.Actualizar_704ILR(sinDato_704ILR)} (esperado InvalidInvitados)");
+
+        var ajustada_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idC_704ILR);
+        ajustada_704ILR.CantidadInvitados_704ILR = chico_704ILR.Capacidad_704ILR;
+        ajustada_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
+        Console.WriteLine($"  confirmar ajustando a la capacidad: {BLL_Reserva_704ILR.Actualizar_704ILR(ajustada_704ILR)} (esperado Success)");
+
+        // El control de cambios registra la correccion de invitados campo por campo.
+        var histC_704ILR = RegistradorDeCambios_704ILR.GetHistorial_704ILR("Reserva", idC_704ILR);
+        int cambiosInv_704ILR = histC_704ILR.Count(h_704ILR => h_704ILR.NombreCampo_704ILR == "CantidadInvitados");
+        Console.WriteLine($"  cambios de CantidadInvitados en el historial: {cambiosInv_704ILR} (esperado 1)");
+
+        // El memento conserva la cantidad de invitados de cada version.
+        var versionesC_704ILR = CaretakerReserva_704ILR.GetVersiones_704ILR(idC_704ILR);
+        if (versionesC_704ILR.Count > 0)
+        {
+            var vC_704ILR = CaretakerReserva_704ILR.GetVersion_704ILR(versionesC_704ILR[versionesC_704ILR.Count - 1].Id_704ILR);
+            Console.WriteLine($"  invitados en la version mas antigua: {vC_704ILR.CantidadInvitados_704ILR} (esperado {exceso_704ILR})");
+        }
+
+        // Limpieza: la reserva confirmada del caso se cancela para no bloquear el
+        // salon en la proxima corrida.
+        BLL_Reserva_704ILR.Cancelar_704ILR(idC_704ILR, out _, out _);
+    }
 }
 
 Console.WriteLine("== fin ==");

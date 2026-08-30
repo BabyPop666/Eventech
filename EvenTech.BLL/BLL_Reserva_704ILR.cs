@@ -13,9 +13,12 @@ namespace EvenTech.BLL
         InvalidSalon,
         InvalidFecha,
         InvalidMonto,
-        SalonOcupado,   // ya hay otra reserva activa para ese salon y fecha
-        NoModificable,  // la reserva esta cancelada: es un estado terminal
-        Vencida,        // se quiso confirmar una cotizacion/pendiente cuyo plazo expiro (RN-01)
+        SalonOcupado,        // ya hay otra reserva activa para ese salon y fecha
+        NoModificable,       // la reserva esta cancelada: es un estado terminal
+        Vencida,             // se quiso confirmar una cotizacion/pendiente cuyo plazo expiro (RN-01)
+        TransicionInvalida,  // el cambio de estado no figura en la tabla de transiciones (RN-05)
+        InvalidInvitados,    // cantidad de invitados negativa
+        CapacidadInsuficiente, // el salon no aloja a los invitados de la reserva (RN-06)
         NotFound
     }
 
@@ -44,6 +47,52 @@ namespace EvenTech.BLL
         // movimiento fisico del dinero es una gestion administrativa externa.
         public const int DiasCancelacionSinPenalidad_704ILR = 30;
         public const int PorcentajeRetencion_704ILR = 50;
+
+        // ---------------------------------------------------------------
+        // RN-05 — Transiciones de estado admitidas.
+        // El ciclo de vida de la operacion no es libre: COTIZACION puede avanzar a
+        // cualquier estado; PENDIENTE solo confirma o cancela; CONFIRMADA solo
+        // cancela (no se "desconfirma": el salon ya quedo comprometido y hay
+        // cobros asociados); CANCELADA es terminal. Mantener el mismo estado
+        // siempre es valido (guardar una reserva sin tocar su estado).
+        // La tabla vive aca, en una unica funcion, para que el documento y el
+        // codigo compartan una sola fuente de verdad.
+        public static bool TransicionValida_704ILR(EstadoReserva_704ILR desde_704ILR, EstadoReserva_704ILR hacia_704ILR)
+        {
+            if (desde_704ILR == hacia_704ILR)
+                return desde_704ILR != EstadoReserva_704ILR.CANCELADA;
+
+            switch (desde_704ILR)
+            {
+                case EstadoReserva_704ILR.COTIZACION:
+                    return hacia_704ILR == EstadoReserva_704ILR.PENDIENTE
+                        || hacia_704ILR == EstadoReserva_704ILR.CONFIRMADA
+                        || hacia_704ILR == EstadoReserva_704ILR.CANCELADA;
+
+                case EstadoReserva_704ILR.PENDIENTE:
+                    return hacia_704ILR == EstadoReserva_704ILR.CONFIRMADA
+                        || hacia_704ILR == EstadoReserva_704ILR.CANCELADA;
+
+                case EstadoReserva_704ILR.CONFIRMADA:
+                    return hacia_704ILR == EstadoReserva_704ILR.CANCELADA;
+
+                default:                       // CANCELADA: estado terminal
+                    return false;
+            }
+        }
+
+        // RN-06 — Capacidad del salon.
+        // Al comprometer el salon (CONFIRMADA) tiene que poder alojar a los invitados
+        // estimados de la reserva. En COTIZACION y PENDIENTE no se exige: el vendedor
+        // todavia esta armando la propuesta y puede cambiar de salon o de cantidad.
+        // La funcion responde para cualquier estado; quien decide CUANDO exigirla (y
+        // que el dato no falte al confirmar) es Validar_704ILR.
+        public static bool CapacidadSuficiente_704ILR(int salonId_704ILR, int cantidadInvitados_704ILR)
+        {
+            if (cantidadInvitados_704ILR <= 0) return true;   // sin dato no hay nada que comparar
+            int capacidad_704ILR = DAL_Salon_704ILR.Capacidad_704ILR(salonId_704ILR);
+            return capacidad_704ILR <= 0 || cantidadInvitados_704ILR <= capacidad_704ILR;
+        }
 
         // Vencimiento que le corresponde a un estado, contado desde 'desde'.
         public static DateTime? CalcularVencimiento_704ILR(EstadoReserva_704ILR estado_704ILR, DateTime desde_704ILR)
@@ -124,13 +173,29 @@ namespace EvenTech.BLL
             return ReservaResult_704ILR.Success;
         }
 
-        // Campos auditados por el control de cambios (T06b).
+        // Campos auditados por el control de cambios (T06b). Se persisten con el
+        // nombre logico; RegistradorDeCambios resuelve por reflexion la propiedad
+        // sufijada correspondiente.
         private static readonly string[] CamposAuditados_704ILR =
-            { "ClienteId", "SalonId", "FechaEvento", "Estado", "Monto" };
+            { "ClienteId", "SalonId", "FechaEvento", "Estado", "Monto", "CantidadInvitados" };
 
         public static ReservaResult_704ILR Crear_704ILR(BE_Reserva_704ILR reserva_704ILR, out int nuevoId_704ILR)
         {
             nuevoId_704ILR = 0;
+            if (reserva_704ILR == null) return ReservaResult_704ILR.InvalidCliente;
+
+            // RN-05: CANCELADA es un estado al que se LLEGA dando de baja una operacion
+            // existente, no uno con el que se nace. Admitirlo en el alta dejaria una
+            // reserva en estado terminal sin liquidacion de la RN-02, sin version previa
+            // y sin asiento de cancelacion, y ya no se podria editar ni dar de baja.
+            if (reserva_704ILR.Estado_704ILR == EstadoReserva_704ILR.CANCELADA)
+            {
+                BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Alta rechazada",
+                    CriticidadBitacora_704ILR.Advertencia,
+                    "No se admite dar de alta una reserva directamente en estado CANCELADA (RN-05).");
+                return ReservaResult_704ILR.TransicionInvalida;
+            }
+
             var validacion_704ILR = Validar_704ILR(reserva_704ILR);
             if (validacion_704ILR != ReservaResult_704ILR.Success) return validacion_704ILR;
 
@@ -167,6 +232,30 @@ namespace EvenTech.BLL
                 BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Modificacion rechazada", CriticidadBitacora_704ILR.Advertencia,
                     $"Reserva #{reserva_704ILR.Id_704ILR} cancelada: no admite modificaciones.");
                 return ReservaResult_704ILR.NoModificable;
+            }
+
+            // RN-05: el cambio de estado tiene que figurar en la tabla de transiciones.
+            // Se evalua sobre el estado PERSISTIDO contra el pedido, antes que nada:
+            // una CONFIRMADA no puede volver a COTIZACION ni a PENDIENTE.
+            if (!TransicionValida_704ILR(antes_704ILR.Estado_704ILR, reserva_704ILR.Estado_704ILR))
+            {
+                BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Transicion rechazada",
+                    CriticidadBitacora_704ILR.Advertencia,
+                    $"Reserva #{reserva_704ILR.Id_704ILR}: no se admite pasar de " +
+                    $"{antes_704ILR.Estado_704ILR} a {reserva_704ILR.Estado_704ILR} (RN-05).");
+                return ReservaResult_704ILR.TransicionInvalida;
+            }
+
+            // Dar de baja no es una edicion mas: entrar a CANCELADA tiene que pasar
+            // por Cancelar, que es quien liquida la RN-02 y deja asentado el
+            // reintegro. Si se admitiera por aca se podria cancelar sin liquidacion.
+            if (reserva_704ILR.Estado_704ILR == EstadoReserva_704ILR.CANCELADA)
+            {
+                BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Cancelacion rechazada por via incorrecta",
+                    CriticidadBitacora_704ILR.Advertencia,
+                    $"Reserva #{reserva_704ILR.Id_704ILR}: la baja se registra por la via de " +
+                    "cancelacion, que aplica la politica de reintegro (RN-02).");
+                return ReservaResult_704ILR.TransicionInvalida;
             }
 
             // RN-01: no se puede confirmar una cotizacion o pendiente cuyo plazo expiro.
@@ -210,13 +299,45 @@ namespace EvenTech.BLL
         // Restaura la reserva al estado de una version previa (patron Memento).
         // El estado vigente se versiona antes de pisarlo, de modo que la propia
         // restauracion tambien se puede deshacer.
+        //
+        // Relacion con la RN-05: restaurar es una correccion ADMINISTRATIVA, no un
+        // avance del ciclo comercial, y por eso no se le exige la tabla de
+        // transiciones (deshacer una confirmacion erronea es su caso de uso tipico
+        // y queda enteramente auditado: versiona, registra campo por campo y asienta
+        // en bitacora). Los dos limites terminales de la RN-05 si se respetan: no se
+        // restaura una reserva CANCELADA ni se restaura HACIA una version cancelada.
         public static ReservaResult_704ILR RestaurarVersion_704ILR(int reservaId_704ILR, int mementoId_704ILR)
         {
             BE_Reserva_704ILR actual_704ILR = DAL_Reserva_704ILR.GetById_704ILR(reservaId_704ILR);
             if (actual_704ILR == null) return ReservaResult_704ILR.NotFound;
 
+            // CANCELADA es terminal (RN-05): restaurar una version previa tambien es
+            // una modificacion y reabriria la operacion por la puerta de atras. La
+            // regla se aplica aca y no solo en la UI porque la restauracion persiste
+            // en el acto, sin pasar por Actualizar.
+            if (!PuedeModificar_704ILR(actual_704ILR))
+            {
+                BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Restauracion rechazada",
+                    CriticidadBitacora_704ILR.Advertencia,
+                    $"Reserva #{reservaId_704ILR} cancelada: no admite restaurar versiones (RN-05).");
+                return ReservaResult_704ILR.NoModificable;
+            }
+
             BE_ReservaMemento_704ILR memento_704ILR = CaretakerReserva_704ILR.GetVersion_704ILR(mementoId_704ILR);
             if (memento_704ILR == null || memento_704ILR.ReservaId_704ILR != reservaId_704ILR) return ReservaResult_704ILR.NotFound;
+
+            // Tampoco se puede ENTRAR a CANCELADA restaurando: dar de baja una
+            // operacion exige pasar por Cancelar, que es quien aplica la RN-02 y
+            // deja asentado el reintegro. Restaurar salteando esa via dejaria una
+            // reserva cancelada sin liquidacion.
+            if (memento_704ILR.Estado_704ILR == EstadoReserva_704ILR.CANCELADA)
+            {
+                BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Restauracion rechazada",
+                    CriticidadBitacora_704ILR.Advertencia,
+                    $"Reserva #{reservaId_704ILR}: la version #{mementoId_704ILR} esta CANCELADA; " +
+                    "la baja se registra por la via de cancelacion (RN-02/RN-05).");
+                return ReservaResult_704ILR.TransicionInvalida;
+            }
 
             BE_Reserva_704ILR restaurada_704ILR = DAL_Reserva_704ILR.GetById_704ILR(reservaId_704ILR);
             restaurada_704ILR.RestaurarDesde_704ILR(memento_704ILR);
@@ -258,6 +379,20 @@ namespace EvenTech.BLL
 
             if (reserva_704ILR.Monto_704ILR < 0)
                 return ReservaResult_704ILR.InvalidMonto;
+
+            if (reserva_704ILR.CantidadInvitados_704ILR < 0)
+                return ReservaResult_704ILR.InvalidInvitados;
+
+            // RN-06: al comprometer el salon hay que saber a cuanta gente hay que alojar,
+            // y el salon tiene que poder hacerlo. En COTIZACION y PENDIENTE el dato puede
+            // faltar: la propuesta todavia se esta componiendo.
+            if (reserva_704ILR.Estado_704ILR == EstadoReserva_704ILR.CONFIRMADA)
+            {
+                if (reserva_704ILR.CantidadInvitados_704ILR <= 0)
+                    return ReservaResult_704ILR.InvalidInvitados;
+                if (!CapacidadSuficiente_704ILR(reserva_704ILR.SalonId_704ILR, reserva_704ILR.CantidadInvitados_704ILR))
+                    return ReservaResult_704ILR.CapacidadInsuficiente;
+            }
 
             // Anti-solapamiento: el salon se compromete solo al CONFIRMAR. Una
             // cotizacion o una reserva pendiente no bloquean (puede haber varias

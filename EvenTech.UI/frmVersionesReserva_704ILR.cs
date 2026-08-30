@@ -22,7 +22,7 @@ namespace EvenTech.UI
         private DataGridView _grid_704ILR;
         private Label _lblVacio_704ILR;
         private AppButton_704ILR _btnRestaurar_704ILR;
-        private DataGridViewTextBoxColumn _colFecha_704ILR, _colUsuario_704ILR, _colCliente_704ILR, _colSalon_704ILR, _colFechaEvento_704ILR, _colEstado_704ILR, _colMonto_704ILR;
+        private DataGridViewTextBoxColumn _colFecha_704ILR, _colUsuario_704ILR, _colCliente_704ILR, _colSalon_704ILR, _colFechaEvento_704ILR, _colInvitados_704ILR, _colEstado_704ILR, _colMonto_704ILR;
 
         public frmVersionesReserva_704ILR(int reservaId_704ILR)
         {
@@ -113,6 +113,15 @@ namespace EvenTech.UI
                 FillWeight = 50,
                 DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd" }
             };
+            // El memento conserva la cantidad de invitados de cada version (es parte del
+            // estado de negocio y la RN-06 depende de el): la pantalla tiene que mostrarla.
+            _colInvitados_704ILR = new DataGridViewTextBoxColumn
+            {
+                Name = "Invitados",
+                DataPropertyName = "CantidadInvitados_704ILR",
+                FillWeight = 40,
+                DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleRight }
+            };
             _colEstado_704ILR = new DataGridViewTextBoxColumn { Name = "Estado", DataPropertyName = "Estado_704ILR", FillWeight = 45 };
             _colMonto_704ILR  = new DataGridViewTextBoxColumn
             {
@@ -121,7 +130,7 @@ namespace EvenTech.UI
                 FillWeight = 45,
                 DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight }
             };
-            _grid_704ILR.Columns.AddRange(_colFecha_704ILR, _colUsuario_704ILR, _colCliente_704ILR, _colSalon_704ILR, _colFechaEvento_704ILR, _colEstado_704ILR, _colMonto_704ILR);
+            _grid_704ILR.Columns.AddRange(_colFecha_704ILR, _colUsuario_704ILR, _colCliente_704ILR, _colSalon_704ILR, _colFechaEvento_704ILR, _colInvitados_704ILR, _colEstado_704ILR, _colMonto_704ILR);
             _grid_704ILR.CellFormatting += Grid_CellFormatting_704ILR;
 
             // Estado vacio: centrado sobre la grilla, visible solo si no hay filas.
@@ -235,6 +244,18 @@ namespace EvenTech.UI
                 case ReservaResult_704ILR.InvalidMonto:   return Tr_704ILR.T_704ILR("MSG_RES_MONTO");
                 case ReservaResult_704ILR.SalonOcupado:   return Tr_704ILR.T_704ILR("MSG_RES_SALON_OCUPADO");
                 case ReservaResult_704ILR.NotFound:       return Tr_704ILR.T_704ILR("MSG_RES_NOTFOUND");
+                // Motivos que la restauracion puede devolver desde que rige la RN-05/RN-06:
+                // sin estos casos el dialogo mostraria un error generico sabiendo la causa.
+                case ReservaResult_704ILR.NoModificable:
+                    return T_704ILR("MSG_RES_NO_MODIFICABLE", "La reserva esta cancelada: no admite modificaciones.");
+                case ReservaResult_704ILR.TransicionInvalida:
+                    return T_704ILR("MSG_RES_TRANSICION_GEN", "El cambio de estado solicitado no esta admitido.");
+                case ReservaResult_704ILR.CapacidadInsuficiente:
+                    return T_704ILR("MSG_RES_CAPACIDAD", "El salon no alcanza para la cantidad de invitados indicada.");
+                case ReservaResult_704ILR.InvalidInvitados:
+                    return T_704ILR("MSG_RES_INVITADOS", "La cantidad de invitados no puede ser negativa.");
+                case ReservaResult_704ILR.Vencida:
+                    return T_704ILR("MSG_RES_VENCIDA", "La operacion vencio: renovala antes de confirmarla.");
                 default:                           return Tr_704ILR.T_704ILR("MSG_RES_ERROR");
             }
         }
@@ -257,6 +278,7 @@ namespace EvenTech.UI
                 _colCliente_704ILR.HeaderText     = Tr_704ILR.T_704ILR("COL_CLIENTE");
                 _colSalon_704ILR.HeaderText       = Tr_704ILR.T_704ILR("COL_SALON");
                 _colFechaEvento_704ILR.HeaderText = Tr_704ILR.T_704ILR("RES_LBL_FECHA");
+                _colInvitados_704ILR.HeaderText   = T_704ILR("COL_INVITADOS", "Invitados");
                 _colEstado_704ILR.HeaderText      = Tr_704ILR.T_704ILR("COL_ESTADO");
                 _colMonto_704ILR.HeaderText       = Tr_704ILR.T_704ILR("COL_MONTO");
             }
