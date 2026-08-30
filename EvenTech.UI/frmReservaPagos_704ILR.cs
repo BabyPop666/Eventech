@@ -32,7 +32,9 @@ namespace EvenTech.UI
         private void BuildUi_704ILR()
         {
             Text = "EvenTech";
-            ClientSize = new Size(760, 500);
+            // Ancho holgado: el resumen del pie muestra Total, Pagado y Saldo en una
+            // sola linea, y los importes del dominio (catering por invitado) son largos.
+            ClientSize = new Size(880, 500);
             BackColor = Theme_704ILR.BgContent_704ILR;
 
             var pnlTitle_704ILR = new Panel { Dock = DockStyle.Top, Height = 44, BackColor = Theme_704ILR.BgTitleBar_704ILR };

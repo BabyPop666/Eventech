@@ -163,6 +163,34 @@ BEGIN
 END
 GO
 
+-- Toda reserva pertenece a un cliente registrado (regla de negocio del PN1: el
+-- vendedor selecciona o da de alta al cliente antes de cotizar). La columna nace
+-- NULL solo para poder migrar las filas heredadas; una vez enlazadas se endurece
+-- a NOT NULL para que la restriccion viva tambien en el modelo de datos y no solo
+-- en la validacion de BLL_Reserva. Idempotente y defensivo: si quedara alguna
+-- reserva huerfana no se fuerza el cambio (el script no debe romper una base real).
+IF COL_LENGTH('dbo.Reservas','ClienteId') IS NOT NULL
+   AND EXISTS (SELECT 1 FROM sys.columns
+               WHERE object_id = OBJECT_ID('dbo.Reservas') AND name = 'ClienteId' AND is_nullable = 1)
+   AND NOT EXISTS (SELECT 1 FROM dbo.Reservas WHERE ClienteId IS NULL)
+BEGIN
+    ALTER TABLE dbo.Reservas ALTER COLUMN ClienteId INT NOT NULL;
+END
+GO
+
+-- Cantidad de invitados estimada (PN1: "Capacidad_Requerida"). Es el dato que el
+-- vendedor usa para consultar disponibilidad y el que sostiene la RN-06: al
+-- confirmar, el salon elegido tiene que poder alojar a los invitados. Se persiste
+-- en la reserva porque forma parte de la operacion contratada, no solo de la
+-- consulta previa.
+-- NO entra en el digito verificador: igual que VenceEl, sumarlo invalidaria los DV
+-- ya calculados sobre las reservas existentes. El DV protege lo que define el
+-- compromiso comercial (cliente, salon, fecha, estado y monto).
+IF COL_LENGTH('dbo.Reservas','CantidadInvitados') IS NULL
+    ALTER TABLE dbo.Reservas ADD CantidadInvitados INT NOT NULL
+        CONSTRAINT DF_Reservas_CantidadInvitados DEFAULT 0;
+GO
+
 -- Seed de clientes de ejemplo (solo si la tabla quedo vacia).
 IF NOT EXISTS (SELECT 1 FROM dbo.Clientes)
 BEGIN
@@ -858,6 +886,14 @@ BEGIN
 END
 GO
 
+-- La foto del Memento tiene que conservar TODO el estado de negocio de la reserva,
+-- incluida la cantidad de invitados: si no, restaurar una version previa repondria
+-- el salon viejo con los invitados nuevos y podria violar la RN-06.
+IF COL_LENGTH('dbo.ReservaMemento','CantidadInvitados') IS NULL
+    ALTER TABLE dbo.ReservaMemento ADD CantidadInvitados INT NOT NULL
+        CONSTRAINT DF_ReservaMemento_CantidadInvitados DEFAULT 0;
+GO
+
 IF OBJECT_ID('dbo.ReservaMementoServicio','U') IS NULL
 BEGIN
     CREATE TABLE dbo.ReservaMementoServicio (
@@ -1007,6 +1043,34 @@ GO
         (N'ES', N'CMP_TITULO_PRESUPUESTO', N'Presupuesto'), (N'EN', N'CMP_TITULO_PRESUPUESTO', N'Quote'), (N'PT', N'CMP_TITULO_PRESUPUESTO', N'Orcamento'),
         (N'ES', N'CMP_DOC_NRO_PRESUPUESTO', N'Presupuesto N'), (N'EN', N'CMP_DOC_NRO_PRESUPUESTO', N'Quote No'), (N'PT', N'CMP_DOC_NRO_PRESUPUESTO', N'Orcamento N'),
         (N'ES', N'CMP_PRESUPUESTO_NOTA', N'Presupuesto sin compromiso de reserva. Sujeto a disponibilidad del salon al momento de confirmar.'), (N'EN', N'CMP_PRESUPUESTO_NOTA', N'Quote with no booking commitment. Subject to venue availability at confirmation time.'), (N'PT', N'CMP_PRESUPUESTO_NOTA', N'Orcamento sem compromisso de reserva. Sujeito a disponibilidade do salao no momento da confirmacao.')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, t.Texto
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+);
+GO
+
+-- ===========================================================================
+-- Ciclo de vida de la reserva (RN-05 transiciones, RN-06 capacidad) y
+-- cantidad de invitados. Idempotente: solo inserta las claves que falten.
+-- ===========================================================================
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        -- Cantidad de invitados (PN1: Capacidad_Requerida)
+        (N'ES', N'COL_INVITADOS', N'Invitados'), (N'EN', N'COL_INVITADOS', N'Guests'), (N'PT', N'COL_INVITADOS', N'Convidados'),
+        (N'ES', N'RES_LBL_INVITADOS', N'Invitados estimados'), (N'EN', N'RES_LBL_INVITADOS', N'Estimated guests'), (N'PT', N'RES_LBL_INVITADOS', N'Convidados estimados'),
+        -- RN-05: transiciones de estado admitidas
+        (N'ES', N'MSG_RES_TRANSICION', N'No se admite pasar de {0} a {1}.'), (N'EN', N'MSG_RES_TRANSICION', N'Moving from {0} to {1} is not allowed.'), (N'PT', N'MSG_RES_TRANSICION', N'Nao e admitido passar de {0} para {1}.'),
+        -- RN-06: el salon tiene que alojar a los invitados al confirmar
+        (N'ES', N'MSG_RES_CAPACIDAD', N'El salon no alcanza para la cantidad de invitados indicada.'), (N'EN', N'MSG_RES_CAPACIDAD', N'The venue cannot hold the number of guests entered.'), (N'PT', N'MSG_RES_CAPACIDAD', N'O salao nao comporta a quantidade de convidados informada.'),
+        (N'ES', N'MSG_RES_INVITADOS', N'La cantidad de invitados no puede ser negativa.'), (N'EN', N'MSG_RES_INVITADOS', N'The number of guests cannot be negative.'), (N'PT', N'MSG_RES_INVITADOS', N'A quantidade de convidados nao pode ser negativa.'),
+        (N'ES', N'MSG_RES_TRANSICION_GEN', N'El cambio de estado solicitado no esta admitido.'), (N'EN', N'MSG_RES_TRANSICION_GEN', N'The requested status change is not allowed.'), (N'PT', N'MSG_RES_TRANSICION_GEN', N'A mudanca de estado solicitada nao e admitida.'),
+        -- Alta de cliente: confirmacion en pantalla (CUN002, paso 5)
+        (N'ES', N'MSG_CLI_CREADO', N'Cliente registrado.'), (N'EN', N'MSG_CLI_CREADO', N'Customer registered.'), (N'PT', N'MSG_CLI_CREADO', N'Cliente registrado.')
     ) AS v(Codigo, Clave, Texto)
 )
 INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)

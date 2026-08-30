@@ -312,7 +312,7 @@ namespace EvenTech.UI
         private void Grid_CellFormatting_704ILR(object sender_704ILR, DataGridViewCellFormattingEventArgs e_704ILR)
         {
             if (e_704ILR.RowIndex < 0 || e_704ILR.ColumnIndex < 0 || e_704ILR.ColumnIndex >= _grid_704ILR.Columns.Count) return;
-            if (_grid_704ILR.Columns[e_704ILR.ColumnIndex].DataPropertyName != "Criticidad") return;
+            if (_grid_704ILR.Columns[e_704ILR.ColumnIndex].DataPropertyName != "Criticidad_704ILR") return;
 
             switch (e_704ILR.Value?.ToString())
             {

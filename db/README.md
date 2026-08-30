@@ -1,7 +1,7 @@
 # Base de datos — EvenTech
 
 La app se conecta por defecto a `localhost\SQLEXPRESS`, base **`EvenTechDB`**
-(Integrated Security). Ver `EvenTech.DAL/DAL_DB_Connection.cs`.
+(Integrated Security). Ver `EvenTech.DAL/DAL_DB_Connection_704ILR.cs`.
 
 Hay dos formas de tener la base:
 
@@ -21,7 +21,7 @@ Usuario inicial: **admin / admin123** (perfil Administrador, acceso total).
 ## Datos cifrados (Email/Telefono de Clientes)
 
 Email y Telefono de `Clientes` se guardan cifrados con AES-256 (prefijo `ENC:`,
-ver `EvenTech.Services/CryptoService.cs`). La clave se genera sola en el primer
+ver `EvenTech.Services/CryptoService_704ILR.cs`). La clave se genera sola en el primer
 uso y queda en `%ProgramData%\EvenTech\crypto.key`, protegida con DPAPI de la
 **máquina**. Consecuencia: si se restaura un `.bak` en otra PC, los valores
 `ENC:` de origen no se pueden descifrar ahí (se muestran tal cual); los valores
@@ -41,6 +41,6 @@ WITH MOVE 'EvenTechDB'     TO N'C:\...\MSSQL\DATA\EvenTechDB.mdf',
      REPLACE;
 ```
 
-(Ajustar las rutas `MOVE` a la carpeta DATA de tu instancia; ver
+(Ajustar las rutas `MOVE` a la carpeta DATA de la instancia local; ver
 `SELECT SERVERPROPERTY('InstanceDefaultDataPath')`.) Requiere SQL Server de
 igual o mayor versión que el de origen (SQL Server Express 2019 / MSSQL15).

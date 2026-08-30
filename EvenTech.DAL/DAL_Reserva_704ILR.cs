@@ -11,7 +11,8 @@ namespace EvenTech.DAL
         // SELECT base con JOIN a salon y cliente para proyectar sus nombres.
         private const string SelectBase_704ILR =
             "SELECT r.Id, r.ClienteId, LTRIM(ISNULL(c.Nombre,'') + ISNULL(' ' + c.Apellido,'')) AS ClienteNombre, " +
-            "r.SalonId, s.Nombre, r.FechaEvento, r.Estado, r.Monto, r.CreatedAt, r.Dvh, r.VenceEl " +
+            "r.SalonId, s.Nombre, r.FechaEvento, r.Estado, r.Monto, r.CantidadInvitados, " +
+            "r.CreatedAt, r.Dvh, r.VenceEl " +
             "FROM dbo.Reservas r " +
             "INNER JOIN dbo.Salones s ON s.Id = r.SalonId " +
             "LEFT JOIN dbo.Clientes c ON c.Id = r.ClienteId ";
@@ -96,9 +97,9 @@ namespace EvenTech.DAL
             using (var cn_704ILR = new DAL_DB_Connection_704ILR())
             {
                 using (var cmd_704ILR = new SqlCommand(
-                    "INSERT INTO dbo.Reservas (ClienteId, SalonId, FechaEvento, Estado, Monto, Dvh, VenceEl) " +
+                    "INSERT INTO dbo.Reservas (ClienteId, SalonId, FechaEvento, Estado, Monto, CantidadInvitados, Dvh, VenceEl) " +
                     "OUTPUT INSERTED.Id " +
-                    "VALUES (@cliente, @salon, @fecha, @estado, @monto, @dvh, @vence)",
+                    "VALUES (@cliente, @salon, @fecha, @estado, @monto, @invitados, @dvh, @vence)",
                     cn_704ILR.OpenConnection_704ILR()))
                 {
                     BindEditable_704ILR(cmd_704ILR, reserva_704ILR);
@@ -113,7 +114,8 @@ namespace EvenTech.DAL
             {
                 using (var cmd_704ILR = new SqlCommand(
                     "UPDATE dbo.Reservas SET ClienteId = @cliente, SalonId = @salon, " +
-                    "FechaEvento = @fecha, Estado = @estado, Monto = @monto, Dvh = @dvh, " +
+                    "FechaEvento = @fecha, Estado = @estado, Monto = @monto, " +
+                    "CantidadInvitados = @invitados, Dvh = @dvh, " +
                     "VenceEl = @vence WHERE Id = @id",
                     cn_704ILR.OpenConnection_704ILR()))
                 {
@@ -143,6 +145,7 @@ namespace EvenTech.DAL
             cmd_704ILR.Parameters.Add("@fecha", SqlDbType.DateTime).Value = reserva_704ILR.FechaEvento_704ILR;
             cmd_704ILR.Parameters.Add("@estado", SqlDbType.NVarChar, 20).Value = reserva_704ILR.Estado_704ILR.ToString();
             cmd_704ILR.Parameters.Add("@monto", SqlDbType.Decimal).Value = reserva_704ILR.Monto_704ILR;
+            cmd_704ILR.Parameters.Add("@invitados", SqlDbType.Int).Value = reserva_704ILR.CantidadInvitados_704ILR;
             cmd_704ILR.Parameters.Add("@dvh", SqlDbType.NVarChar, 64).Value = (object)reserva_704ILR.Dvh_704ILR ?? DBNull.Value;
             cmd_704ILR.Parameters.Add("@vence", SqlDbType.DateTime).Value =
                 reserva_704ILR.VenceEl_704ILR.HasValue ? (object)reserva_704ILR.VenceEl_704ILR.Value : DBNull.Value;
@@ -158,9 +161,10 @@ namespace EvenTech.DAL
             FechaEvento_704ILR = r_704ILR.GetDateTime(5),
             Estado_704ILR = (EstadoReserva_704ILR)Enum.Parse(typeof(EstadoReserva_704ILR), r_704ILR.GetString(6)),
             Monto_704ILR = r_704ILR.GetDecimal(7),
-            CreatedAt_704ILR = r_704ILR.GetDateTime(8),
-            Dvh_704ILR = r_704ILR.IsDBNull(9) ? null : r_704ILR.GetString(9),
-            VenceEl_704ILR = r_704ILR.IsDBNull(10) ? (DateTime?)null : r_704ILR.GetDateTime(10)
+            CantidadInvitados_704ILR = r_704ILR.IsDBNull(8) ? 0 : r_704ILR.GetInt32(8),
+            CreatedAt_704ILR = r_704ILR.GetDateTime(9),
+            Dvh_704ILR = r_704ILR.IsDBNull(10) ? null : r_704ILR.GetString(10),
+            VenceEl_704ILR = r_704ILR.IsDBNull(11) ? (DateTime?)null : r_704ILR.GetDateTime(11)
         };
     }
 }
