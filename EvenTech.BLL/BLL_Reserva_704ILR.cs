@@ -19,6 +19,7 @@ namespace EvenTech.BLL
         TransicionInvalida,  // el cambio de estado no figura en la tabla de transiciones (RN-05)
         InvalidInvitados,    // cantidad de invitados negativa
         CapacidadInsuficiente, // el salon no aloja a los invitados de la reserva (RN-06)
+        MontoInferiorPagado,   // RN-04: el total quedaria por debajo de lo ya cobrado
         NotFound
     }
 
@@ -274,6 +275,18 @@ namespace EvenTech.BLL
             var validacion_704ILR = Validar_704ILR(reserva_704ILR);
             if (validacion_704ILR != ReservaResult_704ILR.Success) return validacion_704ILR;
 
+            // RN-04: el total de la reserva es el tope de la cobranza. Una edicion que
+            // lo achique por debajo de lo ya cobrado (por ejemplo, quitando servicios)
+            // romperia el invariante sin registrar ningun pago: se rechaza aca, que es
+            // el unico camino por el que el total puede bajar.
+            if (reserva_704ILR.Monto_704ILR < DAL_Pago_704ILR.TotalPagado_704ILR(reserva_704ILR.Id_704ILR))
+            {
+                BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Modificacion rechazada",
+                    CriticidadBitacora_704ILR.Advertencia,
+                    $"Reserva #{reserva_704ILR.Id_704ILR}: el total quedaria por debajo de lo ya cobrado (RN-04).");
+                return ReservaResult_704ILR.MontoInferiorPagado;
+            }
+
             // RN-01: si cambia el estado se recalcula la vigencia; si no, se conserva.
             reserva_704ILR.VenceEl_704ILR =
                 reserva_704ILR.Estado_704ILR != antes_704ILR.Estado_704ILR
@@ -347,6 +360,16 @@ namespace EvenTech.BLL
             // reglas (cliente/salon existentes, anti-solapamiento) sigue vigente.
             var validacion_704ILR = Validar_704ILR(restaurada_704ILR, permitirFechaPasada_704ILR: true);
             if (validacion_704ILR != ReservaResult_704ILR.Success) return validacion_704ILR;
+
+            // RN-04: una version previa mas barata que lo ya cobrado tampoco se repone.
+            if (restaurada_704ILR.Monto_704ILR < DAL_Pago_704ILR.TotalPagado_704ILR(reservaId_704ILR))
+            {
+                BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Restauracion rechazada",
+                    CriticidadBitacora_704ILR.Advertencia,
+                    $"Reserva #{reservaId_704ILR}: la version #{mementoId_704ILR} dejaria el total " +
+                    "por debajo de lo ya cobrado (RN-04).");
+                return ReservaResult_704ILR.MontoInferiorPagado;
+            }
 
             CaretakerReserva_704ILR.GuardarVersion_704ILR(actual_704ILR);
 

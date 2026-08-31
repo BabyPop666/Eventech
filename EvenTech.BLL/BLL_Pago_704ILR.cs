@@ -27,7 +27,7 @@ namespace EvenTech.BLL
 
         public static decimal MontoReserva_704ILR(int reservaId_704ILR)
         {
-            var r_704ILR = DAL_Reserva_704ILR.GetById_704ILR(reservaId_704ILR);
+            var r_704ILR = BLL_Reserva_704ILR.GetById_704ILR(reservaId_704ILR);
             return r_704ILR == null ? 0m : r_704ILR.Monto_704ILR;
         }
 
@@ -41,7 +41,8 @@ namespace EvenTech.BLL
             if (p_704ILR.MetodoPagoId_704ILR <= 0) return PagoResult_704ILR.MetodoInvalido;
             if (p_704ILR.Monto_704ILR <= 0) return PagoResult_704ILR.MontoInvalido;
 
-            var reserva_704ILR = DAL_Reserva_704ILR.GetById_704ILR(p_704ILR.ReservaId_704ILR);
+            // La reserva se consulta a traves de su propia regla de negocio.
+            var reserva_704ILR = BLL_Reserva_704ILR.GetById_704ILR(p_704ILR.ReservaId_704ILR);
             if (reserva_704ILR == null) return PagoResult_704ILR.ReservaInvalida;
 
             // Una reserva cancelada es estado terminal: tampoco admite cobros.

@@ -253,7 +253,9 @@ namespace EvenTech.UI
                 case ReservaResult_704ILR.CapacidadInsuficiente:
                     return T_704ILR("MSG_RES_CAPACIDAD", "El salon no alcanza para la cantidad de invitados indicada.");
                 case ReservaResult_704ILR.InvalidInvitados:
-                    return T_704ILR("MSG_RES_INVITADOS", "La cantidad de invitados no puede ser negativa.");
+                    return T_704ILR("MSG_RES_INVITADOS", "Indica la cantidad de invitados estimada: hace falta para confirmar y no puede ser negativa.");
+                case ReservaResult_704ILR.MontoInferiorPagado:
+                    return T_704ILR("MSG_RES_MONTO_PAGADO", "El total de la reserva no puede quedar por debajo de lo ya cobrado.");
                 case ReservaResult_704ILR.Vencida:
                     return T_704ILR("MSG_RES_VENCIDA", "La operacion vencio: renovala antes de confirmarla.");
                 default:                           return Tr_704ILR.T_704ILR("MSG_RES_ERROR");

@@ -27,7 +27,7 @@ namespace EvenTech.BE
         public EstadoReserva_704ILR Estado_704ILR { get; set; }
         public decimal Monto_704ILR { get; set; }
 
-        // Cantidad de invitados estimada (PN1: "Capacidad_Requerida"). Es el dato
+        // Cantidad de invitados estimada (PN1: "Cantidad_Invitados"). Es el dato
         // con el que se consulta la disponibilidad y el que sostiene la RN-06: al
         // confirmar, el salon elegido tiene que poder alojarlos. Igual que VenceEl
         // NO forma parte de ObtenerCamposParaDV: sumarlo invalidaria los digitos

@@ -70,6 +70,10 @@ namespace EvenTech.UI
             var alta_704ILR = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, AutoSize = true, BackColor = Color.Transparent, Margin = new Padding(0, 0, 0, Theme_704ILR.SpaceMd_704ILR) };
             _cboServicio_704ILR = Ui_704ILR.Combo_704ILR(); _cboServicio_704ILR.Width = 300; _cboServicio_704ILR.Margin = new Padding(0, 0, Theme_704ILR.SpaceSm_704ILR, 0);
             foreach (var s_704ILR in _disponibles_704ILR) _cboServicio_704ILR.Items.Add(s_704ILR);
+            // El catalogo se ofrece con su precio vigente a la vista (CUN003, paso 2).
+            Ui_704ILR.DibujarEnum_704ILR(_cboServicio_704ILR, o_704ILR => o_704ILR is BE_Servicio_704ILR sv_704ILR
+                ? sv_704ILR.Nombre_704ILR + "  \u2014  " + sv_704ILR.Precio_704ILR.ToString("N2")
+                : o_704ILR?.ToString());
             if (_cboServicio_704ILR.Items.Count > 0) _cboServicio_704ILR.SelectedIndex = 0;
             _numCantidad_704ILR = new NumericUpDown { Minimum = 1, Maximum = 9999, Value = 1, Width = 70, Font = Theme_704ILR.FontInput_704ILR, Margin = new Padding(0, 0, Theme_704ILR.SpaceSm_704ILR, 0) };
             var btnAgregar_704ILR = Ui_704ILR.Primary_704ILR(T_704ILR("BTN_AGREGAR", "Agregar"), Theme_704ILR.IcoAdd_704ILR); btnAgregar_704ILR.BehindColor_704ILR = Theme_704ILR.BgContent_704ILR; btnAgregar_704ILR.Size = new Size(120, 30); btnAgregar_704ILR.Click += (s_704ILR, e_704ILR) => Agregar_704ILR();
