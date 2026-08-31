@@ -18,7 +18,7 @@ namespace EvenTech.UI
         private Label _lblCount_704ILR, _lblError_704ILR, _lblFormTitle_704ILR;
         private TextBox _txtMonto_704ILR;   // solo lectura: total = suma de los servicios contratados
         private ComboBox _cboCliente_704ILR, _cboSalon_704ILR, _cboEstado_704ILR;
-        private NumericUpDown _numInvitados_704ILR;   // PN1: Capacidad_Requerida (RN-06)
+        private NumericUpDown _numInvitados_704ILR;   // PN1: Cantidad_Invitados (RN-06)
         private DateTimePicker _dtFecha_704ILR;
         private AppButton_704ILR _btnNuevo_704ILR, _btnDisponibilidad_704ILR, _btnGuardar_704ILR, _btnHistorial_704ILR, _btnNuevoCliente_704ILR, _btnServicios_704ILR, _btnPagos_704ILR, _btnComprobante_704ILR, _btnEmail_704ILR, _btnVersiones_704ILR;
         private List<BE_ReservaServicio_704ILR> _serviciosReserva_704ILR = new List<BE_ReservaServicio_704ILR>();
@@ -645,7 +645,7 @@ namespace EvenTech.UI
             }
         }
 
-        // Envia el comprobante por email (paso 7). Sin SMTP: genera y guarda el
+        // Envia el comprobante por email (PN1, paso 6). Sin SMTP: genera y guarda el
         // comprobante, abre el cliente de correo (mailto) con destinatario/asunto/
         // cuerpo prellenados y abre la carpeta del archivo para adjuntarlo.
         private void EnviarEmail_704ILR()
@@ -813,9 +813,10 @@ namespace EvenTech.UI
                 case ReservaResult_704ILR.SalonOcupado:   return Tr_704ILR.T_704ILR("MSG_RES_SALON_OCUPADO");
                 case ReservaResult_704ILR.NoModificable:  return T_704ILR("MSG_RES_NO_MODIFICABLE", "La reserva esta cancelada: no admite modificaciones.");
                 case ReservaResult_704ILR.Vencida:        return T_704ILR("MSG_RES_VENCIDA", "La operacion vencio: renovala antes de confirmarla.");
-                case ReservaResult_704ILR.InvalidInvitados: return T_704ILR("MSG_RES_INVITADOS", "La cantidad de invitados no puede ser negativa.");
+                case ReservaResult_704ILR.InvalidInvitados: return T_704ILR("MSG_RES_INVITADOS", "Indica la cantidad de invitados estimada: hace falta para confirmar y no puede ser negativa.");
                 case ReservaResult_704ILR.CapacidadInsuficiente: return T_704ILR("MSG_RES_CAPACIDAD", "El salon no alcanza para la cantidad de invitados indicada.");
                 case ReservaResult_704ILR.TransicionInvalida: return T_704ILR("MSG_RES_TRANSICION_GEN", "El cambio de estado solicitado no esta admitido.");
+                case ReservaResult_704ILR.MontoInferiorPagado: return T_704ILR("MSG_RES_MONTO_PAGADO", "El total de la reserva no puede quedar por debajo de lo ya cobrado.");
                 case ReservaResult_704ILR.NotFound:       return Tr_704ILR.T_704ILR("MSG_RES_NOTFOUND");
                 default:                           return Tr_704ILR.T_704ILR("MSG_RES_ERROR");
             }

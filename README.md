@@ -125,7 +125,7 @@ del RF1 y las seis reglas de negocio.
 dotnet run --project EvenTech.SmokeTest
 ```
 
-Cada caso imprime el resultado obtenido junto al esperado.
+Los casos imprimen el resultado obtenido y, en las verificaciones clave, el valor esperado junto a el.
 
 ## Estructura del repositorio
 

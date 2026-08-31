@@ -178,7 +178,7 @@ BEGIN
 END
 GO
 
--- Cantidad de invitados estimada (PN1: "Capacidad_Requerida"). Es el dato que el
+-- Cantidad de invitados estimada (PN1: "Cantidad_Invitados"). Es el dato que el
 -- vendedor usa para consultar disponibilidad y el que sostiene la RN-06: al
 -- confirmar, el salon elegido tiene que poder alojar a los invitados. Se persiste
 -- en la reserva porque forma parte de la operacion contratada, no solo de la
@@ -1060,11 +1060,13 @@ GO
 -- ===========================================================================
 ;WITH Txt(Codigo, Clave, Texto) AS (
     SELECT * FROM (VALUES
-        -- Cantidad de invitados (PN1: Capacidad_Requerida)
+        -- Cantidad de invitados (PN1: Cantidad_Invitados)
         (N'ES', N'COL_INVITADOS', N'Invitados'), (N'EN', N'COL_INVITADOS', N'Guests'), (N'PT', N'COL_INVITADOS', N'Convidados'),
         (N'ES', N'RES_LBL_INVITADOS', N'Invitados estimados'), (N'EN', N'RES_LBL_INVITADOS', N'Estimated guests'), (N'PT', N'RES_LBL_INVITADOS', N'Convidados estimados'),
         -- RN-05: transiciones de estado admitidas
         (N'ES', N'MSG_RES_TRANSICION', N'No se admite pasar de {0} a {1}.'), (N'EN', N'MSG_RES_TRANSICION', N'Moving from {0} to {1} is not allowed.'), (N'PT', N'MSG_RES_TRANSICION', N'Nao e admitido passar de {0} para {1}.'),
+        -- RN-04: el total no puede quedar por debajo de lo ya cobrado
+        (N'ES', N'MSG_RES_MONTO_PAGADO', N'El total de la reserva no puede quedar por debajo de lo ya cobrado.'), (N'EN', N'MSG_RES_MONTO_PAGADO', N'The reservation total cannot fall below the amount already collected.'), (N'PT', N'MSG_RES_MONTO_PAGADO', N'O total da reserva nao pode ficar abaixo do valor ja cobrado.'),
         -- RN-06: el salon tiene que alojar a los invitados al confirmar
         (N'ES', N'MSG_RES_CAPACIDAD', N'El salon no alcanza para la cantidad de invitados indicada.'), (N'EN', N'MSG_RES_CAPACIDAD', N'The venue cannot hold the number of guests entered.'), (N'PT', N'MSG_RES_CAPACIDAD', N'O salao nao comporta a quantidade de convidados informada.'),
         (N'ES', N'MSG_RES_INVITADOS', N'La cantidad de invitados no puede ser negativa.'), (N'EN', N'MSG_RES_INVITADOS', N'The number of guests cannot be negative.'), (N'PT', N'MSG_RES_INVITADOS', N'A quantidade de convidados nao pode ser negativa.'),
@@ -1080,4 +1082,16 @@ JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
 WHERE NOT EXISTS (
     SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
 );
+GO
+
+-- El rechazo por invitados cubre dos causas: el dato falta al confirmar (RN-06)
+-- o es negativo. El texto sembrado originalmente solo nombraba la segunda; como
+-- la clave ya existe en bases reales, se corrige por UPDATE (idempotente).
+UPDATE t SET Texto = CASE i.Codigo
+        WHEN N'EN' THEN N'Enter the estimated number of guests: it is required to confirm and cannot be negative.'
+        WHEN N'PT' THEN N'Informe a quantidade estimada de convidados: e necessaria para confirmar e nao pode ser negativa.'
+        ELSE N'Indica la cantidad de invitados estimada: hace falta para confirmar y no puede ser negativa.' END
+FROM dbo.Traducciones t
+JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
+WHERE t.Clave = N'MSG_RES_INVITADOS';
 GO

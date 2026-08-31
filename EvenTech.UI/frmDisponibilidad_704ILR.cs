@@ -28,7 +28,7 @@ namespace EvenTech.UI
 
         // Invitados con los que se hizo la consulta: vuelve a la ficha de la
         // reserva para que la cantidad estimada quede registrada en la operacion
-        // (PN1: Capacidad_Requerida) y no se pierda al cerrar el dialogo.
+        // (PN1: Cantidad_Invitados) y no se pierda al cerrar el dialogo.
         public int InvitadosConsultados_704ILR => (int)_numCapacidad_704ILR.Value;
 
         public frmDisponibilidad_704ILR(DateTime fechaInicial_704ILR, int invitadosIniciales_704ILR = 0)

@@ -187,6 +187,19 @@ namespace EvenTech.UI
             }
         }
 
+        // Deja seleccionada en la grilla la fila del cliente indicado.
+        private void SeleccionarCliente_704ILR(int clienteId_704ILR)
+        {
+            foreach (DataGridViewRow fila_704ILR in _grid_704ILR.Rows)
+            {
+                if (fila_704ILR.DataBoundItem is BE_Cliente_704ILR c_704ILR && c_704ILR.Id_704ILR == clienteId_704ILR)
+                {
+                    _grid_704ILR.CurrentCell = fila_704ILR.Cells[0];
+                    break;
+                }
+            }
+        }
+
         private void Grid_SelectionChanged_704ILR(object sender_704ILR, EventArgs e_704ILR)
         {
             if (_grid_704ILR.CurrentRow?.DataBoundItem is BE_Cliente_704ILR c_704ILR) CargarEnForm_704ILR(c_704ILR);
@@ -231,12 +244,18 @@ namespace EvenTech.UI
                 Email_704ILR = _txtEmail_704ILR.Text.Trim(),
                 Telefono_704ILR = _txtTelefono_704ILR.Text.Trim()
             };
-            ClienteResult_704ILR r_704ILR = _editId_704ILR == 0 ? BLL_Cliente_704ILR.Crear_704ILR(c_704ILR, out _) : BLL_Cliente_704ILR.Actualizar_704ILR(c_704ILR);
+            bool esAlta_704ILR = _editId_704ILR == 0;
+            int nuevoId_704ILR = 0;
+            ClienteResult_704ILR r_704ILR = esAlta_704ILR ? BLL_Cliente_704ILR.Crear_704ILR(c_704ILR, out nuevoId_704ILR) : BLL_Cliente_704ILR.Actualizar_704ILR(c_704ILR);
             if (r_704ILR == ClienteResult_704ILR.Success)
             {
                 LimpiarForm_704ILR();
                 SafeLoadData_704ILR();
-                _lblOk_704ILR.Text = Tr_704ILR.T_704ILR("MSG_CLI_OK");
+                // CUN002, paso 5: el alta se confirma y el cliente recien creado queda
+                // seleccionado en la grilla (la seleccion carga su ficha) para poder
+                // seguir operando con el sin buscarlo.
+                if (esAlta_704ILR) SeleccionarCliente_704ILR(nuevoId_704ILR);
+                _lblOk_704ILR.Text = Tr_704ILR.T_704ILR(esAlta_704ILR ? "MSG_CLI_CREADO" : "MSG_CLI_OK");
                 _lblOk_704ILR.Visible = true;
             }
             else

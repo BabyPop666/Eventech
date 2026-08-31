@@ -173,7 +173,7 @@ else
     {
         ClienteId_704ILR = clientesM_704ILR[0].Id_704ILR,
         SalonId_704ILR = salonesM_704ILR[0].Id_704ILR,
-        FechaEvento_704ILR = DateTime.Today.AddDays(45),
+        FechaEvento_704ILR = DateTime.Today.AddDays(1500 + desfasaje_704ILR),
         Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.PENDIENTE,
         CantidadInvitados_704ILR = 60,   // RN-06: sin este dato no se puede confirmar
         Monto_704ILR = 1000m
@@ -539,6 +539,12 @@ Console.WriteLine("[26] Flujo RF1 completo (servicios, confirmacion, pagos):");
         Console.WriteLine($"  saldo restante: result={rSaldo_704ILR} (esperado Success)");
         Console.WriteLine($"  saldo final: {BLL_Pago_704ILR.Saldo_704ILR(idFlujo_704ILR):N2} (esperado 0,00)");
 
+        // RN-04 como invariante: con el total ya cobrado, una edicion que achique la
+        // reserva por debajo de lo pagado (quitar servicios) se rechaza.
+        var achicada_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idFlujo_704ILR);
+        achicada_704ILR.Monto_704ILR = achicada_704ILR.Monto_704ILR / 2;
+        Console.WriteLine($"  reducir el total por debajo de lo pagado: {BLL_Reserva_704ILR.Actualizar_704ILR(achicada_704ILR)} (esperado MontoInferiorPagado)");
+
         // [27] Consulta de disponibilidad (Proceso 1, paso 1): la fecha recien
         // confirmada tiene que figurar ocupada para ese salon, con una fecha
         // alternativa propuesta; una capacidad imposible marca insuficiente.
@@ -633,6 +639,33 @@ Console.WriteLine("[28] RN-01 vigencia de la operacion:");
     Console.WriteLine($"  confirmar tras renovar: {BLL_Reserva_704ILR.Actualizar_704ILR(renovada_704ILR)} (esperado Success)");
     BLL_Reserva_704ILR.Cancelar_704ILR(idCot2_704ILR, out _, out _);   // limpieza: libera el salon
 
+    // Rama PENDIENTE de la RN-01: 72 horas de vigencia desde que entro al estado.
+    var pen_704ILR = new EvenTech.BE.BE_Reserva_704ILR
+    {
+        ClienteId_704ILR = cliRn_704ILR,
+        SalonId_704ILR = salRn_704ILR,
+        FechaEvento_704ILR = fechaRn_704ILR.AddDays(2),
+        Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.PENDIENTE,
+        CantidadInvitados_704ILR = 50,
+        Monto_704ILR = 700m
+    };
+    BLL_Reserva_704ILR.Crear_704ILR(pen_704ILR, out int idPen_704ILR);
+    var leidaPen_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idPen_704ILR);
+    int horasReales_704ILR = leidaPen_704ILR.VenceEl_704ILR.HasValue
+        ? (int)Math.Round((leidaPen_704ILR.VenceEl_704ILR.Value - DateTime.Now).TotalHours) : -1;
+    Console.WriteLine($"  pendiente vence en: {horasReales_704ILR} horas (esperado {BLL_Reserva_704ILR.HorasValidezPendiente_704ILR})");
+
+    leidaPen_704ILR.VenceEl_704ILR = DateTime.Now.AddHours(-1);
+    EvenTech.DAL.DAL_Reserva_704ILR.Update_704ILR(leidaPen_704ILR);
+    var penVencida_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idPen_704ILR);
+    penVencida_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
+    Console.WriteLine($"  confirmar pendiente vencida: {BLL_Reserva_704ILR.Actualizar_704ILR(penVencida_704ILR)} (esperado Vencida)");
+    Console.WriteLine($"  renovar pendiente: {BLL_Reserva_704ILR.Renovar_704ILR(idPen_704ILR)} (esperado Success)");
+    var penRenovada_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idPen_704ILR);
+    penRenovada_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
+    Console.WriteLine($"  confirmar tras renovar: {BLL_Reserva_704ILR.Actualizar_704ILR(penRenovada_704ILR)} (esperado Success)");
+    BLL_Reserva_704ILR.Cancelar_704ILR(idPen_704ILR, out _, out _);   // limpieza
+
     // [29] RN-02 Politica de cancelacion: con antelacion se reintegra todo; sin
     // antelacion se retiene el porcentaje definido. El calculo queda en bitacora.
     Console.WriteLine("[29] RN-02 politica de cancelacion:");
@@ -693,7 +726,13 @@ Console.WriteLine("[30] RN-05 transiciones de estado admitidas:");
     Chequear_704ILR(CON_704ILR, COT_704ILR, false);
     Chequear_704ILR(CON_704ILR, PEN_704ILR, false);
     Chequear_704ILR(CAN_704ILR, COT_704ILR, false);
+    Chequear_704ILR(CAN_704ILR, PEN_704ILR, false);
+    Chequear_704ILR(CAN_704ILR, CON_704ILR, false);
     Chequear_704ILR(CAN_704ILR, CAN_704ILR, false);
+    // Conservar el estado no es una transicion: siempre se admite, salvo en CANCELADA.
+    Chequear_704ILR(COT_704ILR, COT_704ILR, true);
+    Chequear_704ILR(PEN_704ILR, PEN_704ILR, true);
+    Chequear_704ILR(CON_704ILR, CON_704ILR, true);
 
     // Verificacion end-to-end contra la base: una CONFIRMADA no vuelve atras.
     var cliT_704ILR = BLL_Cliente_704ILR.GetAll_704ILR();
