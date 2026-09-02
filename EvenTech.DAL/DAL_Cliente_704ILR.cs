@@ -16,7 +16,8 @@ namespace EvenTech.DAL
         {
             var list_704ILR = new List<BE_Cliente_704ILR>();
             using (var cn_704ILR = new DAL_DB_Connection_704ILR())
-            using (var cmd_704ILR = new SqlCommand(SelectBase_704ILR + "ORDER BY Nombre, Apellido", cn_704ILR.OpenConnection_704ILR()))
+            // Desempate por Id: dos clientes homonimos harian el orden no determinista.
+            using (var cmd_704ILR = new SqlCommand(SelectBase_704ILR + "ORDER BY Nombre, Apellido, Id", cn_704ILR.OpenConnection_704ILR()))
             using (var r_704ILR = cmd_704ILR.ExecuteReader())
             {
                 while (r_704ILR.Read()) list_704ILR.Add(Map_704ILR(r_704ILR));

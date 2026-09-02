@@ -139,7 +139,9 @@ namespace EvenTech.UI
             {
                 BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Reservas", "Consultar disponibilidad");
                 _lblResumen_704ILR.ForeColor = Theme_704ILR.Error_704ILR;
-                _lblResumen_704ILR.Text = T_704ILR("MSG_RES_ERROR", "No se pudo completar la operacion.");
+                // Mensaje generico de operacion: aca no se estaba guardando ninguna
+                // reserva, asi que "No se pudo guardar la reserva" no correspondia.
+                _lblResumen_704ILR.Text = T_704ILR("MSG_OP_ERROR", "No se pudo completar la operacion.");
                 return;
             }
 

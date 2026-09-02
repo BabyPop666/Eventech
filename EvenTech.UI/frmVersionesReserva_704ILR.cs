@@ -235,7 +235,10 @@ namespace EvenTech.UI
         {
             _lblVacio_704ILR.Visible = vacio_704ILR;
             _grid_704ILR.Visible = !vacio_704ILR;
-            _btnRestaurar_704ILR.Enabled = !vacio_704ILR;
+            // El dialogo se abre para CONSULTAR las versiones (basta el permiso de
+            // historial). Restaurar es una correccion administrativa aparte: sin
+            // RESERVA_RESTAURAR el boton queda apagado y la lista se mira igual.
+            _btnRestaurar_704ILR.Enabled = !vacio_704ILR && Permisos_704ILR.Tiene_704ILR("RESERVA_RESTAURAR");
         }
 
         private static string MensajeError_704ILR(ReservaResult_704ILR r_704ILR)

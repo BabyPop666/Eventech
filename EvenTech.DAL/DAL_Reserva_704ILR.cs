@@ -22,7 +22,11 @@ namespace EvenTech.DAL
             var list_704ILR = new List<BE_Reserva_704ILR>();
             using (var cn_704ILR = new DAL_DB_Connection_704ILR())
             {
-                using (var cmd_704ILR = new SqlCommand(SelectBase_704ILR + "ORDER BY r.FechaEvento DESC", cn_704ILR.OpenConnection_704ILR()))
+                // El desempate por Id hace determinista el orden: varias reservas
+                // pueden compartir la misma fecha de evento (RN-03 admite cotizaciones
+                // y pendientes conviviendo) y sin criterio adicional el motor no
+                // garantiza que se listen siempre igual.
+                using (var cmd_704ILR = new SqlCommand(SelectBase_704ILR + "ORDER BY r.FechaEvento DESC, r.Id DESC", cn_704ILR.OpenConnection_704ILR()))
                 using (var r_704ILR = cmd_704ILR.ExecuteReader())
                 {
                     while (r_704ILR.Read()) list_704ILR.Add(Map_704ILR(r_704ILR));
@@ -54,11 +58,15 @@ namespace EvenTech.DAL
             using (var cn_704ILR = new DAL_DB_Connection_704ILR())
             using (var cmd_704ILR = new SqlCommand(
                 "SELECT COUNT(1) FROM dbo.Reservas " +
-                "WHERE SalonId = @s AND CAST(FechaEvento AS DATE) = @f AND Estado = 'CONFIRMADA' AND Id <> @ex",
+                "WHERE SalonId = @s AND CAST(FechaEvento AS DATE) = @f AND Estado = @estado AND Id <> @ex",
                 cn_704ILR.OpenConnection_704ILR()))
             {
                 cmd_704ILR.Parameters.Add("@s", SqlDbType.Int).Value = salonId_704ILR;
                 cmd_704ILR.Parameters.Add("@f", SqlDbType.Date).Value = fecha_704ILR.Date;
+                // El estado viaja como parametro desde el enumerado, igual que al
+                // persistir la reserva: el estado que compromete el salon se define en
+                // un solo lugar y no queda escrito a mano dentro de la consulta.
+                cmd_704ILR.Parameters.Add("@estado", SqlDbType.NVarChar, 20).Value = EstadoReserva_704ILR.CONFIRMADA.ToString();
                 cmd_704ILR.Parameters.Add("@ex", SqlDbType.Int).Value = excluirId_704ILR;
                 return (int)cmd_704ILR.ExecuteScalar() > 0;
             }
@@ -73,9 +81,10 @@ namespace EvenTech.DAL
             using (var cn_704ILR = new DAL_DB_Connection_704ILR())
             using (var cmd_704ILR = new SqlCommand(
                 "SELECT SalonId, CAST(FechaEvento AS DATE) FROM dbo.Reservas " +
-                "WHERE Estado = 'CONFIRMADA' AND CAST(FechaEvento AS DATE) BETWEEN @d AND @h",
+                "WHERE Estado = @estado AND CAST(FechaEvento AS DATE) BETWEEN @d AND @h",
                 cn_704ILR.OpenConnection_704ILR()))
             {
+                cmd_704ILR.Parameters.Add("@estado", SqlDbType.NVarChar, 20).Value = EstadoReserva_704ILR.CONFIRMADA.ToString();
                 cmd_704ILR.Parameters.Add("@d", SqlDbType.Date).Value = desde_704ILR.Date;
                 cmd_704ILR.Parameters.Add("@h", SqlDbType.Date).Value = hasta_704ILR.Date;
                 using (var r_704ILR = cmd_704ILR.ExecuteReader())

@@ -19,5 +19,5 @@
   </compatibility>
   <!-- El modo de PPP (DPI) se configura via la propiedad del proyecto
        ApplicationHighDpiMode (PerMonitorV2), aplicada por
-       ApplicationConfiguration.Initialize() en Program.cs. -->
+       ApplicationConfiguration.Initialize() en Program_704ILR.cs. -->
 </assembly>

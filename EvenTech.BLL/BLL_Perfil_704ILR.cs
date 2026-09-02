@@ -127,31 +127,5 @@ namespace EvenTech.BLL
             }
         }
 
-        // Recorre el arbol recursivamente y devuelve los permisos efectivos (hojas)
-        // que cubren los componentes asignados al perfil.
-        public static List<BE_Permiso_704ILR> CalcularPermisosEfectivos_704ILR(
-            List<BE_IComponentePermiso_704ILR> arbol_704ILR, HashSet<int> asignados_704ILR)
-        {
-            var efectivos_704ILR = new Dictionary<int, BE_Permiso_704ILR>();
-            foreach (var nodo_704ILR in arbol_704ILR)
-                Recolectar_704ILR(nodo_704ILR, asignados_704ILR, false, efectivos_704ILR);
-            return new List<BE_Permiso_704ILR>(efectivos_704ILR.Values);
-        }
-
-        private static void Recolectar_704ILR(BE_IComponentePermiso_704ILR nodo_704ILR, HashSet<int> asignados_704ILR,
-            bool heredado_704ILR, Dictionary<int, BE_Permiso_704ILR> acumulado_704ILR)
-        {
-            bool activo_704ILR = heredado_704ILR || asignados_704ILR.Contains(nodo_704ILR.Id_704ILR);
-
-            if (nodo_704ILR is BE_GrupoPermisos_704ILR grupo_704ILR)
-            {
-                foreach (var hijo_704ILR in grupo_704ILR.Hijos_704ILR)
-                    Recolectar_704ILR(hijo_704ILR, asignados_704ILR, activo_704ILR, acumulado_704ILR);
-            }
-            else if (nodo_704ILR is BE_Permiso_704ILR permiso_704ILR && activo_704ILR)
-            {
-                acumulado_704ILR[permiso_704ILR.Id_704ILR] = permiso_704ILR;
-            }
-        }
     }
 }

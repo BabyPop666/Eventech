@@ -83,6 +83,12 @@ namespace EvenTech.Services
             NotificarObservadores_704ILR();
         }
 
+        // Re-notifica a los observadores SIN cambiar de idioma. Hace falta cuando lo
+        // que cambia no es el idioma seleccionado sino su contenido: al editar las
+        // traducciones del idioma activo, CambiarIdioma_704ILR corta por igualdad de
+        // codigo y las pantallas seguirian mostrando el texto viejo.
+        public void Refrescar_704ILR() => NotificarObservadores_704ILR();
+
         private void NotificarObservadores_704ILR()
         {
             // Copia para evitar problemas si un observador se desuscribe durante la notificacion.

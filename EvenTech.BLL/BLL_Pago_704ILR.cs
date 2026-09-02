@@ -56,9 +56,17 @@ namespace EvenTech.BLL
                 return PagoResult_704ILR.ReservaCancelada_704ILR;
             }
 
-            // Tope: no se puede pagar mas que el total de la reserva.
-            if (DAL_Pago_704ILR.TotalPagado_704ILR(p_704ILR.ReservaId_704ILR) + p_704ILR.Monto_704ILR > reserva_704ILR.Monto_704ILR)
+            // Tope: no se puede pagar mas que el total de la reserva (RN-04). El
+            // rechazo se asienta —es una regla de negocio, no un error de tipeo— con
+            // el mismo formato de Advertencia que usan los demas rechazos de cobro.
+            decimal pagado_704ILR = DAL_Pago_704ILR.TotalPagado_704ILR(p_704ILR.ReservaId_704ILR);
+            if (pagado_704ILR + p_704ILR.Monto_704ILR > reserva_704ILR.Monto_704ILR)
+            {
+                BLL_Bitacora_704ILR.Registrar_704ILR("Pagos", "Pago rechazado", CriticidadBitacora_704ILR.Advertencia,
+                    $"Reserva #{p_704ILR.ReservaId_704ILR}: un cobro de {p_704ILR.Monto_704ILR:0.00} " +
+                    $"supera el saldo pendiente ({reserva_704ILR.Monto_704ILR - pagado_704ILR:0.00}) (RN-04).");
                 return PagoResult_704ILR.ExcedeSaldo_704ILR;
+            }
 
             nuevoId_704ILR = DAL_Pago_704ILR.Insert_704ILR(p_704ILR);
             BLL_Bitacora_704ILR.Registrar_704ILR("Pagos", "Registro de pago", CriticidadBitacora_704ILR.Info,

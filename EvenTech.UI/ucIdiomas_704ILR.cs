@@ -186,7 +186,10 @@ namespace EvenTech.UI
             {
                 HeaderText = "Texto",
                 Name = "colTexto",
-                FillWeight = 60
+                FillWeight = 60,
+                // Ancho real de Traducciones.Texto: sin este tope un texto mas largo
+                // se guardaria recortado y sin aviso.
+                MaxInputLength = 250
             };
 
             _grid_704ILR.Columns.Add(colClave_704ILR);
@@ -307,8 +310,11 @@ namespace EvenTech.UI
                 }
                 BLL_Idioma_704ILR.GuardarTraducciones_704ILR(idiomaId_704ILR, textos_704ILR);
                 RefrescarSelectorPrincipal_704ILR();
-                // Si edite el idioma activo, refrescar esta misma vista.
-                GestorDeIdioma_704ILR.GetInstance_704ILR.CambiarIdioma_704ILR(GestorDeIdioma_704ILR.GetInstance_704ILR.IdiomaActual_704ILR);
+                // Si edite el idioma activo, refrescar esta misma vista. No sirve
+                // "cambiar" al idioma que ya esta puesto: el gestor corta por igualdad
+                // de codigo y no notifica. Refrescar_704ILR avisa a los observadores
+                // sin tocar el idioma seleccionado (patron Observer).
+                GestorDeIdioma_704ILR.GetInstance_704ILR.Refrescar_704ILR();
                 Mensaje_704ILR(Tr_704ILR.T_704ILR("MSG_IDI_GUARDADO"), false);
             }
             catch (Exception ex_704ILR) { BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Idiomas", "Guardar traducciones"); Mensaje_704ILR(Tr_704ILR.T_704ILR("MSG_ERROR_PREFIJO") + ex_704ILR.Message, true); }

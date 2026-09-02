@@ -67,10 +67,11 @@ Conviene cambiarla despues del primer ingreso.
 
 ### Conexion a la base
 
-Por defecto la aplicacion se conecta a `localhost\SQLEXPRESS`, base
-`EvenTechDB`, con seguridad integrada. Si no logra conectarse abre la pantalla
-de configuracion antes del login, donde se indican la instancia y el nombre de
-la base; la cadena resultante se guarda cifrada con DPAPI en
+La cadena de fabrica apunta a `localhost\SQLEXPRESS`, base `EvenTechDB`, con
+seguridad integrada. Si no logra conectarse, la aplicacion
+prueba las instancias mas habituales —entre ellas `localhost\SQLEXPRESS`— y abre
+la pantalla de configuracion antes del login, donde se indican la instancia y el
+nombre de la base; la cadena resultante se guarda cifrada con DPAPI en
 `%APPDATA%\EvenTech\connection.cfg`.
 
 ## Arquitectura
@@ -85,8 +86,9 @@ EvenTech.sln
 └── EvenTech.SmokeTest   validacion programatica end-to-end contra la base real
 ```
 
-Dependencias entre capas: `UI -> BLL -> DAL -> BE`, con `Services` disponible
-para las capas superiores. `BE` no referencia a ninguna otra.
+Dependencias entre capas, tal como las declaran los `ProjectReference`:
+`UI -> BLL, BE, Services` · `BLL -> DAL, BE, Services` · `DAL -> BE, Services` ·
+`Services -> BE` · `BE` no referencia a ninguna otra.
 
 Unicos paquetes NuGet: `Microsoft.Data.SqlClient` y
 `System.Security.Cryptography.ProtectedData`.
@@ -101,7 +103,7 @@ tiempo constante viven en clases estaticas de servicio, sin estado propio.
 
 | Regla | Enunciado |
 |---|---|
-| RN-01 | Vigencia: una cotizacion vale 15 dias corridos; una reserva PENDIENTE, 72 horas. Vencido el plazo hay que renovarla antes de confirmar. |
+| RN-01 | Vigencia: una cotizacion vale 15 dias corridos; una reserva PENDIENTE, 72 horas. Vencido el plazo la operacion no avanza de estado hasta que se renueve su vigencia. |
 | RN-02 | Cancelacion: con 30 dias o mas de antelacion se reintegra el 100 %; con menos se retiene el 50 %. El sistema calcula, informa y asienta ambos importes. |
 | RN-03 | Solo una reserva CONFIRMADA compromete el salon para la fecha del evento. |
 | RN-04 | La suma de los pagos nunca supera el importe total, y una reserva cancelada no admite cobros. |

@@ -57,7 +57,8 @@ namespace EvenTech.UI
             lblTitle_704ILR.Tag = "T:SRV_TITULO"; lblTitle_704ILR.Anchor = AnchorStyles.Left; lblTitle_704ILR.Margin = new Padding(0, 0, Theme_704ILR.SpaceLg_704ILR, 0);
 
             _btnNuevo_704ILR = Ui_704ILR.Primary_704ILR("Nuevo", Theme_704ILR.IcoAdd_704ILR);
-            _btnNuevo_704ILR.Tag = "T:BTN_NUEVA"; _btnNuevo_704ILR.Size = new Size(120, 36); _btnNuevo_704ILR.BehindColor_704ILR = Theme_704ILR.BgContent_704ILR;
+            // Servicio es masculino: BTN_NUEVO (ver ucClientes).
+            _btnNuevo_704ILR.Tag = "T:BTN_NUEVO"; _btnNuevo_704ILR.Size = new Size(120, 36); _btnNuevo_704ILR.BehindColor_704ILR = Theme_704ILR.BgContent_704ILR;
             _btnNuevo_704ILR.Anchor = AnchorStyles.Left; _btnNuevo_704ILR.Margin = new Padding(0, 0, Theme_704ILR.SpaceMd_704ILR, 0);
             _btnNuevo_704ILR.Click += (s_704ILR, e_704ILR) => LimpiarForm_704ILR();
 
@@ -117,8 +118,13 @@ namespace EvenTech.UI
             for (int i_704ILR = 0; i_704ILR < 4; i_704ILR++) fields_704ILR.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             fields_704ILR.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
+            // MaxLength = ancho real de las columnas de dbo.Servicios: sin el tope, un
+            // texto mas largo llegaba recortado a la base y sin aviso (la validacion de
+            // negocio rechaza el nombre excedido, esto lo evita antes de intentarlo).
             _txtNombre_704ILR = Ui_704ILR.Input_704ILR();
+            _txtNombre_704ILR.MaxLength = 80;
             _txtDescripcion_704ILR = Ui_704ILR.Input_704ILR();
+            _txtDescripcion_704ILR.MaxLength = 250;
             _txtPrecio_704ILR = Ui_704ILR.Input_704ILR();
             var fN_704ILR = Field_704ILR(_txtNombre_704ILR, "COL_NOMBRE", "Nombre");
             var fD_704ILR = Field_704ILR(_txtDescripcion_704ILR, "COL_DESCRIPCION", "Descripcion");

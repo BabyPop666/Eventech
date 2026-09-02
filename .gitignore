@@ -1,5 +1,6 @@
 # Notas locales del entorno de desarrollo (nunca subir al repo).
 NOTES_LOCAL.md
+CLAUDE.md
 .notes-local/
 .claude/
 
@@ -34,6 +35,8 @@ artifacts/
 # Logs
 *.log
 logs/
+# Salida de _build.bat: incluye las rutas absolutas de compilacion de la maquina.
+_build_log.txt
 
 # OS
 Thumbs.db

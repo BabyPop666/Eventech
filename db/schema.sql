@@ -191,6 +191,42 @@ IF COL_LENGTH('dbo.Reservas','CantidadInvitados') IS NULL
         CONSTRAINT DF_Reservas_CantidadInvitados DEFAULT 0;
 GO
 
+-- ---------------------------------------------------------------------------
+-- Reconciliacion de definiciones que viven dentro de un CREATE TABLE.
+-- Un CREATE TABLE bajo IF OBJECT_ID solo corre la primera vez: editarlo NO
+-- cambia una base ya creada. Por eso cada correccion de una columna o de un
+-- DEFAULT necesita su ALTER de acompanamiento, idempotente, aca abajo.
+-- ---------------------------------------------------------------------------
+
+-- Estado inicial de la reserva: COTIZACION (tabla de estados del proceso de
+-- negocio). Una base creada con la version anterior del script quedo con otro
+-- valor por defecto; se repone el correcto sin tocar los datos existentes.
+IF EXISTS (SELECT 1
+           FROM sys.default_constraints dc
+           JOIN sys.columns c ON c.object_id = dc.parent_object_id AND c.column_id = dc.parent_column_id
+           WHERE dc.parent_object_id = OBJECT_ID('dbo.Reservas')
+             AND c.name = 'Estado'
+             AND dc.definition <> '(''COTIZACION'')')
+BEGIN
+    DECLARE @dfEstado SYSNAME = (
+        SELECT dc.name
+        FROM sys.default_constraints dc
+        JOIN sys.columns c ON c.object_id = dc.parent_object_id AND c.column_id = dc.parent_column_id
+        WHERE dc.parent_object_id = OBJECT_ID('dbo.Reservas') AND c.name = 'Estado');
+    EXEC('ALTER TABLE dbo.Reservas DROP CONSTRAINT ' + @dfEstado);
+    ALTER TABLE dbo.Reservas ADD CONSTRAINT DF_Reservas_Estado DEFAULT 'COTIZACION' FOR Estado;
+END
+GO
+
+-- Users.PasswordHash guarda un SHA-256 en hexadecimal: 64 caracteres exactos
+-- (max_length = 128 bytes en NVARCHAR). El ajuste es defensivo: solo se aplica
+-- si todos los valores guardados entran, para no romper una base real.
+IF EXISTS (SELECT 1 FROM sys.columns
+           WHERE object_id = OBJECT_ID('dbo.Users') AND name = 'PasswordHash' AND max_length <> 128)
+   AND NOT EXISTS (SELECT 1 FROM dbo.Users WHERE LEN(PasswordHash) > 64)
+    ALTER TABLE dbo.Users ALTER COLUMN PasswordHash NVARCHAR(64) NOT NULL;
+GO
+
 -- Seed de clientes de ejemplo (solo si la tabla quedo vacia).
 IF NOT EXISTS (SELECT 1 FROM dbo.Clientes)
 BEGIN
@@ -1152,4 +1188,48 @@ WHERE NOT EXISTS (
     SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
 )
 GROUP BY i.Id, t.Clave;
+GO
+
+-- ===========================================================================
+-- Mensajes propios de cada accion. Varias pantallas reutilizaban un texto de
+-- otra operacion ("Guarde la reserva antes de registrar pagos" al pedir el
+-- comprobante, "No se pudo guardar la reserva" al consultar disponibilidad),
+-- de modo que el aviso no correspondia a lo que el usuario habia pedido.
+-- Idempotente: solo inserta las claves que falten.
+-- ===========================================================================
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        -- Comprobante y envio por correo sobre una reserva todavia no guardada
+        (N'ES', N'MSG_RES_GUARDAR_PRIMERO', N'Guarde la reserva antes de emitir su documentacion.'), (N'EN', N'MSG_RES_GUARDAR_PRIMERO', N'Save the reservation before issuing its paperwork.'), (N'PT', N'MSG_RES_GUARDAR_PRIMERO', N'Salve a reserva antes de emitir sua documentacao.'),
+        -- Error generico de una operacion que no es un guardado de reserva
+        (N'ES', N'MSG_OP_ERROR', N'No se pudo completar la operacion.'), (N'EN', N'MSG_OP_ERROR', N'The operation could not be completed.'), (N'PT', N'MSG_OP_ERROR', N'Nao foi possivel concluir a operacao.'),
+        -- Seleccion de una reserva para una accion que no es el historial
+        (N'ES', N'MSG_RES_SELECCIONE_GEN', N'Seleccione una reserva existente.'), (N'EN', N'MSG_RES_SELECCIONE_GEN', N'Select an existing reservation.'), (N'PT', N'MSG_RES_SELECCIONE_GEN', N'Selecione uma reserva existente.'),
+        -- RN-02: lo que se retiene y se reintegra SI se confirma la cancelacion
+        (N'ES', N'MSG_RES_CANCELAR_DETALLE', N'Si se cancela hoy se retienen {0:N2} y se reintegran {1:N2}.'), (N'EN', N'MSG_RES_CANCELAR_DETALLE', N'Cancelling today retains {0:N2} and refunds {1:N2}.'), (N'PT', N'MSG_RES_CANCELAR_DETALLE', N'Cancelando hoje sao retidos {0:N2} e reembolsados {1:N2}.'),
+        -- Alta en las secciones cuyo sustantivo es masculino (Cliente, Servicio)
+        (N'ES', N'BTN_NUEVO', N'Nuevo'), (N'EN', N'BTN_NUEVO', N'New'), (N'PT', N'BTN_NUEVO', N'Novo')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;
+GO
+
+-- El cliente de la reserva se elige de una lista desplegable, no se escribe: el
+-- texto original ("Ingrese el nombre del cliente") no corresponde a ese control.
+-- Como la clave ya existe en bases reales, se corrige por UPDATE (idempotente).
+UPDATE t SET Texto = CASE i.Codigo
+        WHEN N'EN' THEN N'Select a valid client.'
+        WHEN N'PT' THEN N'Selecione um cliente valido.'
+        ELSE N'Seleccione un cliente valido.' END
+FROM dbo.Traducciones t
+JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
+WHERE t.Clave = N'MSG_RES_CLIENTE'
+  AND i.Codigo IN (N'ES', N'EN', N'PT');   -- solo los tres idiomas del sistema.
 GO

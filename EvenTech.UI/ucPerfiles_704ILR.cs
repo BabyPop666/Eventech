@@ -602,6 +602,11 @@ namespace EvenTech.UI
 
         private void GuardarAsignaciones_704ILR()
         {
+            // Segunda capa del control de acceso (ver Permisos.cs). Asignar perfiles
+            // es la accion mas sensible de la pantalla —puede elevar una cuenta a
+            // Administrador—, asi que vuelve a exigir el permiso al ejecutarse y no
+            // solo al mostrar la seccion.
+            if (!Permisos_704ILR.Exigir_704ILR("PERFILES_GESTION", FindForm(), "asignar perfiles a usuarios")) return;
             try
             {
                 _gridUsuarios_704ILR.EndEdit();

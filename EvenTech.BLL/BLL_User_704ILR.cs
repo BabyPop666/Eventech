@@ -33,6 +33,11 @@ namespace EvenTech.BLL
                 return CreateUserResult_704ILR.UsernameAlreadyExists_704ILR;
 
             DAL_User_704ILR.Insert_704ILR(username_704ILR, hashedPassword_704ILR);
+            // El alta se hace desde la pantalla de acceso, sin sesion iniciada: la
+            // bitacora la asienta como "Sistema". Es la unica accion que crea una
+            // credencial nueva, asi que se registra con criticidad Advertencia.
+            BLL_Bitacora_704ILR.Registrar_704ILR("Usuarios", "Alta de cuenta", CriticidadBitacora_704ILR.Advertencia,
+                $"Cuenta '{username_704ILR}' creada desde la pantalla de acceso (sin perfil asignado)");
             return CreateUserResult_704ILR.Success_704ILR;
         }
 
