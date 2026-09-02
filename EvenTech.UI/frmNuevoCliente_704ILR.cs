@@ -97,7 +97,7 @@ namespace EvenTech.UI
                     Telefono_704ILR = _txtTelefono_704ILR.Text.Trim()
                 };
                 ClienteResult_704ILR r_704ILR = BLL_Cliente_704ILR.Crear_704ILR(c_704ILR, out int id_704ILR);
-                if (r_704ILR != ClienteResult_704ILR.Success) { _lblMsg_704ILR.Text = MensajeError_704ILR(r_704ILR); return; }
+                if (r_704ILR != ClienteResult_704ILR.Success_704ILR) { _lblMsg_704ILR.Text = MensajeError_704ILR(r_704ILR); return; }
                 NuevoId_704ILR = id_704ILR;
                 DialogResult = DialogResult.OK;
                 Close();
@@ -113,9 +113,9 @@ namespace EvenTech.UI
         {
             switch (r_704ILR)
             {
-                case ClienteResult_704ILR.NombreInvalido: return T_704ILR("MSG_CLI_NOMBRE", "Ingrese el nombre del cliente.");
-                case ClienteResult_704ILR.DniDuplicado:   return T_704ILR("MSG_CLI_DNI_DUP", "Ya existe un cliente con ese DNI.");
-                case ClienteResult_704ILR.EmailInvalido:  return T_704ILR("MSG_CLI_EMAIL", "El email no es valido.");
+                case ClienteResult_704ILR.NombreInvalido_704ILR: return T_704ILR("MSG_CLI_NOMBRE", "Ingrese el nombre del cliente.");
+                case ClienteResult_704ILR.DniDuplicado_704ILR:   return T_704ILR("MSG_CLI_DNI_DUP", "Ya existe un cliente con ese DNI.");
+                case ClienteResult_704ILR.EmailInvalido_704ILR:  return T_704ILR("MSG_CLI_EMAIL", "El email no es valido.");
                 default:                           return Tr_704ILR.T_704ILR("MSG_ERROR");
             }
         }

@@ -253,7 +253,7 @@ namespace EvenTech.UI
                 Activo_704ILR = _chkActivo_704ILR.Checked
             };
             ServicioResult_704ILR r_704ILR = _editId_704ILR == 0 ? BLL_Servicio_704ILR.Crear_704ILR(s_704ILR, out _) : BLL_Servicio_704ILR.Actualizar_704ILR(s_704ILR);
-            if (r_704ILR == ServicioResult_704ILR.Success)
+            if (r_704ILR == ServicioResult_704ILR.Success_704ILR)
             {
                 LimpiarForm_704ILR();
                 SafeLoadData_704ILR();
@@ -271,10 +271,10 @@ namespace EvenTech.UI
         {
             switch (r_704ILR)
             {
-                case ServicioResult_704ILR.NombreInvalido:  return Tr_704ILR.T_704ILR("MSG_SRV_NOMBRE");
-                case ServicioResult_704ILR.NombreDuplicado: return Tr_704ILR.T_704ILR("MSG_SRV_DUP");
-                case ServicioResult_704ILR.PrecioInvalido:  return Tr_704ILR.T_704ILR("MSG_SRV_PRECIO");
-                case ServicioResult_704ILR.NotFound:        return Tr_704ILR.T_704ILR("MSG_RES_NOTFOUND");
+                case ServicioResult_704ILR.NombreInvalido_704ILR:  return Tr_704ILR.T_704ILR("MSG_SRV_NOMBRE");
+                case ServicioResult_704ILR.NombreDuplicado_704ILR: return Tr_704ILR.T_704ILR("MSG_SRV_DUP");
+                case ServicioResult_704ILR.PrecioInvalido_704ILR:  return Tr_704ILR.T_704ILR("MSG_SRV_PRECIO");
+                case ServicioResult_704ILR.NotFound_704ILR:        return Tr_704ILR.T_704ILR("MSG_RES_NOTFOUND");
                 default:                             return Tr_704ILR.T_704ILR("MSG_ERROR");
             }
         }

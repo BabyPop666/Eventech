@@ -9,10 +9,10 @@ namespace EvenTech.BLL
 {
     public enum CreateUserResult_704ILR
     {
-        Success,
-        InvalidUsername,
-        UsernameAlreadyExists,
-        InvalidPassword
+        Success_704ILR,
+        InvalidUsername_704ILR,
+        UsernameAlreadyExists_704ILR,
+        InvalidPassword_704ILR
     }
 
     // Alta de usuarios. La password en claro nunca llega aca: la UI manda solo
@@ -24,16 +24,16 @@ namespace EvenTech.BLL
         public static CreateUserResult_704ILR CreateUser_704ILR(string username_704ILR, string hashedPassword_704ILR)
         {
             if (string.IsNullOrWhiteSpace(username_704ILR) || !UsernameRegex_704ILR.IsMatch(username_704ILR))
-                return CreateUserResult_704ILR.InvalidUsername;
+                return CreateUserResult_704ILR.InvalidUsername_704ILR;
 
             if (string.IsNullOrEmpty(hashedPassword_704ILR) || hashedPassword_704ILR.Length != 64)
-                return CreateUserResult_704ILR.InvalidPassword;
+                return CreateUserResult_704ILR.InvalidPassword_704ILR;
 
             if (DAL_User_704ILR.ExistsUsername_704ILR(username_704ILR))
-                return CreateUserResult_704ILR.UsernameAlreadyExists;
+                return CreateUserResult_704ILR.UsernameAlreadyExists_704ILR;
 
             DAL_User_704ILR.Insert_704ILR(username_704ILR, hashedPassword_704ILR);
-            return CreateUserResult_704ILR.Success;
+            return CreateUserResult_704ILR.Success_704ILR;
         }
 
         // --- Asignacion de perfiles (T04) ---

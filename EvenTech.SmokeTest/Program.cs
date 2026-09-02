@@ -10,6 +10,22 @@ Console.WriteLine("== EvenTech smoke test v2 ==");
 // por salon+fecha podria dar de baja datos reales sin aviso y sin vuelta atras.
 int desfasaje_704ILR = (int)DateTime.Now.TimeOfDay.TotalSeconds % 900;
 
+// RN-07: una reserva se confirma con el adelanto ya cobrado. Este helper registra
+// ese cobro para poder ejercitar las transiciones a CONFIRMADA, igual que hace el
+// vendedor en la aplicacion: guardar la operacion, cobrar y recien ahi confirmar.
+void Adelanto_704ILR(int reservaId_704ILR, decimal monto_704ILR)
+{
+    var met_704ILR = BLL_Pago_704ILR.GetMetodos_704ILR();
+    if (met_704ILR.Count == 0) return;
+    BLL_Pago_704ILR.Registrar_704ILR(new EvenTech.BE.BE_Pago_704ILR
+    {
+        ReservaId_704ILR = reservaId_704ILR,
+        MetodoPagoId_704ILR = met_704ILR[0].Id_704ILR,
+        Monto_704ILR = monto_704ILR,
+        Observacion_704ILR = "Adelanto"
+    }, out _);
+}
+
 // [1] Login OK
 Console.WriteLine("[1] Login admin/admin123:");
 var r1_704ILR = BLL_Login_704ILR.Authenticate_704ILR("admin", Encrypt_704ILR.HashValue_704ILR("admin123"));
@@ -89,9 +105,10 @@ else
     Console.WriteLine($"  {BLL_Reserva_704ILR.GetAll_704ILR().Count} reservas");
 
     // [10] Control de cambios: modificar la reserva recien creada
-    if (rr1_704ILR == ReservaResult_704ILR.Success)
+    if (rr1_704ILR == ReservaResult_704ILR.Success_704ILR)
     {
         Console.WriteLine($"[10] Modificar reserva #{nuevoId_704ILR} (estado + monto):");
+        Adelanto_704ILR(nuevoId_704ILR, 1000m);   // RN-07: sin adelanto no se confirma
         var editada_704ILR = BLL_Reserva_704ILR.GetById_704ILR(nuevoId_704ILR);
         editada_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
         editada_704ILR.Monto_704ILR = 175000m;
@@ -181,6 +198,7 @@ else
     var rm_704ILR = BLL_Reserva_704ILR.Crear_704ILR(reservaM_704ILR, out int idM_704ILR);
     Console.WriteLine($"  alta: result={rm_704ILR}, id={idM_704ILR}");
 
+    Adelanto_704ILR(idM_704ILR, 500m);   // RN-07
     var v1_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idM_704ILR);
     v1_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
     v1_704ILR.Monto_704ILR = 2000m;
@@ -501,34 +519,41 @@ Console.WriteLine("[26] Flujo RF1 completo (servicios, confirmacion, pagos):");
         Console.WriteLine($"  alta cotizacion: result={rCot_704ILR}, id={idFlujo_704ILR}");
         Console.WriteLine($"  servicios persistidos: {BLL_ReservaServicio_704ILR.GetByReserva_704ILR(idFlujo_704ILR).Count} (esperado {servicios_704ILR.Count})");
 
+        // RN-07: el adelanto se cobra ANTES de confirmar. Ese es el orden del proceso
+        // de negocio: se registra la operacion, se cobra y recien ahi queda firme.
+        var metodos_704ILR = BLL_Pago_704ILR.GetMetodos_704ILR();
+        Console.WriteLine($"  metodos de pago: {metodos_704ILR.Count} (esperado 5)");
+        decimal adelanto_704ILR = Math.Round(total_704ILR / 2, 2);
+        var rAde_704ILR = BLL_Pago_704ILR.Registrar_704ILR(new EvenTech.BE.BE_Pago_704ILR
+        { ReservaId_704ILR = idFlujo_704ILR, MetodoPagoId_704ILR = metodos_704ILR[0].Id_704ILR, Monto_704ILR = adelanto_704ILR, Observacion_704ILR = "Adelanto" }, out _);
+        Console.WriteLine($"  adelanto {adelanto_704ILR:N2}: result={rAde_704ILR} (esperado Success)");
+        Console.WriteLine($"  saldo tras adelanto: {BLL_Pago_704ILR.Saldo_704ILR(idFlujo_704ILR):N2} (esperado {total_704ILR - adelanto_704ILR:N2})");
+
         // Confirmar: recien aca se compromete el salon.
         var reserva_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idFlujo_704ILR);
         reserva_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
         var rConf_704ILR = BLL_Reserva_704ILR.Actualizar_704ILR(reserva_704ILR);
         Console.WriteLine($"  confirmar: result={rConf_704ILR} (esperado Success)");
 
-        // Anti-solapamiento: otra CONFIRMADA para el mismo salon y fecha se rechaza.
+        // Anti-solapamiento: otra reserva para el mismo salon y fecha no puede
+        // confirmarse. Nace PENDIENTE y con su adelanto cobrado (RN-07), de modo que
+        // lo unico que puede rechazar la confirmacion es el salon ya comprometido.
         var choque_704ILR = new EvenTech.BE.BE_Reserva_704ILR
         {
             ClienteId_704ILR = cli_704ILR[0].Id_704ILR,
             SalonId_704ILR = sal_704ILR[0].Id_704ILR,
             FechaEvento_704ILR = fechaEvento_704ILR,
-            Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA,
+            Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.PENDIENTE,
             CantidadInvitados_704ILR = 70,   // RN-06: sin este dato no se puede confirmar
             Monto_704ILR = 1000m
         };
-        var rChoque_704ILR = BLL_Reserva_704ILR.Crear_704ILR(choque_704ILR, out _);
+        BLL_Reserva_704ILR.Crear_704ILR(choque_704ILR, out int idChoque_704ILR);
+        Adelanto_704ILR(idChoque_704ILR, 100m);
+        var aChocar_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idChoque_704ILR);
+        aChocar_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
+        var rChoque_704ILR = BLL_Reserva_704ILR.Actualizar_704ILR(aChocar_704ILR);
         Console.WriteLine($"  segunda confirmada mismo salon/fecha: result={rChoque_704ILR} (esperado SalonOcupado)");
-
-        // Cobros: adelanto, intento de exceso y saldo exacto.
-        var metodos_704ILR = BLL_Pago_704ILR.GetMetodos_704ILR();
-        Console.WriteLine($"  metodos de pago: {metodos_704ILR.Count} (esperado 5)");
-        decimal adelanto_704ILR = Math.Round(total_704ILR / 2, 2);
-
-        var rAde_704ILR = BLL_Pago_704ILR.Registrar_704ILR(new EvenTech.BE.BE_Pago_704ILR
-        { ReservaId_704ILR = idFlujo_704ILR, MetodoPagoId_704ILR = metodos_704ILR[0].Id_704ILR, Monto_704ILR = adelanto_704ILR, Observacion_704ILR = "Adelanto" }, out _);
-        Console.WriteLine($"  adelanto {adelanto_704ILR:N2}: result={rAde_704ILR} (esperado Success)");
-        Console.WriteLine($"  saldo tras adelanto: {BLL_Pago_704ILR.Saldo_704ILR(idFlujo_704ILR):N2} (esperado {total_704ILR - adelanto_704ILR:N2})");
+        BLL_Reserva_704ILR.Cancelar_704ILR(idChoque_704ILR, out _, out _);   // limpieza
 
         var rExceso_704ILR = BLL_Pago_704ILR.Registrar_704ILR(new EvenTech.BE.BE_Pago_704ILR
         { ReservaId_704ILR = idFlujo_704ILR, MetodoPagoId_704ILR = metodos_704ILR[0].Id_704ILR, Monto_704ILR = total_704ILR }, out _);
@@ -602,6 +627,7 @@ Console.WriteLine("[28] RN-01 vigencia de la operacion:");
     Console.WriteLine($"  plazo: {diasReales_704ILR} dias (esperado {diasEsperados_704ILR})");
 
     // Al confirmar, la operacion deja de tener plazo.
+    Adelanto_704ILR(idCot_704ILR, 100m);   // RN-07
     leida_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
     var rConf_704ILR = BLL_Reserva_704ILR.Actualizar_704ILR(leida_704ILR);
     var confirmada_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCot_704ILR);
@@ -635,6 +661,7 @@ Console.WriteLine("[28] RN-01 vigencia de la operacion:");
     Console.WriteLine($"  renovar: {rRen_704ILR} (esperado Success)");
     var renovada_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCot2_704ILR);
     Console.WriteLine($"  vencida tras renovar: {renovada_704ILR.EstaVencida_704ILR} (esperado False)");
+    Adelanto_704ILR(idCot2_704ILR, 100m);   // RN-07
     renovada_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
     Console.WriteLine($"  confirmar tras renovar: {BLL_Reserva_704ILR.Actualizar_704ILR(renovada_704ILR)} (esperado Success)");
     BLL_Reserva_704ILR.Cancelar_704ILR(idCot2_704ILR, out _, out _);   // limpieza: libera el salon
@@ -661,6 +688,7 @@ Console.WriteLine("[28] RN-01 vigencia de la operacion:");
     penVencida_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
     Console.WriteLine($"  confirmar pendiente vencida: {BLL_Reserva_704ILR.Actualizar_704ILR(penVencida_704ILR)} (esperado Vencida)");
     Console.WriteLine($"  renovar pendiente: {BLL_Reserva_704ILR.Renovar_704ILR(idPen_704ILR)} (esperado Success)");
+    Adelanto_704ILR(idPen_704ILR, 100m);   // RN-07
     var penRenovada_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idPen_704ILR);
     penRenovada_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
     Console.WriteLine($"  confirmar tras renovar: {BLL_Reserva_704ILR.Actualizar_704ILR(penRenovada_704ILR)} (esperado Success)");
@@ -678,16 +706,21 @@ Console.WriteLine("[28] RN-01 vigencia de la operacion:");
         Monto_704ILR = 400m
     }, out _);
 
+    // Lo esperado se deriva de lo REALMENTE cobrado sobre la reserva, no de un
+    // literal: la operacion pudo recibir otros pagos antes (por ejemplo el adelanto
+    // que exige la RN-07 para confirmarla) y un numero fijo daria un falso rojo.
+    decimal pagadoRn2_704ILR = BLL_Pago_704ILR.TotalPagado_704ILR(idCot_704ILR);
     BLL_Reserva_704ILR.CalcularCancelacion_704ILR(conAntelacion_704ILR,
         out decimal retLejos_704ILR, out decimal reemLejos_704ILR);
-    Console.WriteLine($"  evento lejano -> retenido {retLejos_704ILR:0.00} (esperado 0.00), reintegro {reemLejos_704ILR:0.00} (esperado 400.00)");
+    Console.WriteLine($"  total cobrado: {pagadoRn2_704ILR:0.00}");
+    Console.WriteLine($"  evento lejano -> retenido {retLejos_704ILR:0.00} (esperado 0.00), reintegro {reemLejos_704ILR:0.00} (esperado {pagadoRn2_704ILR:0.00})");
 
     // Mismo calculo con el evento dentro de la ventana de penalidad.
     var cerca_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idCot_704ILR);
     cerca_704ILR.FechaEvento_704ILR = DateTime.Today.AddDays(5);
     BLL_Reserva_704ILR.CalcularCancelacion_704ILR(cerca_704ILR,
         out decimal retCerca_704ILR, out decimal reemCerca_704ILR);
-    decimal esperadoRet_704ILR = 400m * BLL_Reserva_704ILR.PorcentajeRetencion_704ILR / 100m;
+    decimal esperadoRet_704ILR = decimal.Round(pagadoRn2_704ILR * BLL_Reserva_704ILR.PorcentajeRetencion_704ILR / 100m, 2);
     Console.WriteLine($"  evento cercano -> retenido {retCerca_704ILR:0.00} (esperado {esperadoRet_704ILR:0.00}), reintegro {reemCerca_704ILR:0.00}");
 
     var rCan_704ILR = BLL_Reserva_704ILR.Cancelar_704ILR(idCot_704ILR,
@@ -750,6 +783,7 @@ Console.WriteLine("[30] RN-05 transiciones de estado admitidas:");
         };
         BLL_Reserva_704ILR.Crear_704ILR(rT_704ILR, out int idT_704ILR);
 
+        Adelanto_704ILR(idT_704ILR, 100m);   // RN-07
         var aConfirmar_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idT_704ILR);
         aConfirmar_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
         Console.WriteLine($"  confirmar cotizacion: {BLL_Reserva_704ILR.Actualizar_704ILR(aConfirmar_704ILR)} (esperado Success)");
@@ -814,6 +848,7 @@ Console.WriteLine("[31] RN-06 capacidad del salon al confirmar:");
         sinDato_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
         Console.WriteLine($"  confirmar sin invitados: {BLL_Reserva_704ILR.Actualizar_704ILR(sinDato_704ILR)} (esperado InvalidInvitados)");
 
+        Adelanto_704ILR(idC_704ILR, 100m);   // RN-07
         var ajustada_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idC_704ILR);
         ajustada_704ILR.CantidadInvitados_704ILR = chico_704ILR.Capacidad_704ILR;
         ajustada_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
@@ -835,6 +870,116 @@ Console.WriteLine("[31] RN-06 capacidad del salon al confirmar:");
         // Limpieza: la reserva confirmada del caso se cancela para no bloquear el
         // salon en la proxima corrida.
         BLL_Reserva_704ILR.Cancelar_704ILR(idC_704ILR, out _, out _);
+    }
+}
+
+// [32] RN-07 Adelanto para confirmar. Lo que distingue a una reserva CONFIRMADA de
+// una PENDIENTE es que el cliente ya puso dinero: sin adelanto registrado no se
+// confirma, y como el cobro necesita la reserva ya guardada, tampoco se puede nacer
+// CONFIRMADA. El orden del proceso es siempre guardar -> cobrar -> confirmar.
+Console.WriteLine("[32] RN-07 Adelanto para confirmar:");
+{
+    var cliA_704ILR = BLL_Cliente_704ILR.GetAll_704ILR();
+    var salA_704ILR = BLL_Salon_704ILR.GetAll_704ILR();
+    if (cliA_704ILR.Count > 0 && salA_704ILR.Count > 0)
+    {
+        var salA0_704ILR = salA_704ILR[0];
+
+        // Alta directa en CONFIRMADA: rechazada, no hay reserva a la que imputar el cobro.
+        var altaDirecta_704ILR = new EvenTech.BE.BE_Reserva_704ILR
+        {
+            ClienteId_704ILR = cliA_704ILR[0].Id_704ILR,
+            SalonId_704ILR = salA0_704ILR.Id_704ILR,
+            FechaEvento_704ILR = DateTime.Today.AddDays(5500 + desfasaje_704ILR),
+            Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA,
+            CantidadInvitados_704ILR = 20,
+            Monto_704ILR = 900m
+        };
+        Console.WriteLine($"  alta directa CONFIRMADA: {BLL_Reserva_704ILR.Crear_704ILR(altaDirecta_704ILR, out _)} (esperado SinAdelanto)");
+
+        // Alta normal en COTIZACION y confirmacion sin ningun pago: rechazada.
+        var cotA_704ILR = new EvenTech.BE.BE_Reserva_704ILR
+        {
+            ClienteId_704ILR = cliA_704ILR[0].Id_704ILR,
+            SalonId_704ILR = salA0_704ILR.Id_704ILR,
+            FechaEvento_704ILR = DateTime.Today.AddDays(5500 + desfasaje_704ILR),
+            Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.COTIZACION,
+            CantidadInvitados_704ILR = 20,
+            Monto_704ILR = 900m
+        };
+        var rAltaA_704ILR = BLL_Reserva_704ILR.Crear_704ILR(cotA_704ILR, out int idA_704ILR);
+        Console.WriteLine($"  alta cotizacion: {rAltaA_704ILR} (esperado Success)");
+        Console.WriteLine($"  adelanto registrado: {BLL_Reserva_704ILR.TieneAdelanto_704ILR(idA_704ILR)} (esperado False)");
+
+        var sinPago_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idA_704ILR);
+        sinPago_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
+        Console.WriteLine($"  confirmar sin adelanto: {BLL_Reserva_704ILR.Actualizar_704ILR(sinPago_704ILR)} (esperado SinAdelanto)");
+        Console.WriteLine($"  estado tras el rechazo: {BLL_Reserva_704ILR.GetById_704ILR(idA_704ILR).Estado_704ILR} (esperado COTIZACION)");
+
+        // Con el adelanto cobrado, la misma confirmacion procede.
+        Adelanto_704ILR(idA_704ILR, 300m);
+        Console.WriteLine($"  adelanto registrado: {BLL_Reserva_704ILR.TieneAdelanto_704ILR(idA_704ILR)} (esperado True)");
+        var conPago_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idA_704ILR);
+        conPago_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
+        Console.WriteLine($"  confirmar con adelanto: {BLL_Reserva_704ILR.Actualizar_704ILR(conPago_704ILR)} (esperado Success)");
+        Console.WriteLine($"  estado final: {BLL_Reserva_704ILR.GetById_704ILR(idA_704ILR).Estado_704ILR} (esperado CONFIRMADA)");
+
+        // Una PENDIENTE sin cobros tampoco confirma.
+        var penA_704ILR = new EvenTech.BE.BE_Reserva_704ILR
+        {
+            ClienteId_704ILR = cliA_704ILR[0].Id_704ILR,
+            SalonId_704ILR = salA0_704ILR.Id_704ILR,
+            FechaEvento_704ILR = DateTime.Today.AddDays(5600 + desfasaje_704ILR),
+            Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.PENDIENTE,
+            CantidadInvitados_704ILR = 20,
+            Monto_704ILR = 900m
+        };
+        BLL_Reserva_704ILR.Crear_704ILR(penA_704ILR, out int idPenA_704ILR);
+        var penSinPago_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idPenA_704ILR);
+        penSinPago_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
+        Console.WriteLine($"  confirmar pendiente sin adelanto: {BLL_Reserva_704ILR.Actualizar_704ILR(penSinPago_704ILR)} (esperado SinAdelanto)");
+
+        // Limpieza: se liberan los dos salones tomados por el caso.
+        BLL_Reserva_704ILR.Cancelar_704ILR(idA_704ILR, out _, out _);
+        BLL_Reserva_704ILR.Cancelar_704ILR(idPenA_704ILR, out _, out _);
+    }
+}
+
+// [33] Anulacion de pago: pasa por las mismas reglas que el registro. Antes esto
+// borraba la fila sin mirar si el pago existia, si era de esa reserva o si la
+// reserva admitia movimientos.
+Console.WriteLine("[33] Anulacion de pago con reglas:");
+{
+    var cliP_704ILR = BLL_Cliente_704ILR.GetAll_704ILR();
+    var salP_704ILR = BLL_Salon_704ILR.GetAll_704ILR();
+    if (cliP_704ILR.Count > 0 && salP_704ILR.Count > 0)
+    {
+        var rP_704ILR = new EvenTech.BE.BE_Reserva_704ILR
+        {
+            ClienteId_704ILR = cliP_704ILR[0].Id_704ILR,
+            SalonId_704ILR = salP_704ILR[0].Id_704ILR,
+            FechaEvento_704ILR = DateTime.Today.AddDays(5700 + desfasaje_704ILR),
+            Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.COTIZACION,
+            CantidadInvitados_704ILR = 15,
+            Monto_704ILR = 600m
+        };
+        BLL_Reserva_704ILR.Crear_704ILR(rP_704ILR, out int idP_704ILR);
+
+        var metP_704ILR = BLL_Pago_704ILR.GetMetodos_704ILR();
+        BLL_Pago_704ILR.Registrar_704ILR(new EvenTech.BE.BE_Pago_704ILR
+        { ReservaId_704ILR = idP_704ILR, MetodoPagoId_704ILR = metP_704ILR[0].Id_704ILR, Monto_704ILR = 200m }, out int idPago_704ILR);
+        Console.WriteLine($"  pagado: {BLL_Pago_704ILR.TotalPagado_704ILR(idP_704ILR):N2} (esperado 200,00)");
+
+        // Un pago inexistente no se anula.
+        Console.WriteLine($"  anular pago inexistente: {BLL_Pago_704ILR.Eliminar_704ILR(999999, idP_704ILR)} (esperado PagoInvalido)");
+
+        // Un pago que existe pero es de otra reserva, tampoco.
+        Console.WriteLine($"  anular pago ajeno a la reserva: {BLL_Pago_704ILR.Eliminar_704ILR(idPago_704ILR, idP_704ILR + 100000)} (esperado PagoInvalido)");
+
+        // Sobre una reserva cancelada no se admiten movimientos de cobro (RN-04).
+        BLL_Reserva_704ILR.Cancelar_704ILR(idP_704ILR, out _, out _);
+        Console.WriteLine($"  anular sobre reserva cancelada: {BLL_Pago_704ILR.Eliminar_704ILR(idPago_704ILR, idP_704ILR)} (esperado ReservaCancelada)");
+        Console.WriteLine($"  el pago sigue registrado: {BLL_Pago_704ILR.TotalPagado_704ILR(idP_704ILR):N2} (esperado 200,00)");
     }
 }
 

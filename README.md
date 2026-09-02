@@ -9,7 +9,11 @@ organizada en cinco capas y sin frameworks de persistencia de terceros.
 
 > **Trabajo de Diploma** — Reser, Ivan Leonel (DNI 38.823.704, Legajo
 > A0900013691-T1). Comision 3-B-N, Sede Centro, 2026.
-> Todos los identificadores del codigo llevan el sufijo de autoria `_704ILR`.
+> Clases, metodos, propiedades, campos, variables y miembros de enumerados de
+> resultado llevan el sufijo de autoria `_704ILR`. Quedan sin sufijo, a proposito,
+> las tablas y columnas de la base, los valores que se persisten como dato (estados
+> de la reserva, criticidades, claves de permisos y de traducciones) y lo que el
+> framework no permite renombrar.
 
 ---
 
@@ -87,9 +91,11 @@ para las capas superiores. `BE` no referencia a ninguna otra.
 Unicos paquetes NuGet: `Microsoft.Data.SqlClient` y
 `System.Security.Cryptography.ProtectedData`.
 
-**Patrones aplicados:** Singleton (gestion de sesion, cifrado y autenticacion),
-Composite (arbol de perfiles y permisos), Observer (cambio de idioma en caliente)
-y Memento (versiones de una reserva, con restauracion auditada).
+**Patrones aplicados:** Singleton (gestion de sesion: instancia unica con
+constructor privado y acceso sincronizado), Composite (arbol de perfiles y
+permisos), Observer (cambio de idioma en caliente) y Memento (versiones de una
+reserva, con restauracion auditada). El hash de contrasenas y la comparacion en
+tiempo constante viven en clases estaticas de servicio, sin estado propio.
 
 ## Reglas de negocio implementadas
 
@@ -101,6 +107,7 @@ y Memento (versiones de una reserva, con restauracion auditada).
 | RN-04 | La suma de los pagos nunca supera el importe total, y una reserva cancelada no admite cobros. |
 | RN-05 | Transiciones de estado: COTIZACION avanza a cualquier estado, PENDIENTE solo confirma o cancela, CONFIRMADA solo cancela y CANCELADA es terminal. |
 | RN-06 | Al confirmar, el salon elegido tiene que poder alojar a la cantidad de invitados estimada. |
+| RN-07 | Una reserva queda CONFIRMADA con el adelanto ya cobrado: el orden es guardar la operacion, cobrar y recien entonces confirmar. |
 
 ## Seguridad e integridad
 
@@ -119,7 +126,7 @@ y Memento (versiones de una reserva, con restauracion auditada).
 `EvenTech.SmokeTest` recorre el sistema end-to-end contra la base real: login y
 auditoria, alta y modificacion de reservas, control de cambios, arbol de permisos,
 idiomas, integridad, memento, cifrado, configuracion de conexion, el flujo completo
-del RF1 y las seis reglas de negocio.
+del RF1 y las siete reglas de negocio. Son 33 casos numerados `[1]` a `[33]`.
 
 ```bat
 dotnet run --project EvenTech.SmokeTest

@@ -247,7 +247,7 @@ namespace EvenTech.UI
             bool esAlta_704ILR = _editId_704ILR == 0;
             int nuevoId_704ILR = 0;
             ClienteResult_704ILR r_704ILR = esAlta_704ILR ? BLL_Cliente_704ILR.Crear_704ILR(c_704ILR, out nuevoId_704ILR) : BLL_Cliente_704ILR.Actualizar_704ILR(c_704ILR);
-            if (r_704ILR == ClienteResult_704ILR.Success)
+            if (r_704ILR == ClienteResult_704ILR.Success_704ILR)
             {
                 LimpiarForm_704ILR();
                 SafeLoadData_704ILR();
@@ -269,10 +269,10 @@ namespace EvenTech.UI
         {
             switch (r_704ILR)
             {
-                case ClienteResult_704ILR.NombreInvalido: return Tr_704ILR.T_704ILR("MSG_CLI_NOMBRE");
-                case ClienteResult_704ILR.DniDuplicado:   return Tr_704ILR.T_704ILR("MSG_CLI_DNI_DUP");
-                case ClienteResult_704ILR.EmailInvalido:  return Tr_704ILR.T_704ILR("MSG_CLI_EMAIL");
-                case ClienteResult_704ILR.NotFound:       return Tr_704ILR.T_704ILR("MSG_RES_NOTFOUND");
+                case ClienteResult_704ILR.NombreInvalido_704ILR: return Tr_704ILR.T_704ILR("MSG_CLI_NOMBRE");
+                case ClienteResult_704ILR.DniDuplicado_704ILR:   return Tr_704ILR.T_704ILR("MSG_CLI_DNI_DUP");
+                case ClienteResult_704ILR.EmailInvalido_704ILR:  return Tr_704ILR.T_704ILR("MSG_CLI_EMAIL");
+                case ClienteResult_704ILR.NotFound_704ILR:       return Tr_704ILR.T_704ILR("MSG_RES_NOTFOUND");
                 default:                           return Tr_704ILR.T_704ILR("MSG_ERROR");
             }
         }

@@ -511,7 +511,7 @@ namespace EvenTech.UI
                         if (n_704ILR.Checked && n_704ILR.Tag is BE_Perfil_704ILR p_704ILR) incluidos_704ILR.Add(p_704ILR.Id_704ILR);
 
                 PerfilResult_704ILR res_704ILR = BLL_Perfil_704ILR.GuardarComposicion_704ILR(perfilId_704ILR, ids_704ILR, incluidos_704ILR);
-                if (res_704ILR == PerfilResult_704ILR.ReferenciaCircular)
+                if (res_704ILR == PerfilResult_704ILR.ReferenciaCircular_704ILR)
                 {
                     MostrarError_704ILR(T_704ILR("MSG_PERF_CICLO", "No se puede incluir ese perfil: generaria una referencia circular."));
                     return;

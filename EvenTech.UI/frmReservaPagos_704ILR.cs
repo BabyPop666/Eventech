@@ -120,15 +120,15 @@ namespace EvenTech.UI
             var res_704ILR = BLL_Pago_704ILR.Registrar_704ILR(pago_704ILR, out id_704ILR);
             switch (res_704ILR)
             {
-                case PagoResult_704ILR.MontoInvalido:
+                case PagoResult_704ILR.MontoInvalido_704ILR:
                     Aviso_704ILR(T_704ILR("MSG_PAGO_MONTO", "Ingrese un monto valido.")); return;
-                case PagoResult_704ILR.MetodoInvalido:
+                case PagoResult_704ILR.MetodoInvalido_704ILR:
                     Aviso_704ILR(T_704ILR("MSG_PAGO_METODO", "Seleccione un metodo de pago.")); return;
-                case PagoResult_704ILR.ExcedeSaldo:
+                case PagoResult_704ILR.ExcedeSaldo_704ILR:
                     Aviso_704ILR(T_704ILR("MSG_PAGO_EXCEDE", "El pago supera el saldo pendiente.")); return;
-                case PagoResult_704ILR.ReservaInvalida:
+                case PagoResult_704ILR.ReservaInvalida_704ILR:
                     Aviso_704ILR(T_704ILR("MSG_PAGO_RESERVA", "Reserva invalida.")); return;
-                case PagoResult_704ILR.ReservaCancelada:
+                case PagoResult_704ILR.ReservaCancelada_704ILR:
                     Aviso_704ILR(T_704ILR("MSG_RES_NO_MODIFICABLE", "La reserva esta cancelada: no admite modificaciones.")); return;
             }
             _numMonto_704ILR.Value = 0;
@@ -154,7 +154,17 @@ namespace EvenTech.UI
                 "EvenTech", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
             if (confirma_704ILR != DialogResult.Yes) return;
 
-            BLL_Pago_704ILR.Eliminar_704ILR(pagoId_704ILR, _reservaId_704ILR);
+            var anul_704ILR = BLL_Pago_704ILR.Eliminar_704ILR(pagoId_704ILR, _reservaId_704ILR);
+            switch (anul_704ILR)
+            {
+                case PagoResult_704ILR.ReservaCancelada_704ILR:
+                    Aviso_704ILR(T_704ILR("MSG_RES_NO_MODIFICABLE", "La reserva esta cancelada: no admite modificaciones.")); return;
+                case PagoResult_704ILR.PagoInvalido_704ILR:
+                case PagoResult_704ILR.ReservaInvalida_704ILR:
+                    Aviso_704ILR(T_704ILR("MSG_PAGO_NO_ANULABLE", "El pago ya no existe o no pertenece a esta reserva."));
+                    Refrescar_704ILR();
+                    return;
+            }
             Refrescar_704ILR();
         }
 

@@ -121,18 +121,24 @@ namespace EvenTech.UI
             Refrescar_704ILR();
         }
 
+        // Se quita el item POR REFERENCIA, no por posicion: la grilla se puede reordenar
+        // haciendo clic en un encabezado y entonces el indice visual deja de coincidir
+        // con el de la lista, con lo que se borraba un servicio distinto del elegido.
         private void Quitar_704ILR()
         {
-            if (_grid_704ILR.CurrentRow == null) return;
-            int idx_704ILR = _grid_704ILR.CurrentRow.Index;
-            if (idx_704ILR >= 0 && idx_704ILR < Items_704ILR.Count) { Items_704ILR.RemoveAt(idx_704ILR); Refrescar_704ILR(); }
+            if (_grid_704ILR.CurrentRow?.Tag is BE_ReservaServicio_704ILR it_704ILR &&
+                Items_704ILR.Remove(it_704ILR))
+                Refrescar_704ILR();
         }
 
         private void Refrescar_704ILR()
         {
             _grid_704ILR.Rows.Clear();
             foreach (var it_704ILR in Items_704ILR)
-                _grid_704ILR.Rows.Add(it_704ILR.ServicioNombre_704ILR, it_704ILR.Cantidad_704ILR, it_704ILR.PrecioUnitario_704ILR, it_704ILR.Subtotal_704ILR);
+            {
+                int i_704ILR = _grid_704ILR.Rows.Add(it_704ILR.ServicioNombre_704ILR, it_704ILR.Cantidad_704ILR, it_704ILR.PrecioUnitario_704ILR, it_704ILR.Subtotal_704ILR);
+                _grid_704ILR.Rows[i_704ILR].Tag = it_704ILR;
+            }
             _lblTotal_704ILR.Text = T_704ILR("LBL_TOTAL", "Total") + ": " + Items_704ILR.Sum(i_704ILR => i_704ILR.Subtotal_704ILR).ToString("N2");
         }
 

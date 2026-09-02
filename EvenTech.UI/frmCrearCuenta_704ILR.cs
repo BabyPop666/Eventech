@@ -155,17 +155,17 @@ namespace EvenTech.UI
                 var r_704ILR = BLL_User_704ILR.CreateUser_704ILR(user_704ILR, hash_704ILR);
                 switch (r_704ILR)
                 {
-                    case CreateUserResult_704ILR.Success:
+                    case CreateUserResult_704ILR.Success_704ILR:
                         SetStatus_704ILR(T_704ILR("CC_MSG_OK", "Usuario creado. Ya podes iniciar sesion."), error_704ILR: false);
                         _txtUser_704ILR.Clear();
                         break;
-                    case CreateUserResult_704ILR.InvalidUsername:
+                    case CreateUserResult_704ILR.InvalidUsername_704ILR:
                         SetStatus_704ILR(T_704ILR("CC_MSG_USER_INVALIDO", "Usuario invalido (3-50, letras/numeros/._-)."), error_704ILR: true);
                         break;
-                    case CreateUserResult_704ILR.UsernameAlreadyExists:
+                    case CreateUserResult_704ILR.UsernameAlreadyExists_704ILR:
                         SetStatus_704ILR(T_704ILR("CC_MSG_USER_EXISTE", "Ese usuario ya existe."), error_704ILR: true);
                         break;
-                    case CreateUserResult_704ILR.InvalidPassword:
+                    case CreateUserResult_704ILR.InvalidPassword_704ILR:
                         SetStatus_704ILR(T_704ILR("CC_MSG_PASS_INVALIDA", "Contraseña invalida."), error_704ILR: true);
                         break;
                 }

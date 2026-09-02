@@ -5,7 +5,7 @@ using EvenTech.DAL;
 
 namespace EvenTech.BLL
 {
-    public enum PerfilResult_704ILR { Success, NombreInvalido, NombreDuplicado, ReferenciaCircular }
+    public enum PerfilResult_704ILR { Success_704ILR, NombreInvalido_704ILR, NombreDuplicado_704ILR, ReferenciaCircular_704ILR }
 
     // Logica de negocio de perfiles y arbol de permisos (Composite).
     public static class BLL_Perfil_704ILR
@@ -19,14 +19,14 @@ namespace EvenTech.BLL
         {
             nuevoId_704ILR = 0;
             if (string.IsNullOrWhiteSpace(nombre_704ILR) || nombre_704ILR.Trim().Length > 80)
-                return PerfilResult_704ILR.NombreInvalido;
+                return PerfilResult_704ILR.NombreInvalido_704ILR;
             nombre_704ILR = nombre_704ILR.Trim();
             if (DAL_Perfil_704ILR.ExistsNombre_704ILR(nombre_704ILR))
-                return PerfilResult_704ILR.NombreDuplicado;
+                return PerfilResult_704ILR.NombreDuplicado_704ILR;
 
             nuevoId_704ILR = DAL_Perfil_704ILR.Insert_704ILR(nombre_704ILR, string.IsNullOrWhiteSpace(descripcion_704ILR) ? null : descripcion_704ILR.Trim());
             BLL_Bitacora_704ILR.Registrar_704ILR("Perfiles", "Alta de perfil", CriticidadBitacora_704ILR.Info, $"Perfil '{nombre_704ILR}' creado");
-            return PerfilResult_704ILR.Success;
+            return PerfilResult_704ILR.Success_704ILR;
         }
 
         public static HashSet<int> GetPermisosAsignados_704ILR(int perfilId_704ILR) => DAL_Perfil_704ILR.GetPermisoIds_704ILR(perfilId_704ILR);
@@ -47,12 +47,12 @@ namespace EvenTech.BLL
             IEnumerable<int> perfilesIncluidos_704ILR)
         {
             var incluidos_704ILR = (perfilesIncluidos_704ILR ?? Enumerable.Empty<int>()).Distinct().ToList();
-            if (GeneraCiclo_704ILR(perfilId_704ILR, incluidos_704ILR)) return PerfilResult_704ILR.ReferenciaCircular;
+            if (GeneraCiclo_704ILR(perfilId_704ILR, incluidos_704ILR)) return PerfilResult_704ILR.ReferenciaCircular_704ILR;
 
             DAL_Perfil_704ILR.SetComposicion_704ILR(perfilId_704ILR, permisoIds_704ILR ?? Enumerable.Empty<int>(), incluidos_704ILR);
             BLL_Bitacora_704ILR.Registrar_704ILR("Perfiles", "Actualizacion de permisos", CriticidadBitacora_704ILR.Info,
                 $"Se actualizo la composicion del perfil #{perfilId_704ILR} ({incluidos_704ILR.Count} perfil(es) incluido(s))");
-            return PerfilResult_704ILR.Success;
+            return PerfilResult_704ILR.Success_704ILR;
         }
 
         // El grafo de inclusiones no admite ciclos: un perfil no puede contenerse

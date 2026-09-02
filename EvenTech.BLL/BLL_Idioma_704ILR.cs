@@ -8,10 +8,10 @@ namespace EvenTech.BLL
 {
     public enum IdiomaResult_704ILR
     {
-        Success,
-        CodigoInvalido,
-        NombreInvalido,
-        CodigoDuplicado
+        Success_704ILR,
+        CodigoInvalido_704ILR,
+        NombreInvalido_704ILR,
+        CodigoDuplicado_704ILR
     }
 
     // Orquesta la carga de idiomas/traducciones desde la base hacia el
@@ -42,13 +42,13 @@ namespace EvenTech.BLL
         {
             nuevoId_704ILR = 0;
             if (string.IsNullOrWhiteSpace(codigo_704ILR) || codigo_704ILR.Trim().Length > 5)
-                return IdiomaResult_704ILR.CodigoInvalido;
+                return IdiomaResult_704ILR.CodigoInvalido_704ILR;
             if (string.IsNullOrWhiteSpace(nombre_704ILR))
-                return IdiomaResult_704ILR.NombreInvalido;
+                return IdiomaResult_704ILR.NombreInvalido_704ILR;
 
             codigo_704ILR = codigo_704ILR.Trim().ToUpperInvariant();
             if (DAL_Idioma_704ILR.ExistsCodigo_704ILR(codigo_704ILR))
-                return IdiomaResult_704ILR.CodigoDuplicado;
+                return IdiomaResult_704ILR.CodigoDuplicado_704ILR;
 
             nuevoId_704ILR = DAL_Idioma_704ILR.InsertIdioma_704ILR(codigo_704ILR, nombre_704ILR.Trim());
 
@@ -64,7 +64,7 @@ namespace EvenTech.BLL
             Inicializar_704ILR();
             BLL_Bitacora_704ILR.Registrar_704ILR("Idiomas", "Alta de idioma", CriticidadBitacora_704ILR.Info,
                 $"Idioma '{nombre_704ILR}' ({codigo_704ILR}) creado");
-            return IdiomaResult_704ILR.Success;
+            return IdiomaResult_704ILR.Success_704ILR;
         }
 
         // Guarda los textos editados de un idioma y recarga el gestor en caliente.

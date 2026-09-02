@@ -87,25 +87,49 @@ namespace EvenTech.UI
         private void BuildUi_704ILR()
         {
             Text = "EvenTech";
-            ClientSize = new Size(1040, 680);
+            // Tamano por defecto acorde a la resolucion minima declarada en G05
+            // (1366x768): con 1040x680 el area de trabajo quedaba en 760x550 y la
+            // seccion de reservas no entraba (encabezados cortados y campos de la
+            // ficha fuera de vista). La ventana ademas se puede maximizar y
+            // redimensionar, asi que en pantallas mas grandes aprovecha el espacio.
+            ClientSize = new Size(1355, 715);
             BackColor = Theme_704ILR.BgContent_704ILR;
-            MinimumSize = new Size(900, 600);
+            MinimumSize = new Size(1100, 680);
+            Redimensionable_704ILR = true;
 
             // ---------------- Sidebar ----------------
             var pnlMenu_704ILR = new Panel { Dock = DockStyle.Left, Width = 232, BackColor = Theme_704ILR.BgSidebar_704ILR };
 
             var pnlLogo_704ILR = new Panel { Dock = DockStyle.Top, Height = 96, BackColor = Theme_704ILR.BgSidebar_704ILR };
             EnableDrag_704ILR(pnlLogo_704ILR);
-            var lblLogo_704ILR = new Label
+            // Isologotipo del sistema en el extremo superior izquierdo, visible desde
+            // cualquier seccion (G05). Si el recurso no estuviera disponible se cae al
+            // rotulo de texto, de modo que la pantalla nunca queda sin identidad.
+            Control lblLogo_704ILR;
+            if (Theme_704ILR.Logo_704ILR != null)
             {
-                Text = "EvenTech",
-                Font = Theme_704ILR.FontH1_704ILR,
-                ForeColor = Theme_704ILR.Accent_704ILR,
-                Dock = DockStyle.Top,
-                Height = 52,
-                TextAlign = ContentAlignment.MiddleCenter,
-                BackColor = Color.Transparent
-            };
+                lblLogo_704ILR = new PictureBox
+                {
+                    Image = Theme_704ILR.Logo_704ILR,
+                    SizeMode = PictureBoxSizeMode.Zoom,
+                    Dock = DockStyle.Top,
+                    Height = 62,
+                    BackColor = Color.Transparent
+                };
+            }
+            else
+            {
+                lblLogo_704ILR = new Label
+                {
+                    Text = "EvenTech",
+                    Font = Theme_704ILR.FontH1_704ILR,
+                    ForeColor = Theme_704ILR.Accent_704ILR,
+                    Dock = DockStyle.Top,
+                    Height = 52,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    BackColor = Color.Transparent
+                };
+            }
             EnableDrag_704ILR(lblLogo_704ILR);
             _lblWelcome_704ILR = new Label
             {
@@ -147,12 +171,12 @@ namespace EvenTech.UI
             var topGrid_704ILR = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 4,
+                ColumnCount = 5,
                 RowCount = 1,
                 BackColor = Color.Transparent
             };
             topGrid_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); // titulo
-            for (int i_704ILR = 0; i_704ILR < 3; i_704ILR++) topGrid_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            for (int i_704ILR = 0; i_704ILR < 4; i_704ILR++) topGrid_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             topGrid_704ILR.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             EnableDrag_704ILR(topGrid_704ILR);
 
@@ -177,6 +201,12 @@ namespace EvenTech.UI
             var btnMin_704ILR = WindowButton_704ILR(Theme_704ILR.IcoMinimize_704ILR, (s_704ILR, e_704ILR) => WindowState = FormWindowState.Minimized);
             btnMin_704ILR.Dock = DockStyle.Fill;
             btnMin_704ILR.Margin = new Padding(0);
+            var btnMax_704ILR = WindowButton_704ILR(Theme_704ILR.IcoMaximize_704ILR, (s_704ILR, e_704ILR) =>
+                WindowState = WindowState == FormWindowState.Maximized
+                    ? FormWindowState.Normal
+                    : FormWindowState.Maximized);
+            btnMax_704ILR.Dock = DockStyle.Fill;
+            btnMax_704ILR.Margin = new Padding(0);
             var btnClose_704ILR = WindowButton_704ILR(Theme_704ILR.IcoClose_704ILR, (s_704ILR, e_704ILR) => Close(), danger_704ILR: true);
             btnClose_704ILR.Dock = DockStyle.Fill;
             btnClose_704ILR.Margin = new Padding(0);
@@ -184,7 +214,8 @@ namespace EvenTech.UI
             topGrid_704ILR.Controls.Add(_lblPageTitle_704ILR, 0, 0);
             topGrid_704ILR.Controls.Add(_btnLogout_704ILR, 1, 0);
             topGrid_704ILR.Controls.Add(btnMin_704ILR, 2, 0);
-            topGrid_704ILR.Controls.Add(btnClose_704ILR, 3, 0);
+            topGrid_704ILR.Controls.Add(btnMax_704ILR, 3, 0);
+            topGrid_704ILR.Controls.Add(btnClose_704ILR, 4, 0);
             pnlTop_704ILR.Controls.Add(topGrid_704ILR);
 
             // ---------------- Pie (footer) con selector de idioma a la derecha ----------------

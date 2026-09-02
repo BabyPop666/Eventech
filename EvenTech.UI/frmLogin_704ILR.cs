@@ -117,15 +117,31 @@ namespace EvenTech.UI
                     ? new RowStyle(SizeType.Percent, 100)
                     : new RowStyle(SizeType.Absolute, heights_704ILR[i_704ILR]));
 
-            var lblLogo_704ILR = new Label
+            // El isologotipo encabeza la pantalla de acceso (G05). Sin el recurso, el
+            // rotulo de texto cumple la misma funcion.
+            Control lblLogo_704ILR;
+            if (Theme_704ILR.Logo_704ILR != null)
             {
-                Text = "EvenTech",
-                Font = Theme_704ILR.FontDisplay_704ILR,
-                ForeColor = Theme_704ILR.Accent_704ILR,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleCenter,
-                BackColor = Color.Transparent
-            };
+                lblLogo_704ILR = new PictureBox
+                {
+                    Image = Theme_704ILR.Logo_704ILR,
+                    SizeMode = PictureBoxSizeMode.Zoom,
+                    Dock = DockStyle.Fill,
+                    BackColor = Color.Transparent
+                };
+            }
+            else
+            {
+                lblLogo_704ILR = new Label
+                {
+                    Text = "EvenTech",
+                    Font = Theme_704ILR.FontDisplay_704ILR,
+                    ForeColor = Theme_704ILR.Accent_704ILR,
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    BackColor = Color.Transparent
+                };
+            }
             _lblTagline_704ILR = new Label
             {
                 Font = Theme_704ILR.FontSmall_704ILR,
@@ -214,7 +230,7 @@ namespace EvenTech.UI
 
             switch (resp_704ILR.Result_704ILR)
             {
-                case LoginResult_704ILR.Success:
+                case LoginResult_704ILR.Success_704ILR:
                     LoginPrefs_704ILR.Save_704ILR(_chkRemember_704ILR.Checked, username_704ILR);
                     Hide();
                     using (var main_704ILR = new frmMain_704ILR()) main_704ILR.ShowDialog();
@@ -224,18 +240,18 @@ namespace EvenTech.UI
                     _txtUser_704ILR.Focus();
                     Show();
                     break;
-                case LoginResult_704ILR.UserNotFound:
+                case LoginResult_704ILR.UserNotFound_704ILR:
                     SetError_704ILR(T_704ILR("LOGIN_ERR_USUARIO", "Usuario no encontrado."));
                     break;
-                case LoginResult_704ILR.IncorrectPassword:
+                case LoginResult_704ILR.IncorrectPassword_704ILR:
                     // Muestra el intento actual: "Contraseña incorrecta. Intento 2 de 3."
                     SetError_704ILR(T_704ILR("LOGIN_ERR_PASS", "Contraseña incorrecta.") + " " +
                              string.Format(T_704ILR("LOGIN_INTENTOS", "Intento {0} de {1}."), resp_704ILR.FailedAttempts_704ILR, resp_704ILR.MaxAttempts_704ILR));
                     break;
-                case LoginResult_704ILR.UserBlocked:
+                case LoginResult_704ILR.UserBlocked_704ILR:
                     SetError_704ILR(T_704ILR("LOGIN_BLOQUEADA", "Cuenta bloqueada. Contactate con un administrador."));
                     break;
-                case LoginResult_704ILR.AccountInactive:
+                case LoginResult_704ILR.AccountInactive_704ILR:
                     SetError_704ILR(T_704ILR("LOGIN_INACTIVA", "La cuenta esta inactiva. Contactate con un administrador."));
                     break;
             }
