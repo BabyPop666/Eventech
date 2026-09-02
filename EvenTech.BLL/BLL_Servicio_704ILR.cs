@@ -44,10 +44,21 @@ namespace EvenTech.BLL
             return ServicioResult_704ILR.Success_704ILR;
         }
 
+        // Anchos de dbo.Servicios. La capa de datos manda los parametros con ese
+        // tamano fijo, de modo que un texto mas largo se guardaria recortado sin aviso:
+        // la regla se hace explicita aca (nombre demasiado largo = nombre invalido) y
+        // la descripcion —dato accesorio— se recorta a lo que entra.
+        private const int MaxNombre_704ILR = 80;
+        private const int MaxDescripcion_704ILR = 250;
+
         private static ServicioResult_704ILR Validar_704ILR(BE_Servicio_704ILR s_704ILR, int idActual_704ILR)
         {
             if (s_704ILR == null || string.IsNullOrWhiteSpace(s_704ILR.Nombre_704ILR))
                 return ServicioResult_704ILR.NombreInvalido_704ILR;
+            if (s_704ILR.Nombre_704ILR.Trim().Length > MaxNombre_704ILR)
+                return ServicioResult_704ILR.NombreInvalido_704ILR;
+            if (s_704ILR.Descripcion_704ILR != null && s_704ILR.Descripcion_704ILR.Trim().Length > MaxDescripcion_704ILR)
+                s_704ILR.Descripcion_704ILR = s_704ILR.Descripcion_704ILR.Trim().Substring(0, MaxDescripcion_704ILR);
             if (s_704ILR.Precio_704ILR < 0)
                 return ServicioResult_704ILR.PrecioInvalido_704ILR;
             if (DAL_Servicio_704ILR.ExistsNombre_704ILR(s_704ILR.Nombre_704ILR.Trim(), idActual_704ILR))

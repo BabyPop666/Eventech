@@ -41,10 +41,12 @@ namespace EvenTech.UI
             else if (pagado_704ILR > 0) { estadoPago_704ILR = T_704ILR("CMP_EST_PARCIAL", "Pago parcial"); estadoColor_704ILR = Gold_704ILR; }
             else { estadoPago_704ILR = T_704ILR("CMP_EST_PENDIENTE", "Pendiente"); estadoColor_704ILR = Muted_704ILR; }
 
-            // El documento correspondiente al estado (Proceso 1, paso 6): una
-            // cotizacion emite un presupuesto (sin compromiso del salon); una
-            // reserva emite el comprobante propiamente dicho.
-            bool esPresupuesto_704ILR = reserva_704ILR.Estado_704ILR == EstadoReserva_704ILR.COTIZACION;
+            // El documento correspondiente al estado (Proceso 1, paso 6): el
+            // comprobante es el de una reserva CONFIRMADA, que es la unica que
+            // compromete el salon (RN-03). Mientras la operacion sigue abierta
+            // —COTIZACION o PENDIENTE— lo que se emite es un presupuesto, sin
+            // compromiso, tal como lo describe el proceso de negocio.
+            bool esPresupuesto_704ILR = reserva_704ILR.Estado_704ILR != EstadoReserva_704ILR.CONFIRMADA;
             string docTitulo_704ILR = esPresupuesto_704ILR
                 ? T_704ILR("CMP_TITULO_PRESUPUESTO", "Presupuesto")
                 : T_704ILR("CMP_TITULO", "Comprobante de Reserva");

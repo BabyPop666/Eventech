@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection;
 using EvenTech.BE;
 using EvenTech.DAL;
@@ -60,11 +61,16 @@ namespace EvenTech.BLL
         public static List<BE_CambioEntry_704ILR> GetHistorial_704ILR(string entidad_704ILR, int entidadId_704ILR)
             => DAL_HistorialCambios_704ILR.GetByEntidad_704ILR(entidad_704ILR, entidadId_704ILR);
 
+        // El valor formateado SE PERSISTE en HistorialCambios, asi que se escribe con
+        // cultura invariante: si dependiera de la configuracion de la estacion, la
+        // misma reserva quedaria historiada con "77000,00" o "77000.00" segun donde se
+        // haya editado. Es el mismo criterio con el que se arma el digito verificador.
+        // El formato para PANTALLA se resuelve aparte, en las grillas.
         private static string Formatear_704ILR(object valor_704ILR)
         {
             if (valor_704ILR == null) return null;
-            if (valor_704ILR is DateTime dt_704ILR) return dt_704ILR.ToString("yyyy-MM-dd HH:mm");
-            if (valor_704ILR is decimal dec_704ILR) return dec_704ILR.ToString("0.00");
+            if (valor_704ILR is DateTime dt_704ILR) return dt_704ILR.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+            if (valor_704ILR is decimal dec_704ILR) return dec_704ILR.ToString("0.00", CultureInfo.InvariantCulture);
             return valor_704ILR.ToString();
         }
 

@@ -18,7 +18,11 @@ namespace EvenTech.Services
     public static class ConfiguracionConexion_704ILR
     {
         // Instancia y base esperadas en una instalacion estandar.
-        public const string ServidorPorDefecto_704ILR = ".";
+        // SQL Server Express es el motor que declara el README y su instancia se
+        // llama SQLEXPRESS: apuntar ahi de fabrica hace que el sistema conecte al
+        // primer arranque en una instalacion limpia. Si no responde, la aplicacion
+        // igual prueba las otras instancias habituales y ofrece configurarla.
+        public const string ServidorPorDefecto_704ILR = @"localhost\SQLEXPRESS";
         public const string BaseDatosPorDefecto_704ILR = "EvenTechDB";
 
         public static string PorDefecto_704ILR => Construir_704ILR(ServidorPorDefecto_704ILR, BaseDatosPorDefecto_704ILR);
@@ -115,6 +119,13 @@ namespace EvenTech.Services
             }
             catch (IOException)
             {
+                return null;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Permisos denegados sobre el archivo (no deriva de IOException). El
+                // proposito de esta clase es ofrecer configurar la conexion, no abortar
+                // el arranque: se cae a la cadena de fabrica como en los demas casos.
                 return null;
             }
         }

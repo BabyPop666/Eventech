@@ -38,8 +38,8 @@ namespace EvenTech.BLL
         // RN-01 — Vigencia de la operacion.
         // Una COTIZACION vale DiasValidezCotizacion dias desde su emision; una
         // reserva PENDIENTE vale HorasValidezPendiente horas desde que quedo en
-        // ese estado. Vencido el plazo la operacion no puede confirmarse: hay que
-        // renovarla. CONFIRMADA y CANCELADA no tienen plazo (VenceEl queda null).
+        // ese estado. Vencido el plazo la operacion no puede AVANZAR DE ESTADO: hay
+        // que renovarla. CONFIRMADA y CANCELADA no tienen plazo (VenceEl queda null).
         public const int DiasValidezCotizacion_704ILR = 15;
         public const int HorasValidezPendiente_704ILR = 72;
 
@@ -90,11 +90,14 @@ namespace EvenTech.BLL
         // todavia esta armando la propuesta y puede cambiar de salon o de cantidad.
         // La funcion responde para cualquier estado; quien decide CUANDO exigirla (y
         // que el dato no falte al confirmar) es Validar_704ILR.
+        // Un salon sin capacidad cargada (0) NO alcanza: es el mismo criterio con el
+        // que responde la consulta de disponibilidad, y comprometer el salon sin saber
+        // a cuanta gente aloja es justo lo que la regla evita.
         public static bool CapacidadSuficiente_704ILR(int salonId_704ILR, int cantidadInvitados_704ILR)
         {
             if (cantidadInvitados_704ILR <= 0) return true;   // sin dato no hay nada que comparar
             int capacidad_704ILR = DAL_Salon_704ILR.Capacidad_704ILR(salonId_704ILR);
-            return capacidad_704ILR <= 0 || cantidadInvitados_704ILR <= capacidad_704ILR;
+            return capacidad_704ILR > 0 && cantidadInvitados_704ILR <= capacidad_704ILR;
         }
 
         // RN-07 — Adelanto para confirmar.
@@ -147,7 +150,8 @@ namespace EvenTech.BLL
             }
             else
             {
-                retenido_704ILR = decimal.Round(pagado_704ILR * PorcentajeRetencion_704ILR / 100m, 2);
+                retenido_704ILR = decimal.Round(pagado_704ILR * PorcentajeRetencion_704ILR / 100m, 2,
+                    MidpointRounding.AwayFromZero);   // redondeo comercial sobre importes
                 reembolsable_704ILR = pagado_704ILR - retenido_704ILR;
             }
         }
@@ -229,7 +233,11 @@ namespace EvenTech.BLL
             }
 
             var validacion_704ILR = Validar_704ILR(reserva_704ILR);
-            if (validacion_704ILR != ReservaResult_704ILR.Success_704ILR) return validacion_704ILR;
+            if (validacion_704ILR != ReservaResult_704ILR.Success_704ILR)
+            {
+                AsentarRechazoDeRegla_704ILR(reserva_704ILR.Id_704ILR, validacion_704ILR, "Alta rechazada");
+                return validacion_704ILR;
+            }
 
             // RN-01: la vigencia se fija al dar de alta, segun el estado inicial.
             reserva_704ILR.VenceEl_704ILR =
@@ -254,8 +262,16 @@ namespace EvenTech.BLL
             // commit y, si fallara, se vuelve a calcular en el proximo arranque.
             BLL_Integridad_704ILR.RecalcularDVVerticalReservas_704ILR();
 
-            BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Alta de reserva", CriticidadBitacora_704ILR.Info,
-                $"Reserva #{nuevoId_704ILR} - cliente #{reserva_704ILR.ClienteId_704ILR}, monto {reserva_704ILR.Monto_704ILR:0.00}");
+            // El asiento nombra el documento que se emitio: una cotizacion y una
+            // reserva pendiente son operaciones distintas para el negocio, y el estado
+            // inicial es lo unico que las separa en el alta (RN-07).
+            BLL_Bitacora_704ILR.Registrar_704ILR("Reservas",
+                reserva_704ILR.Estado_704ILR == EstadoReserva_704ILR.COTIZACION
+                    ? "Cotizacion generada"
+                    : "Reserva generada",
+                CriticidadBitacora_704ILR.Info,
+                $"Reserva #{nuevoId_704ILR} - cliente #{reserva_704ILR.ClienteId_704ILR}, " +
+                $"estado {reserva_704ILR.Estado_704ILR}, monto {reserva_704ILR.Monto_704ILR:0.00}");
             return ReservaResult_704ILR.Success_704ILR;
         }
 
@@ -310,21 +326,32 @@ namespace EvenTech.BLL
                 return ReservaResult_704ILR.TransicionInvalida_704ILR;
             }
 
-            // RN-01: no se puede confirmar una cotizacion o pendiente cuyo plazo expiro.
-            // Se evalua sobre lo PERSISTIDO: el formulario no puede saltear el vencimiento.
-            if (reserva_704ILR.Estado_704ILR == EstadoReserva_704ILR.CONFIRMADA &&
-                antes_704ILR.Estado_704ILR != EstadoReserva_704ILR.CONFIRMADA &&
+            // RN-01: una operacion vencida no AVANZA de estado hasta que se renueve su
+            // vigencia. El control cubre cualquier cambio de estado y no solo el paso a
+            // CONFIRMADA: si solo mirara la confirmacion, el vencimiento se eludiria en
+            // dos pasos (una cotizacion vencida pasa a PENDIENTE, lo que le da plazo
+            // nuevo, y desde ahi se confirma sin renovar y sin dejar asiento).
+            // Se evalua sobre lo PERSISTIDO: el formulario no puede saltear el
+            // vencimiento. Conservar el mismo estado sigue permitido (se puede seguir
+            // editando una cotizacion vencida); la baja va por Cancelar, que se rechaza
+            // antes y no llega hasta aca.
+            if (reserva_704ILR.Estado_704ILR != antes_704ILR.Estado_704ILR &&
                 antes_704ILR.EstaVencida_704ILR)
             {
-                BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Confirmacion rechazada",
+                BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Cambio de estado rechazado",
                     CriticidadBitacora_704ILR.Advertencia,
                     $"Reserva #{reserva_704ILR.Id_704ILR} vencida el " +
-                    $"{antes_704ILR.VenceEl_704ILR:yyyy-MM-dd HH:mm}: hay que renovarla (RN-01).");
+                    $"{antes_704ILR.VenceEl_704ILR:yyyy-MM-dd HH:mm}: no puede pasar a " +
+                    $"{reserva_704ILR.Estado_704ILR} hasta renovarla (RN-01).");
                 return ReservaResult_704ILR.Vencida_704ILR;
             }
 
             var validacion_704ILR = Validar_704ILR(reserva_704ILR);
-            if (validacion_704ILR != ReservaResult_704ILR.Success_704ILR) return validacion_704ILR;
+            if (validacion_704ILR != ReservaResult_704ILR.Success_704ILR)
+            {
+                AsentarRechazoDeRegla_704ILR(reserva_704ILR.Id_704ILR, validacion_704ILR, "Modificacion rechazada");
+                return validacion_704ILR;
+            }
 
             // RN-04: el total de la reserva es el tope de la cobranza. Una edicion que
             // lo achique por debajo de lo ya cobrado (por ejemplo, quitando servicios)
@@ -513,6 +540,27 @@ namespace EvenTech.BLL
             BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Restauracion de version", CriticidadBitacora_704ILR.Info,
                 $"Reserva #{reservaId_704ILR} restaurada a la version #{mementoId_704ILR} ({cambios_704ILR} campo(s) repuestos)");
             return ReservaResult_704ILR.Success_704ILR;
+        }
+
+        // Criterio de auditoria de los rechazos de Validar_704ILR: se asientan los que
+        // son REGLA DE NEGOCIO (RN-03 salon comprometido, RN-06 capacidad), porque
+        // describen un conflicto real de la operacion y son informacion de gestion.
+        // Los errores de tipeo (cliente o salon inexistente, fecha pasada, monto o
+        // invitados negativos) se corrigen en pantalla y no dejan asiento: serian ruido.
+        private static void AsentarRechazoDeRegla_704ILR(int reservaId_704ILR,
+            ReservaResult_704ILR motivo_704ILR, string accion_704ILR)
+        {
+            string regla_704ILR;
+            if (motivo_704ILR == ReservaResult_704ILR.SalonOcupado_704ILR)
+                regla_704ILR = "el salon ya tiene una reserva confirmada para esa fecha (RN-03)";
+            else if (motivo_704ILR == ReservaResult_704ILR.CapacidadInsuficiente_704ILR)
+                regla_704ILR = "el salon no aloja a los invitados estimados (RN-06)";
+            else
+                return;
+
+            string referencia_704ILR = reservaId_704ILR > 0 ? "Reserva #" + reservaId_704ILR : "Reserva nueva";
+            BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", accion_704ILR,
+                CriticidadBitacora_704ILR.Advertencia, $"{referencia_704ILR}: {regla_704ILR}.");
         }
 
         private static ReservaResult_704ILR Validar_704ILR(BE_Reserva_704ILR reserva_704ILR, bool permitirFechaPasada_704ILR = false)

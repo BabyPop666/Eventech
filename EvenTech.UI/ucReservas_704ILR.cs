@@ -22,6 +22,9 @@ namespace EvenTech.UI
         private DateTimePicker _dtFecha_704ILR;
         private AppButton_704ILR _btnNuevo_704ILR, _btnDisponibilidad_704ILR, _btnGuardar_704ILR, _btnHistorial_704ILR, _btnNuevoCliente_704ILR, _btnServicios_704ILR, _btnPagos_704ILR, _btnComprobante_704ILR, _btnEmail_704ILR, _btnVersiones_704ILR;
         private List<BE_ReservaServicio_704ILR> _serviciosReserva_704ILR = new List<BE_ReservaServicio_704ILR>();
+        // El alta rapida de cliente es un boton de icono, sin rotulo: el ToolTip es lo
+        // que le pone nombre en pantalla ("Nuevo cliente", CUN002 paso 1).
+        private readonly ToolTip _tip_704ILR = new ToolTip();
 
         private int _editId_704ILR; // 0 = alta, >0 = edicion
 
@@ -231,6 +234,7 @@ namespace EvenTech.UI
             _btnNuevoCliente_704ILR.Margin = new Padding(0);
             _btnNuevoCliente_704ILR.Click += (s_704ILR, e_704ILR) => NuevoCliente_704ILR();
             _btnNuevoCliente_704ILR.Enabled = Permisos_704ILR.Tiene_704ILR("CLIENTES_GESTION");
+            _tip_704ILR.SetToolTip(_btnNuevoCliente_704ILR, Tr_704ILR.T_704ILR("CLI_NUEVO"));
             var clientePanel_704ILR = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.Transparent, Margin = new Padding(0) };
             clientePanel_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             clientePanel_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 36));
@@ -389,6 +393,9 @@ namespace EvenTech.UI
                 _grid_704ILR.Columns["cEstado"].HeaderText  = Tr_704ILR.T_704ILR("COL_ESTADO");
                 _grid_704ILR.Columns["cMonto"].HeaderText   = Tr_704ILR.T_704ILR("COL_MONTO");
             }
+            // El ToolTip no lleva Tag: se re-traduce a mano como los encabezados.
+            if (_btnNuevoCliente_704ILR != null)
+                _tip_704ILR.SetToolTip(_btnNuevoCliente_704ILR, Tr_704ILR.T_704ILR("CLI_NUEVO"));
             // Re-traduce los valores de Estado (grilla por celda, combo por display).
             _grid_704ILR.Invalidate();
             _cboEstado_704ILR.Invalidate();
@@ -521,6 +528,9 @@ namespace EvenTech.UI
         // desactivan Guardar y Pagos. Los pagos importan aparte porque persisten en el
         // acto (no esperan a Guardar), asi que sin bloquearlos se podria seguir moviendo
         // el saldo de una reserva cancelada.
+        // Comprobante y Email tambien se apagan: el documento que emiten dice
+        // "Comprobante de Reserva" y agradece la contratacion, de modo que sobre una
+        // reserva dada de baja afirmaria algo que ya no es cierto (PN1).
         // Versiones queda HABILITADO: consultar el historial de versiones no es
         // modificar, y la RN-05 prohibe restaurar, no mirar. La restauracion en si la
         // rechaza la BLL (RestaurarVersion_704ILR devuelve NoModificable).
@@ -529,6 +539,8 @@ namespace EvenTech.UI
             bool editable_704ILR = BLL_Reserva_704ILR.PuedeModificar_704ILR(r_704ILR);
             _btnGuardar_704ILR.Enabled = editable_704ILR;
             _btnPagos_704ILR.Enabled = editable_704ILR;
+            _btnComprobante_704ILR.Enabled = editable_704ILR;
+            _btnEmail_704ILR.Enabled = editable_704ILR;
             if (!editable_704ILR)
                 ShowError_704ILR(T_704ILR("MSG_RES_NO_MODIFICABLE", "La reserva esta cancelada: no admite modificaciones."));
             else
@@ -557,6 +569,8 @@ namespace EvenTech.UI
             ActualizarMonto_704ILR();
             _btnGuardar_704ILR.Enabled = true;
             _btnPagos_704ILR.Enabled = true;
+            _btnComprobante_704ILR.Enabled = true;
+            _btnEmail_704ILR.Enabled = true;
             _lblError_704ILR.Visible = false;
         }
 
@@ -585,20 +599,30 @@ namespace EvenTech.UI
         // Refleja el total (suma de servicios) en el campo Monto y el conteo en el boton.
         private void ActualizarMonto_704ILR()
         {
-            _txtMonto_704ILR.Text = BLL_ReservaServicio_704ILR.Total_704ILR(_serviciosReserva_704ILR).ToString("0.##");
+            // "N2" es el mismo formato con el que la grilla muestra la columna Monto:
+            // el total no puede verse de dos maneras distintas en la misma pantalla.
+            _txtMonto_704ILR.Text = BLL_ReservaServicio_704ILR.Total_704ILR(_serviciosReserva_704ILR).ToString("N2");
             if (_btnServicios_704ILR != null)
                 _btnServicios_704ILR.Text = Tr_704ILR.T_704ILR("MENU_SERVICIOS") + " (" + _serviciosReserva_704ILR.Count + ")";
         }
 
         private void EditarServicios_704ILR()
         {
-            using (var dlg_704ILR = new frmReservaServicios_704ILR(_serviciosReserva_704ILR, BLL_Servicio_704ILR.GetActivos_704ILR()))
+            try
             {
-                if (dlg_704ILR.ShowDialog(FindForm()) == DialogResult.OK)
+                using (var dlg_704ILR = new frmReservaServicios_704ILR(_serviciosReserva_704ILR, BLL_Servicio_704ILR.GetActivos_704ILR()))
                 {
-                    _serviciosReserva_704ILR = dlg_704ILR.Items_704ILR;
-                    ActualizarMonto_704ILR();
+                    if (dlg_704ILR.ShowDialog(FindForm()) == DialogResult.OK)
+                    {
+                        _serviciosReserva_704ILR = dlg_704ILR.Items_704ILR;
+                        ActualizarMonto_704ILR();
+                    }
                 }
+            }
+            catch (Exception ex_704ILR)
+            {
+                BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Reservas", "Editar servicios de la reserva");
+                ShowError_704ILR(Tr_704ILR.T_704ILR("MSG_ERROR_PREFIJO") + ex_704ILR.Message);
             }
         }
 
@@ -632,17 +656,32 @@ namespace EvenTech.UI
                 ShowError_704ILR(Tr_704ILR.T_704ILR("MSG_PAGO_GUARDAR_RESERVA"));
                 return;
             }
-            using (var dlg_704ILR = new frmReservaPagos_704ILR(_editId_704ILR, BLL_Pago_704ILR.MontoReserva_704ILR(_editId_704ILR)))
-                dlg_704ILR.ShowDialog(FindForm());
+            try
+            {
+                using (var dlg_704ILR = new frmReservaPagos_704ILR(_editId_704ILR, BLL_Pago_704ILR.MontoReserva_704ILR(_editId_704ILR)))
+                    dlg_704ILR.ShowDialog(FindForm());
+            }
+            catch (Exception ex_704ILR)
+            {
+                BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Reservas", "Abrir pagos de la reserva #" + _editId_704ILR);
+                ShowError_704ILR(Tr_704ILR.T_704ILR("MSG_ERROR_PREFIJO") + ex_704ILR.Message);
+            }
         }
 
         // Genera el comprobante/presupuesto HTML de la reserva, lo guarda donde el
         // usuario elija y lo abre en el navegador para imprimir (Proceso 1, paso 6).
         private void GenerarComprobante_704ILR()
         {
+            // El comprobante vuelca al documento el DNI, el correo y el telefono del
+            // cliente descifrados: emitirlo es parte de la gestion de la reserva y no
+            // de su consulta, asi que exige el permiso de gestion (CUN005, precondicion).
+            if (!Permisos_704ILR.ExigirAlguno_704ILR(FindForm(),
+                    "emitir el comprobante de la reserva" + ReferenciaEnEdicion_704ILR(),
+                    "RESERVA_CREAR", "RESERVA_EDITAR"))
+                return;
             if (_editId_704ILR == 0)
             {
-                ShowError_704ILR(Tr_704ILR.T_704ILR("MSG_PAGO_GUARDAR_RESERVA"));
+                ShowError_704ILR(T_704ILR("MSG_RES_GUARDAR_PRIMERO", "Guarde la reserva antes de emitir su documentacion."));
                 return;
             }
             try
@@ -668,7 +707,7 @@ namespace EvenTech.UI
             catch (Exception ex_704ILR)
             {
                 BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Reservas", "Generar comprobante");
-                ShowError_704ILR(Tr_704ILR.T_704ILR("MSG_RES_ERROR"));
+                ShowError_704ILR(T_704ILR("MSG_OP_ERROR", "No se pudo completar la operacion."));
             }
         }
 
@@ -677,20 +716,30 @@ namespace EvenTech.UI
         // cuerpo prellenados y abre la carpeta del archivo para adjuntarlo.
         private void EnviarEmail_704ILR()
         {
+            // Misma exigencia que el comprobante: el correo lleva el mismo documento
+            // con los datos de contacto del cliente.
+            if (!Permisos_704ILR.ExigirAlguno_704ILR(FindForm(),
+                    "remitir el comprobante de la reserva" + ReferenciaEnEdicion_704ILR(),
+                    "RESERVA_CREAR", "RESERVA_EDITAR"))
+                return;
             if (_editId_704ILR == 0)
             {
-                ShowError_704ILR(Tr_704ILR.T_704ILR("MSG_PAGO_GUARDAR_RESERVA"));
-                return;
-            }
-            var reserva_704ILR = BLL_Reserva_704ILR.GetById_704ILR(_editId_704ILR);
-            var cliente_704ILR = reserva_704ILR != null && reserva_704ILR.ClienteId_704ILR > 0 ? BLL_Cliente_704ILR.GetById_704ILR(reserva_704ILR.ClienteId_704ILR) : null;
-            if (cliente_704ILR == null || string.IsNullOrWhiteSpace(cliente_704ILR.Email_704ILR))
-            {
-                ShowError_704ILR(Tr_704ILR.T_704ILR("MSG_EMAIL_SIN_CORREO"));
+                ShowError_704ILR(T_704ILR("MSG_RES_GUARDAR_PRIMERO", "Guarde la reserva antes de emitir su documentacion."));
                 return;
             }
             try
             {
+                // La lectura de la reserva y del cliente va DENTRO del try: son dos
+                // accesos a la base y una falla ahi tiene que asentarse igual que las
+                // demas, no tumbar la aplicacion.
+                var reserva_704ILR = BLL_Reserva_704ILR.GetById_704ILR(_editId_704ILR);
+                var cliente_704ILR = reserva_704ILR != null && reserva_704ILR.ClienteId_704ILR > 0 ? BLL_Cliente_704ILR.GetById_704ILR(reserva_704ILR.ClienteId_704ILR) : null;
+                if (cliente_704ILR == null || string.IsNullOrWhiteSpace(cliente_704ILR.Email_704ILR))
+                {
+                    ShowError_704ILR(Tr_704ILR.T_704ILR("MSG_EMAIL_SIN_CORREO"));
+                    return;
+                }
+
                 string html_704ILR = ComprobanteService_704ILR.GenerarHtml_704ILR(_editId_704ILR);
                 string path_704ILR = System.IO.Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
@@ -715,19 +764,44 @@ namespace EvenTech.UI
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(mailto_704ILR) { UseShellExecute = true });
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", "/select,\"" + path_704ILR + "\"") { UseShellExecute = true });
 
-                BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Comprobante enviado por email", CriticidadBitacora_704ILR.Info,
-                    "Reserva #" + _editId_704ILR + " -> " + cliente_704ILR.Email_704ILR);
+                // El asiento describe lo que el sistema REALMENTE hizo: preparo el
+                // documento y abrio el cliente de correo. El envio lo completa la
+                // persona, y el sistema no puede verificarlo.
+                // El correo del cliente no se copia al detalle: es un dato que la base
+                // guarda cifrado y volcarlo en claro en la bitacora anularia el
+                // cifrado. Se identifica al cliente por su numero.
+                BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Comprobante preparado para envio", CriticidadBitacora_704ILR.Info,
+                    "Reserva #" + _editId_704ILR + " -> cliente #" + cliente_704ILR.Id_704ILR +
+                    ", correo abierto y adjunto guardado en " + path_704ILR);
 
                 MessageBox.Show(Tr_704ILR.T_704ILR("MSG_EMAIL_ADJUNTAR"), "EvenTech", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex_704ILR)
             {
                 BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Reservas", "Enviar comprobante por email");
-                ShowError_704ILR(Tr_704ILR.T_704ILR("MSG_RES_ERROR"));
+                ShowError_704ILR(T_704ILR("MSG_OP_ERROR", "No se pudo completar la operacion."));
             }
         }
 
+        // Punto unico de entrada del guardado. Toda la operatoria de escritura de la
+        // ficha (alta, edicion, cancelacion y renovacion) toca la base varias veces:
+        // una falla ahi se asienta en la bitacora y se informa en pantalla, igual que
+        // en la carga de datos, en lugar de terminar la aplicacion.
         private void Guardar_704ILR()
+        {
+            try
+            {
+                GuardarReserva_704ILR();
+            }
+            catch (Exception ex_704ILR)
+            {
+                BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Reservas",
+                    _editId_704ILR == 0 ? "Guardar reserva nueva" : "Guardar reserva #" + _editId_704ILR);
+                ShowError_704ILR(Tr_704ILR.T_704ILR("MSG_ERROR_PREFIJO") + ex_704ILR.Message);
+            }
+        }
+
+        private void GuardarReserva_704ILR()
         {
             // Segunda capa del control de acceso: el alta y la edicion exigen su
             // propio permiso al ejecutarse, no solo al mostrar la seccion.
@@ -763,11 +837,15 @@ namespace EvenTech.UI
                 {
                     BLL_Reserva_704ILR.CalcularCancelacion_704ILR(actual_704ILR,
                         out decimal ret_704ILR, out decimal reem_704ILR);
+                    // La pregunta anticipa lo que VA a pasar (condicional): el aviso en
+                    // pasado ("Reserva cancelada...") corresponde despues del exito, no
+                    // antes de que el vendedor decida.
                     string aviso_704ILR = string.Format(
                         T_704ILR("MSG_RES_CANCELAR", "Cancelar la reserva #{0}?"), _editId_704ILR);
                     if (ret_704ILR > 0 || reem_704ILR > 0)
                         aviso_704ILR += Environment.NewLine + Environment.NewLine + string.Format(
-                            T_704ILR("MSG_RES_CANCELADA", "Reserva cancelada. Retenido {0:N2}, reintegro {1:N2}."),
+                            T_704ILR("MSG_RES_CANCELAR_DETALLE",
+                                "Si se cancela hoy se retienen {0:N2} y se reintegran {1:N2}."),
                             ret_704ILR, reem_704ILR);
                     if (MessageBox.Show(aviso_704ILR, "EvenTech",
                             MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
@@ -782,6 +860,12 @@ namespace EvenTech.UI
                     }
                     SafeLoadData_704ILR();
                     SeleccionarReserva_704ILR(_editId_704ILR);
+                    // Recien ahora la baja esta aplicada: se informa el resultado con
+                    // los importes que quedaron asentados (RN-02).
+                    MessageBox.Show(string.Format(
+                            T_704ILR("MSG_RES_CANCELADA", "Reserva cancelada. Retenido {0:N2}, reintegro {1:N2}."),
+                            ret_704ILR, reem_704ILR),
+                        "EvenTech", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
             }
@@ -803,7 +887,15 @@ namespace EvenTech.UI
                         MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes &&
                     BLL_Reserva_704ILR.Renovar_704ILR(_editId_704ILR) == ReservaResult_704ILR.Success_704ILR)
                 {
-                    result_704ILR = BLL_Reserva_704ILR.Actualizar_704ILR(reserva_704ILR);
+                    // La renovacion se confirma al vendedor: sin aviso, el nuevo plazo
+                    // solo se ve mirando la columna "Vence" de la grilla.
+                    MessageBox.Show(T_704ILR("MSG_RES_RENOVADA", "Vigencia renovada."), "EvenTech",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    // El reintento viaja CON los servicios, igual que el camino normal:
+                    // con la sobrecarga de un solo argumento se guardaba la cabecera con
+                    // el monto nuevo y las lineas quedaban como estaban, rompiendo el
+                    // invariante "monto = suma de los servicios contratados".
+                    result_704ILR = BLL_Reserva_704ILR.Actualizar_704ILR(reserva_704ILR, _serviciosReserva_704ILR);
                 }
             }
 
@@ -874,14 +966,15 @@ namespace EvenTech.UI
         {
             if (_editId_704ILR == 0)
             {
-                ShowError_704ILR(Tr_704ILR.T_704ILR("MSG_RES_SELECCIONE"));
+                ShowError_704ILR(T_704ILR("MSG_RES_SELECCIONE_GEN", "Seleccione una reserva existente."));
                 return;
             }
-            // Restaurar es una correccion ADMINISTRATIVA: no respeta la tabla de
-            // transiciones (RN-05) y puede deshacer una confirmacion, asi que lleva
-            // permiso propio y no el de edicion que tiene el vendedor. Consultar las
-            // versiones no se bloquea: para eso esta el dialogo en modo lectura.
-            if (!Permisos_704ILR.Exigir_704ILR("RESERVA_RESTAURAR", FindForm(), "restaurar una version de la reserva #" + _editId_704ILR)) return;
+            // ABRIR el dialogo es consultar, y por eso pide el permiso de consulta del
+            // historial. RESTAURAR es otra cosa —una correccion ADMINISTRATIVA que no
+            // respeta la tabla de transiciones (RN-05) y puede deshacer una
+            // confirmacion— y lleva permiso propio, exigido dentro del dialogo, que
+            // ademas deshabilita el boton cuando falta.
+            if (!Permisos_704ILR.Exigir_704ILR("RESERVA_HISTORIAL", FindForm(), "ver las versiones de la reserva #" + _editId_704ILR)) return;
             using (var frm_704ILR = new frmVersionesReserva_704ILR(_editId_704ILR))
             {
                 if (frm_704ILR.ShowDialog(FindForm()) != DialogResult.OK) return;
@@ -908,6 +1001,11 @@ namespace EvenTech.UI
                 }
             }
         }
+
+        // Sufijo " #N" para el texto de la accion que se registra al denegar un
+        // permiso. Sin reserva en edicion no hay numero que nombrar, y el asiento
+        // diria "reserva #0".
+        private string ReferenciaEnEdicion_704ILR() => _editId_704ILR > 0 ? " #" + _editId_704ILR : "";
 
         private void ShowError_704ILR(string msg_704ILR)
         {

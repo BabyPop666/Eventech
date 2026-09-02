@@ -104,8 +104,20 @@ namespace EvenTech.Services
                 return ProtectedData.Unprotect(File.ReadAllBytes(ruta_704ILR), null, DataProtectionScope.LocalMachine);
 
             byte[] clave_704ILR = RandomNumberGenerator.GetBytes(32); // 256 bits
-            Directory.CreateDirectory(dir_704ILR);
-            File.WriteAllBytes(ruta_704ILR, ProtectedData.Protect(clave_704ILR, null, DataProtectionScope.LocalMachine));
+            try
+            {
+                Directory.CreateDirectory(dir_704ILR);
+                File.WriteAllBytes(ruta_704ILR, ProtectedData.Protect(clave_704ILR, null, DataProtectionScope.LocalMachine));
+            }
+            catch (Exception ex_704ILR) when (ex_704ILR is UnauthorizedAccessException || ex_704ILR is IOException)
+            {
+                // Sin escritura en ProgramData la clave no se puede persistir. Se
+                // traduce a un error de operacion con la causa a la vista: de lo
+                // contrario el alta de un cliente falla con un mensaje del sistema de
+                // archivos que no dice que hacer.
+                throw new InvalidOperationException(
+                    "No se pudo crear la clave de cifrado en " + ruta_704ILR + ": " + ex_704ILR.Message, ex_704ILR);
+            }
             return clave_704ILR;
         }
     }

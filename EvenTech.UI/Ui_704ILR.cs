@@ -44,11 +44,15 @@ namespace EvenTech.UI
             BorderStyle = BorderStyle.FixedSingle
         };
 
+        // El fondo se fija explicitamente: un combo Flat sin BackColor queda gris y en
+        // pantalla se lee como deshabilitado, al lado de los que dibuja DibujarEnum
+        // (que los repinta con el color de superficie). Un solo estilo para todos.
         public static ComboBox Combo_704ILR() => new ComboBox
         {
             Font = Theme_704ILR.FontInput_704ILR,
             DropDownStyle = ComboBoxStyle.DropDownList,
-            FlatStyle = FlatStyle.Flat
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Theme_704ILR.Surface_704ILR
         };
 
         // Hace que un ComboBox dibuje cada item con texto traducido EN VIVO: como el
@@ -71,10 +75,15 @@ namespace EvenTech.UI
             };
         }
 
+        // Formato fijo yyyy-MM-dd: el formato corto de la estacion muestra la fecha
+        // rellenada con espacios ("17/ 1/2027") y no coincide con el de las grillas ni
+        // con el de los comprobantes, de modo que el mismo dato se veia de dos maneras
+        // en la misma pantalla.
         public static DateTimePicker DatePicker_704ILR() => new DateTimePicker
         {
             Font = Theme_704ILR.FontInput_704ILR,
-            Format = DateTimePickerFormat.Short
+            Format = DateTimePickerFormat.Custom,
+            CustomFormat = "yyyy-MM-dd"
         };
 
         // ---------- Campo etiquetado (caption arriba, input abajo) ----------

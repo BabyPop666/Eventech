@@ -67,7 +67,13 @@ namespace EvenTech.UI
             foreach (var m_704ILR in BLL_Pago_704ILR.GetMetodos_704ILR()) _cboMetodo_704ILR.Items.Add(m_704ILR);
             if (_cboMetodo_704ILR.Items.Count > 0) _cboMetodo_704ILR.SelectedIndex = 0;
             _numMonto_704ILR = new NumericUpDown { Minimum = 0, Maximum = 99999999, DecimalPlaces = 2, Increment = 1000, Width = 120, Font = Theme_704ILR.FontInput_704ILR, Margin = new Padding(0, 0, Theme_704ILR.SpaceSm_704ILR, 0), TextAlign = HorizontalAlignment.Right };
+            // La observacion es el unico campo de la fila sin rotulo (la fila es
+            // horizontal y no hay lugar para uno): el texto de ejemplo le da nombre en
+            // pantalla, que es el que cita el CUN004. MaxLength = ancho real de
+            // Pagos.Observacion: sin el, un texto mas largo se guardaria recortado.
             _txtObs_704ILR = Ui_704ILR.Input_704ILR(); _txtObs_704ILR.Width = 150; _txtObs_704ILR.Margin = new Padding(0, 0, Theme_704ILR.SpaceSm_704ILR, 0);
+            _txtObs_704ILR.MaxLength = 200;
+            _txtObs_704ILR.PlaceholderText = T_704ILR("COL_OBSERVACION", "Observacion");
             var btnRegistrar_704ILR = Ui_704ILR.Primary_704ILR(T_704ILR("BTN_REGISTRAR", "Registrar"), Theme_704ILR.IcoAdd_704ILR); btnRegistrar_704ILR.BehindColor_704ILR = Theme_704ILR.BgContent_704ILR; btnRegistrar_704ILR.Size = new Size(130, 30); btnRegistrar_704ILR.Click += (s_704ILR, e_704ILR) => Registrar_704ILR();
             var btnQuitar_704ILR = Ui_704ILR.Secondary_704ILR(T_704ILR("BTN_QUITAR", "Quitar"), Theme_704ILR.IcoClear_704ILR); btnQuitar_704ILR.BehindColor_704ILR = Theme_704ILR.BgContent_704ILR; btnQuitar_704ILR.Size = new Size(100, 30); btnQuitar_704ILR.Margin = new Padding(Theme_704ILR.SpaceSm_704ILR, 0, 0, 0); btnQuitar_704ILR.Click += (s_704ILR, e_704ILR) => Quitar_704ILR();
             // Anular un pago es una operacion sensible: se oculta a quien no la tiene.
@@ -89,7 +95,9 @@ namespace EvenTech.UI
             footer_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             footer_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             _lblResumen_704ILR = new Label { Font = Theme_704ILR.FontH2_704ILR, ForeColor = Theme_704ILR.TextOnLight_704ILR, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(2, 6, 0, 0), BackColor = Color.Transparent };
-            var btnCerrar_704ILR = Ui_704ILR.Primary_704ILR(T_704ILR("BTN_CERRAR", "Cerrar"), Theme_704ILR.IcoSave_704ILR); btnCerrar_704ILR.BehindColor_704ILR = Theme_704ILR.BgContent_704ILR; btnCerrar_704ILR.Size = new Size(130, 38); btnCerrar_704ILR.Anchor = AnchorStyles.Right;
+            // Cerrar lleva el glifo de cerrar: el de guardar sugeria que el dialogo
+            // confirma cambios pendientes, y aca cada pago ya persistio al registrarse.
+            var btnCerrar_704ILR = Ui_704ILR.Primary_704ILR(T_704ILR("BTN_CERRAR", "Cerrar"), Theme_704ILR.IcoClose_704ILR); btnCerrar_704ILR.BehindColor_704ILR = Theme_704ILR.BgContent_704ILR; btnCerrar_704ILR.Size = new Size(130, 38); btnCerrar_704ILR.Anchor = AnchorStyles.Right;
             btnCerrar_704ILR.Click += (s_704ILR, e_704ILR) => { DialogResult = DialogResult.OK; Close(); };
             footer_704ILR.Controls.Add(_lblResumen_704ILR, 0, 0);
             footer_704ILR.Controls.Add(btnCerrar_704ILR, 1, 0);
@@ -103,7 +111,34 @@ namespace EvenTech.UI
             AcceptButton = btnCerrar_704ILR;
         }
 
+        // Los tres handlers del dialogo tocan la base (alta, baja y lectura de pagos).
+        // Se envuelven para que una falla se asiente en la bitacora y se informe, en vez
+        // de terminar la aplicacion con el dialogo abierto.
         private void Registrar_704ILR()
+        {
+            try { RegistrarPago_704ILR(); }
+            catch (Exception ex_704ILR) { Fallo_704ILR(ex_704ILR, "Registrar pago en la reserva #" + _reservaId_704ILR); }
+        }
+
+        private void Quitar_704ILR()
+        {
+            try { QuitarPago_704ILR(); }
+            catch (Exception ex_704ILR) { Fallo_704ILR(ex_704ILR, "Anular pago de la reserva #" + _reservaId_704ILR); }
+        }
+
+        private void Refrescar_704ILR()
+        {
+            try { RefrescarPagos_704ILR(); }
+            catch (Exception ex_704ILR) { Fallo_704ILR(ex_704ILR, "Cargar pagos de la reserva #" + _reservaId_704ILR); }
+        }
+
+        private void Fallo_704ILR(Exception ex_704ILR, string contexto_704ILR)
+        {
+            BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Pagos", contexto_704ILR);
+            Aviso_704ILR(Tr_704ILR.T_704ILR("MSG_ERROR_PREFIJO") + ex_704ILR.Message);
+        }
+
+        private void RegistrarPago_704ILR()
         {
             // Registrar un cobro mueve el saldo de la reserva: es una escritura y
             // exige su permiso, igual que la anulacion.
@@ -139,7 +174,7 @@ namespace EvenTech.UI
         // Anulacion de un pago. Es destructiva e irreversible (no hay versionado de
         // pagos como si lo hay de reservas), asi que exige permiso propio y una
         // confirmacion explicita que nombra el importe que se va a anular.
-        private void Quitar_704ILR()
+        private void QuitarPago_704ILR()
         {
             if (_grid_704ILR.CurrentRow == null) return;
             if (!(_grid_704ILR.CurrentRow.Tag is int pagoId_704ILR)) return;
@@ -168,7 +203,7 @@ namespace EvenTech.UI
             Refrescar_704ILR();
         }
 
-        private void Refrescar_704ILR()
+        private void RefrescarPagos_704ILR()
         {
             _grid_704ILR.Rows.Clear();
             var pagos_704ILR = BLL_Pago_704ILR.GetByReserva_704ILR(_reservaId_704ILR);

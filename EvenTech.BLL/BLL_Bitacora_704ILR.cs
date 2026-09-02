@@ -12,6 +12,12 @@ namespace EvenTech.BLL
     // flujo principal, por eso Registrar atrapa sus propias excepciones.
     public static class BLL_Bitacora_704ILR
     {
+        // Ancho de Bitacora.Detalle en la base. Un detalle mas largo se recorta ACA,
+        // con marca visible, porque el parametro del comando tiene ese tamano fijo y
+        // el motor truncaria en silencio: el asiento quedaria cortado sin que nada lo
+        // indique (pasa, por ejemplo, con la lista de inconsistencias de integridad).
+        private const int MaxDetalle_704ILR = 1000;
+
         public static void Registrar_704ILR(string modulo_704ILR, string accion_704ILR, CriticidadBitacora_704ILR criticidad_704ILR, string detalle_704ILR)
         {
             try
@@ -23,7 +29,7 @@ namespace EvenTech.BLL
                     Modulo_704ILR = modulo_704ILR,
                     Accion_704ILR = accion_704ILR,
                     Criticidad_704ILR = criticidad_704ILR,
-                    Detalle_704ILR = detalle_704ILR
+                    Detalle_704ILR = Recortar_704ILR(detalle_704ILR)
                 });
             }
             catch
@@ -46,6 +52,11 @@ namespace EvenTech.BLL
         public static List<BE_BitacoraEntry_704ILR> Buscar_704ILR(BitacoraFiltros_704ILR filtros_704ILR) => DAL_Bitacora_704ILR.Buscar_704ILR(filtros_704ILR);
 
         public static List<string> GetModulos_704ILR() => DAL_Bitacora_704ILR.GetModulos_704ILR();
+
+        private static string Recortar_704ILR(string detalle_704ILR)
+            => detalle_704ILR != null && detalle_704ILR.Length > MaxDetalle_704ILR
+                ? detalle_704ILR.Substring(0, MaxDetalle_704ILR - 3) + "..."
+                : detalle_704ILR;
 
         private static string UsuarioActual_704ILR()
         {

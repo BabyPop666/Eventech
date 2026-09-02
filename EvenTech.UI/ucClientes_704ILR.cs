@@ -55,8 +55,10 @@ namespace EvenTech.UI
             var lblTitle_704ILR = Ui_704ILR.H1_704ILR("Gestion de Clientes");
             lblTitle_704ILR.Tag = "T:CLI_TITULO"; lblTitle_704ILR.Anchor = AnchorStyles.Left; lblTitle_704ILR.Margin = new Padding(0, 0, Theme_704ILR.SpaceLg_704ILR, 0);
 
+            // Cliente y Servicio son masculinos: llevan BTN_NUEVO. BTN_NUEVA queda para
+            // Reservas, que es la unica seccion cuyo sustantivo es femenino.
             _btnNuevo_704ILR = Ui_704ILR.Primary_704ILR("Nuevo", Theme_704ILR.IcoAdd_704ILR);
-            _btnNuevo_704ILR.Tag = "T:BTN_NUEVA"; _btnNuevo_704ILR.Size = new Size(120, 36); _btnNuevo_704ILR.BehindColor_704ILR = Theme_704ILR.BgContent_704ILR;
+            _btnNuevo_704ILR.Tag = "T:BTN_NUEVO"; _btnNuevo_704ILR.Size = new Size(120, 36); _btnNuevo_704ILR.BehindColor_704ILR = Theme_704ILR.BgContent_704ILR;
             _btnNuevo_704ILR.Anchor = AnchorStyles.Left; _btnNuevo_704ILR.Margin = new Padding(0, 0, Theme_704ILR.SpaceMd_704ILR, 0);
             _btnNuevo_704ILR.Click += (s_704ILR, e_704ILR) => LimpiarForm_704ILR();
 
@@ -226,7 +228,24 @@ namespace EvenTech.UI
             _grid_704ILR.ClearSelection();
         }
 
+        // Igual que en Reservas: la escritura queda envuelta para que una falla de base
+        // se asiente e informe en vez de terminar la aplicacion.
         private void Guardar_704ILR()
+        {
+            try
+            {
+                GuardarCliente_704ILR();
+            }
+            catch (Exception ex_704ILR)
+            {
+                BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Clientes",
+                    _editId_704ILR == 0 ? "Guardar cliente nuevo" : "Guardar cliente #" + _editId_704ILR);
+                _lblError_704ILR.Text = Tr_704ILR.T_704ILR("MSG_ERROR_PREFIJO") + ex_704ILR.Message;
+                _lblError_704ILR.Visible = true;
+            }
+        }
+
+        private void GuardarCliente_704ILR()
         {
             // Segunda capa del control de acceso (ver Permisos.cs).
             if (!Permisos_704ILR.Exigir_704ILR("CLIENTES_GESTION", FindForm(),
@@ -251,10 +270,12 @@ namespace EvenTech.UI
             {
                 LimpiarForm_704ILR();
                 SafeLoadData_704ILR();
-                // CUN002, paso 5: el alta se confirma y el cliente recien creado queda
-                // seleccionado en la grilla (la seleccion carga su ficha) para poder
-                // seguir operando con el sin buscarlo.
-                if (esAlta_704ILR) SeleccionarCliente_704ILR(nuevoId_704ILR);
+                // CUN002, paso 5: el cliente que se acaba de guardar queda seleccionado
+                // en la grilla (la seleccion carga su ficha) para poder seguir operando
+                // con el sin buscarlo. Vale para el alta y para la edicion: al reasignar
+                // el DataSource la grilla vuelve a la primera fila y, sin esto, la ficha
+                // terminaba mostrando OTRO cliente bajo el cartel "Cliente actualizado".
+                SeleccionarCliente_704ILR(esAlta_704ILR ? nuevoId_704ILR : c_704ILR.Id_704ILR);
                 _lblOk_704ILR.Text = Tr_704ILR.T_704ILR(esAlta_704ILR ? "MSG_CLI_CREADO" : "MSG_CLI_OK");
                 _lblOk_704ILR.Visible = true;
             }
