@@ -9,11 +9,11 @@ namespace EvenTech.BLL
 {
     public enum LoginResult_704ILR
     {
-        Success,
-        UserNotFound,
-        IncorrectPassword,
-        UserBlocked,        // cuenta bloqueada por intentos fallidos (RF01.3)
-        AccountInactive     // cuenta dada de baja / inactiva (RF01.4)
+        Success_704ILR,
+        UserNotFound_704ILR,
+        IncorrectPassword_704ILR,
+        UserBlocked_704ILR,        // cuenta bloqueada por intentos fallidos (RF01.3)
+        AccountInactive_704ILR     // cuenta dada de baja / inactiva (RF01.4)
     }
 
     // Resultado del login con info para que la UI muestre los intentos restantes.
@@ -40,7 +40,7 @@ namespace EvenTech.BLL
             if (user_704ILR == null)
             {
                 BLL_LoginAudit_704ILR.Register_704ILR(username_704ILR, LoginAuditAction_704ILR.LOGIN_FAIL, "Usuario inexistente");
-                resp_704ILR.Result_704ILR = LoginResult_704ILR.UserNotFound;
+                resp_704ILR.Result_704ILR = LoginResult_704ILR.UserNotFound_704ILR;
                 return resp_704ILR;
             }
 
@@ -48,7 +48,7 @@ namespace EvenTech.BLL
             if (!user_704ILR.Activo_704ILR)
             {
                 BLL_LoginAudit_704ILR.Register_704ILR(username_704ILR, LoginAuditAction_704ILR.LOGIN_FAIL, "Cuenta inactiva");
-                resp_704ILR.Result_704ILR = LoginResult_704ILR.AccountInactive;
+                resp_704ILR.Result_704ILR = LoginResult_704ILR.AccountInactive_704ILR;
                 resp_704ILR.FailedAttempts_704ILR = user_704ILR.FailedAttempts_704ILR;
                 return resp_704ILR;
             }
@@ -58,7 +58,7 @@ namespace EvenTech.BLL
             {
                 if (!user_704ILR.Blocked_704ILR) DAL_User_704ILR.SetBlocked_704ILR(username_704ILR, true);
                 BLL_LoginAudit_704ILR.Register_704ILR(username_704ILR, LoginAuditAction_704ILR.LOGIN_FAIL, "Intento sobre cuenta bloqueada");
-                resp_704ILR.Result_704ILR = LoginResult_704ILR.UserBlocked;
+                resp_704ILR.Result_704ILR = LoginResult_704ILR.UserBlocked_704ILR;
                 resp_704ILR.FailedAttempts_704ILR = Math.Max(user_704ILR.FailedAttempts_704ILR, MaxIntentos_704ILR);
                 return resp_704ILR;
             }
@@ -74,13 +74,13 @@ namespace EvenTech.BLL
                     DAL_User_704ILR.SetBlocked_704ILR(username_704ILR, true);
                     BLL_LoginAudit_704ILR.Register_704ILR(username_704ILR, LoginAuditAction_704ILR.LOGIN_FAIL,
                         $"Password incorrecto - cuenta bloqueada ({intentos_704ILR}/{MaxIntentos_704ILR})");
-                    resp_704ILR.Result_704ILR = LoginResult_704ILR.UserBlocked;
+                    resp_704ILR.Result_704ILR = LoginResult_704ILR.UserBlocked_704ILR;
                     return resp_704ILR;
                 }
 
                 BLL_LoginAudit_704ILR.Register_704ILR(username_704ILR, LoginAuditAction_704ILR.LOGIN_FAIL,
                     $"Password incorrecto (intento {intentos_704ILR}/{MaxIntentos_704ILR})");
-                resp_704ILR.Result_704ILR = LoginResult_704ILR.IncorrectPassword;
+                resp_704ILR.Result_704ILR = LoginResult_704ILR.IncorrectPassword_704ILR;
                 return resp_704ILR;
             }
 
@@ -117,7 +117,7 @@ namespace EvenTech.BLL
 
             SessionManager_704ILR.Login_704ILR(user_704ILR, permisos_704ILR, permisosNoDisponibles_704ILR, sinPerfil_704ILR);
             BLL_LoginAudit_704ILR.Register_704ILR(username_704ILR, LoginAuditAction_704ILR.LOGIN_OK, "Ingreso correcto");
-            resp_704ILR.Result_704ILR = LoginResult_704ILR.Success;
+            resp_704ILR.Result_704ILR = LoginResult_704ILR.Success_704ILR;
             return resp_704ILR;
         }
 

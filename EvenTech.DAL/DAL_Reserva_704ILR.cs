@@ -95,34 +95,46 @@ namespace EvenTech.DAL
         public static int Insert_704ILR(BE_Reserva_704ILR reserva_704ILR)
         {
             using (var cn_704ILR = new DAL_DB_Connection_704ILR())
+                return Insert_704ILR(reserva_704ILR, cn_704ILR.OpenConnection_704ILR(), null);
+        }
+
+        // Sobrecarga transaccional: escribe sobre la conexion y la transaccion que
+        // le pasan, para que la reserva y sus servicios contratados entren o no
+        // entren juntos. La usa BLL_Reserva cuando orquesta la operacion completa.
+        public static int Insert_704ILR(BE_Reserva_704ILR reserva_704ILR,
+            SqlConnection conn_704ILR, SqlTransaction tx_704ILR)
+        {
+            using (var cmd_704ILR = new SqlCommand(
+                "INSERT INTO dbo.Reservas (ClienteId, SalonId, FechaEvento, Estado, Monto, CantidadInvitados, Dvh, VenceEl) " +
+                "OUTPUT INSERTED.Id " +
+                "VALUES (@cliente, @salon, @fecha, @estado, @monto, @invitados, @dvh, @vence)",
+                conn_704ILR, tx_704ILR))
             {
-                using (var cmd_704ILR = new SqlCommand(
-                    "INSERT INTO dbo.Reservas (ClienteId, SalonId, FechaEvento, Estado, Monto, CantidadInvitados, Dvh, VenceEl) " +
-                    "OUTPUT INSERTED.Id " +
-                    "VALUES (@cliente, @salon, @fecha, @estado, @monto, @invitados, @dvh, @vence)",
-                    cn_704ILR.OpenConnection_704ILR()))
-                {
-                    BindEditable_704ILR(cmd_704ILR, reserva_704ILR);
-                    return (int)cmd_704ILR.ExecuteScalar();
-                }
+                BindEditable_704ILR(cmd_704ILR, reserva_704ILR);
+                return (int)cmd_704ILR.ExecuteScalar();
             }
         }
 
         public static void Update_704ILR(BE_Reserva_704ILR reserva_704ILR)
         {
             using (var cn_704ILR = new DAL_DB_Connection_704ILR())
+                Update_704ILR(reserva_704ILR, cn_704ILR.OpenConnection_704ILR(), null);
+        }
+
+        // Sobrecarga transaccional (ver Insert_704ILR).
+        public static void Update_704ILR(BE_Reserva_704ILR reserva_704ILR,
+            SqlConnection conn_704ILR, SqlTransaction tx_704ILR)
+        {
+            using (var cmd_704ILR = new SqlCommand(
+                "UPDATE dbo.Reservas SET ClienteId = @cliente, SalonId = @salon, " +
+                "FechaEvento = @fecha, Estado = @estado, Monto = @monto, " +
+                "CantidadInvitados = @invitados, Dvh = @dvh, " +
+                "VenceEl = @vence WHERE Id = @id",
+                conn_704ILR, tx_704ILR))
             {
-                using (var cmd_704ILR = new SqlCommand(
-                    "UPDATE dbo.Reservas SET ClienteId = @cliente, SalonId = @salon, " +
-                    "FechaEvento = @fecha, Estado = @estado, Monto = @monto, " +
-                    "CantidadInvitados = @invitados, Dvh = @dvh, " +
-                    "VenceEl = @vence WHERE Id = @id",
-                    cn_704ILR.OpenConnection_704ILR()))
-                {
-                    BindEditable_704ILR(cmd_704ILR, reserva_704ILR);
-                    cmd_704ILR.Parameters.Add("@id", SqlDbType.Int).Value = reserva_704ILR.Id_704ILR;
-                    cmd_704ILR.ExecuteNonQuery();
-                }
+                BindEditable_704ILR(cmd_704ILR, reserva_704ILR);
+                cmd_704ILR.Parameters.Add("@id", SqlDbType.Int).Value = reserva_704ILR.Id_704ILR;
+                cmd_704ILR.ExecuteNonQuery();
             }
         }
 

@@ -23,15 +23,21 @@ Usuario inicial: **admin / admin123** (perfil Administrador, acceso total).
 Email y Telefono de `Clientes` se guardan cifrados con AES-256 (prefijo `ENC:`,
 ver `EvenTech.Services/CryptoService_704ILR.cs`). La clave se genera sola en el primer
 uso y queda en `%ProgramData%\EvenTech\crypto.key`, protegida con DPAPI de la
-**máquina**. Consecuencia: si se restaura un `.bak` en otra PC, los valores
-`ENC:` de origen no se pueden descifrar ahí (se muestran tal cual); los valores
-legados en texto plano se leen normal y todo se re-cifra con la clave local al
-guardar el cliente.
+**máquina**, y por eso **no viaja con el `.bak`**: un valor `ENC:` restaurado en
+otra PC no se puede descifrar ahí y se mostraría tal cual.
+
+Por eso **el snapshot que se entrega lleva los datos de contacto en texto plano**.
+Al primer guardado de cada cliente, la aplicación los cifra con la clave local de
+esa máquina: el cifrado se ejercita igual y los datos se leen desde el arranque.
+La aplicación tampoco rechaza un valor que siga cifrado (no lo confunde con un
+email mal escrito), de modo que la ficha del cliente nunca queda trabada.
 
 ## Opción B — Restaurar el snapshot completo (con datos)
 
-`EvenTechDB.bak` es un backup full con los datos actuales (reservas, perfiles,
-usuarios, bitácora, etc.). Restaurar:
+`EvenTechDB.bak` es un backup full con los datos de demostración: 12 clientes,
+24 reservas repartidas en los tres salones y los cuatro estados, sus servicios
+contratados y pagos, tres perfiles (Administrador, Vendedor y Gerencial) y la
+bitácora de esas operaciones. Restaurar:
 
 ```sql
 RESTORE DATABASE EvenTechDB

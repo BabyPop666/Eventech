@@ -97,6 +97,31 @@ namespace EvenTech.UI
         public static readonly string IcoLock_704ILR     = Glyph_704ILR(0xE72E);
         public static readonly string IcoClose_704ILR    = Glyph_704ILR(0xE8BB); // ChromeClose
         public static readonly string IcoMinimize_704ILR = Glyph_704ILR(0xE921); // ChromeMinimize
+        public static readonly string IcoMaximize_704ILR = Glyph_704ILR(0xE922); // ChromeMaximize
+
+        // Isologotipo del sistema, embebido en el ensamblado. Se carga una sola vez.
+        private static System.Drawing.Image _logo_704ILR;
+        private static bool _logoBuscado_704ILR;
+
+        public static System.Drawing.Image Logo_704ILR
+        {
+            get
+            {
+                if (_logoBuscado_704ILR) return _logo_704ILR;
+                _logoBuscado_704ILR = true;
+                try
+                {
+                    var asm_704ILR = System.Reflection.Assembly.GetExecutingAssembly();
+                    string nombre_704ILR = System.Array.Find(asm_704ILR.GetManifestResourceNames(),
+                        n_704ILR => n_704ILR.EndsWith("logo_eventech.png", System.StringComparison.OrdinalIgnoreCase));
+                    if (nombre_704ILR != null)
+                        using (var st_704ILR = asm_704ILR.GetManifestResourceStream(nombre_704ILR))
+                            _logo_704ILR = System.Drawing.Image.FromStream(st_704ILR);
+                }
+                catch { _logo_704ILR = null; }   // sin logo la pantalla igual funciona
+                return _logo_704ILR;
+            }
+        }
         public static readonly string IcoSearch_704ILR   = Glyph_704ILR(0xE721);
         public static readonly string IcoAdd_704ILR      = Glyph_704ILR(0xE710);
         public static readonly string IcoSave_704ILR     = Glyph_704ILR(0xE74E);

@@ -12,6 +12,11 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Isologotipo del sistema: viaja embebido en el ensamblado, sin archivos
+         sueltos que se puedan perder al copiar la aplicacion. -->
+    <EmbeddedResource Include="Assets\logo_eventech.png" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\EvenTech.BE\EvenTech.BE.csproj" />
     <ProjectReference Include="..\EvenTech.BLL\EvenTech.BLL.csproj" />
     <ProjectReference Include="..\EvenTech.Services\EvenTech.Services.csproj" />

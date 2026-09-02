@@ -474,6 +474,16 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'PAGOS_ANULAR')
     INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
         VALUES (N'Anular Pagos', N'Eliminar un pago ya registrado de una reserva', 0, N'PAGOS_ANULAR', @gVentas);
 
+-- Restaurar una version previa es una correccion ADMINISTRATIVA: no respeta la
+-- tabla de transiciones (RN-05) y puede deshacer una confirmacion, asi que no
+-- alcanza con el permiso de edicion del vendedor. Lleva permiso propio.
+DECLARE @gReservasR INT = (SELECT TOP 1 Id FROM dbo.Permisos WHERE Nombre = N'Gestion de Reservas' AND EsGrupo = 1);
+IF @gReservasR IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.Permisos WHERE Clave = N'RESERVA_RESTAURAR')
+    INSERT INTO dbo.Permisos (Nombre, Descripcion, EsGrupo, Clave, PermisoPadreId)
+        VALUES (N'Restaurar Version de Reserva',
+                N'Reponer una version previa de la reserva (correccion administrativa)',
+                0, N'RESERVA_RESTAURAR', @gReservasR);
+
 -- Acceso total del Administrador: se le asigna todo permiso que le falte.
 INSERT INTO dbo.PerfilPermiso (PerfilId, PermisoId)
 SELECT p.Id, pe.Id
@@ -724,8 +734,10 @@ GO
         (N'ES', N'LOGIN_BLOQUEADA', N'Cuenta bloqueada. Contactate con un administrador.'), (N'EN', N'LOGIN_BLOQUEADA', N'Account blocked. Contact an administrator.'), (N'PT', N'LOGIN_BLOQUEADA', N'Conta bloqueada. Entre em contato com um administrador.'),
         (N'ES', N'LOGIN_INACTIVA', N'La cuenta esta inactiva. Contactate con un administrador.'), (N'EN', N'LOGIN_INACTIVA', N'The account is inactive. Contact an administrator.'), (N'PT', N'LOGIN_INACTIVA', N'A conta esta inativa. Entre em contato com um administrador.'),
         (N'ES', N'LOGIN_INTENTOS', N'Intento {0} de {1}.'), (N'EN', N'LOGIN_INTENTOS', N'Attempt {0} of {1}.'), (N'PT', N'LOGIN_INTENTOS', N'Tentativa {0} de {1}.'),
-        -- Estado de usuario (grilla de asignacion)
-        (N'ES', N'COL_ESTADO', N'Estado'), (N'EN', N'COL_ESTADO', N'Status'), (N'PT', N'COL_ESTADO', N'Estado'),
+        -- Estado de usuario (grilla de asignacion). La clave COL_ESTADO ya viene
+        -- sembrada mas arriba (encabezados de grilla): repetirla aca hacia que las
+        -- dos filas entraran juntas en el mismo INSERT y chocaran contra
+        -- UQ_Traducciones al correr el script sobre una base nueva.
         (N'ES', N'EST_ACTIVO', N'Activo'), (N'EN', N'EST_ACTIVO', N'Active'), (N'PT', N'EST_ACTIVO', N'Ativo'),
         (N'ES', N'EST_BLOQUEADO', N'Bloqueado'), (N'EN', N'EST_BLOQUEADO', N'Blocked'), (N'PT', N'EST_BLOQUEADO', N'Bloqueado'),
         (N'ES', N'EST_INACTIVO', N'Inactivo'), (N'EN', N'EST_INACTIVO', N'Inactive'), (N'PT', N'EST_INACTIVO', N'Inativo'),
@@ -838,12 +850,14 @@ GO
     ) AS v(Codigo, Clave, Texto)
 )
 INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
-SELECT i.Id, t.Clave, t.Texto
+SELECT i.Id, t.Clave, MIN(t.Texto)
 FROM Txt t
 JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
 WHERE NOT EXISTS (
     SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
-);
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
 GO
 
 -- La seccion de auditoria ahora unifica bitacora general + auditoria de login,
@@ -851,7 +865,10 @@ GO
 UPDATE t SET Texto = CASE i.Codigo WHEN N'EN' THEN N'Audit' ELSE N'Auditoria' END
 FROM dbo.Traducciones t
 JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
-WHERE t.Clave = N'MENU_AUDITORIA';
+WHERE t.Clave = N'MENU_AUDITORIA'
+  AND i.Codigo IN (N'ES', N'EN', N'PT');   -- solo los tres idiomas del sistema:
+                                           -- un idioma agregado por el usuario
+                                           -- conserva su traduccion propia.
 GO
 
 -- El boton de historial comparte fila con "Pagos" en la ficha de reserva:
@@ -859,7 +876,10 @@ GO
 UPDATE t SET Texto = CASE i.Codigo WHEN N'EN' THEN N'History' WHEN N'PT' THEN N'Historico' ELSE N'Historial' END
 FROM dbo.Traducciones t
 JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
-WHERE t.Clave = N'RES_HISTORIAL';
+WHERE t.Clave = N'RES_HISTORIAL'
+  AND i.Codigo IN (N'ES', N'EN', N'PT');   -- solo los tres idiomas del sistema:
+                                           -- un idioma agregado por el usuario
+                                           -- conserva su traduccion propia.
 GO
 
 -- ===========================================================================
@@ -934,7 +954,10 @@ UPDATE t SET Texto = CASE i.Codigo
         ELSE N'Tilde los permisos del perfil. Marcar un grupo incluye a sus hijos; en "Perfiles incluidos" podes contener otros perfiles y heredar sus permisos.' END
 FROM dbo.Traducciones t
 JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
-WHERE t.Clave = N'PERF_HINT';
+WHERE t.Clave = N'PERF_HINT'
+  AND i.Codigo IN (N'ES', N'EN', N'PT');   -- solo los tres idiomas del sistema:
+                                           -- un idioma agregado por el usuario
+                                           -- conserva su traduccion propia.
 GO
 
 -- Traducciones del modulo de versiones (idempotente: solo inserta las que falten).
@@ -952,12 +975,14 @@ GO
     ) AS v(Codigo, Clave, Texto)
 )
 INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
-SELECT i.Id, t.Clave, t.Texto
+SELECT i.Id, t.Clave, MIN(t.Texto)
 FROM Txt t
 JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
 WHERE NOT EXISTS (
     SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
-);
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
 GO
 
 -- ===========================================================================
@@ -992,12 +1017,14 @@ GO
     ) AS v(Codigo, Clave, Texto)
 )
 INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
-SELECT i.Id, t.Clave, t.Texto
+SELECT i.Id, t.Clave, MIN(t.Texto)
 FROM Txt t
 JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
 WHERE NOT EXISTS (
     SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
-);
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
 GO
 
 -- ===========================================================================
@@ -1046,12 +1073,14 @@ GO
     ) AS v(Codigo, Clave, Texto)
 )
 INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
-SELECT i.Id, t.Clave, t.Texto
+SELECT i.Id, t.Clave, MIN(t.Texto)
 FROM Txt t
 JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
 WHERE NOT EXISTS (
     SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
-);
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
 GO
 
 -- ===========================================================================
@@ -1076,12 +1105,14 @@ GO
     ) AS v(Codigo, Clave, Texto)
 )
 INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
-SELECT i.Id, t.Clave, t.Texto
+SELECT i.Id, t.Clave, MIN(t.Texto)
 FROM Txt t
 JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
 WHERE NOT EXISTS (
     SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
-);
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
 GO
 
 -- El rechazo por invitados cubre dos causas: el dato falta al confirmar (RN-06)
@@ -1093,5 +1124,32 @@ UPDATE t SET Texto = CASE i.Codigo
         ELSE N'Indica la cantidad de invitados estimada: hace falta para confirmar y no puede ser negativa.' END
 FROM dbo.Traducciones t
 JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
-WHERE t.Clave = N'MSG_RES_INVITADOS';
+WHERE t.Clave = N'MSG_RES_INVITADOS'
+  AND i.Codigo IN (N'ES', N'EN', N'PT');   -- solo los tres idiomas del sistema:
+                                           -- un idioma agregado por el usuario
+                                           -- conserva su traduccion propia.
+GO
+
+-- ===========================================================================
+-- RN-07 (adelanto para confirmar) y avisos de anulacion de pago y de servicios.
+-- Idempotente: solo inserta las claves que falten.
+-- ===========================================================================
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        -- RN-07: la reserva queda firme cuando se registro el adelanto
+        (N'ES', N'MSG_RES_SIN_ADELANTO', N'Para confirmar la reserva hay que registrar el adelanto: guardala y cobra el pago desde Pagos.'), (N'EN', N'MSG_RES_SIN_ADELANTO', N'To confirm the reservation the deposit must be recorded: save it and take the payment from Payments.'), (N'PT', N'MSG_RES_SIN_ADELANTO', N'Para confirmar a reserva e preciso registrar o adiantamento: salve-a e cobre o pagamento em Pagamentos.'),
+        -- Anulacion de pago rechazada (pago inexistente o de otra reserva)
+        (N'ES', N'MSG_PAGO_NO_ANULABLE', N'El pago ya no existe o no pertenece a esta reserva.'), (N'EN', N'MSG_PAGO_NO_ANULABLE', N'The payment no longer exists or does not belong to this reservation.'), (N'PT', N'MSG_PAGO_NO_ANULABLE', N'O pagamento nao existe mais ou nao pertence a esta reserva.'),
+        -- La reserva se guardo pero sus servicios no pudieron registrarse
+        (N'ES', N'MSG_RES_SERVICIOS_ERROR', N'La reserva se guardo, pero sus servicios no pudieron registrarse. Revise el detalle.'), (N'EN', N'MSG_RES_SERVICIOS_ERROR', N'The reservation was saved, but its services could not be recorded. Please review the detail.'), (N'PT', N'MSG_RES_SERVICIOS_ERROR', N'A reserva foi salva, mas seus servicos nao puderam ser registrados. Revise o detalhe.')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;
 GO

@@ -197,10 +197,14 @@ namespace EvenTech.UI
                 "EvenTech", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (confirma_704ILR != DialogResult.Yes) return;
 
+            // La restauracion tambien se exige aca, no solo en quien abre el dialogo:
+            // es el punto donde la operacion realmente se ejecuta.
+            if (!Permisos_704ILR.Exigir_704ILR("RESERVA_RESTAURAR", this, "restaurar una version de la reserva #" + _reservaId_704ILR)) return;
+
             try
             {
                 ReservaResult_704ILR result_704ILR = BLL_Reserva_704ILR.RestaurarVersion_704ILR(_reservaId_704ILR, memento_704ILR.Id_704ILR);
-                if (result_704ILR != ReservaResult_704ILR.Success)
+                if (result_704ILR != ReservaResult_704ILR.Success_704ILR)
                 {
                     MessageBox.Show(MensajeError_704ILR(result_704ILR), Tr_704ILR.T_704ILR("MSG_ERROR"),
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -238,25 +242,27 @@ namespace EvenTech.UI
         {
             switch (r_704ILR)
             {
-                case ReservaResult_704ILR.InvalidCliente: return Tr_704ILR.T_704ILR("MSG_RES_CLIENTE");
-                case ReservaResult_704ILR.InvalidSalon:   return Tr_704ILR.T_704ILR("MSG_RES_SALON");
-                case ReservaResult_704ILR.InvalidFecha:   return Tr_704ILR.T_704ILR("MSG_RES_FECHA");
-                case ReservaResult_704ILR.InvalidMonto:   return Tr_704ILR.T_704ILR("MSG_RES_MONTO");
-                case ReservaResult_704ILR.SalonOcupado:   return Tr_704ILR.T_704ILR("MSG_RES_SALON_OCUPADO");
-                case ReservaResult_704ILR.NotFound:       return Tr_704ILR.T_704ILR("MSG_RES_NOTFOUND");
+                case ReservaResult_704ILR.InvalidCliente_704ILR: return Tr_704ILR.T_704ILR("MSG_RES_CLIENTE");
+                case ReservaResult_704ILR.InvalidSalon_704ILR:   return Tr_704ILR.T_704ILR("MSG_RES_SALON");
+                case ReservaResult_704ILR.InvalidFecha_704ILR:   return Tr_704ILR.T_704ILR("MSG_RES_FECHA");
+                case ReservaResult_704ILR.InvalidMonto_704ILR:   return Tr_704ILR.T_704ILR("MSG_RES_MONTO");
+                case ReservaResult_704ILR.SalonOcupado_704ILR:   return Tr_704ILR.T_704ILR("MSG_RES_SALON_OCUPADO");
+                case ReservaResult_704ILR.NotFound_704ILR:       return Tr_704ILR.T_704ILR("MSG_RES_NOTFOUND");
                 // Motivos que la restauracion puede devolver desde que rige la RN-05/RN-06:
                 // sin estos casos el dialogo mostraria un error generico sabiendo la causa.
-                case ReservaResult_704ILR.NoModificable:
+                case ReservaResult_704ILR.NoModificable_704ILR:
                     return T_704ILR("MSG_RES_NO_MODIFICABLE", "La reserva esta cancelada: no admite modificaciones.");
-                case ReservaResult_704ILR.TransicionInvalida:
+                case ReservaResult_704ILR.TransicionInvalida_704ILR:
                     return T_704ILR("MSG_RES_TRANSICION_GEN", "El cambio de estado solicitado no esta admitido.");
-                case ReservaResult_704ILR.CapacidadInsuficiente:
+                case ReservaResult_704ILR.CapacidadInsuficiente_704ILR:
                     return T_704ILR("MSG_RES_CAPACIDAD", "El salon no alcanza para la cantidad de invitados indicada.");
-                case ReservaResult_704ILR.InvalidInvitados:
+                case ReservaResult_704ILR.InvalidInvitados_704ILR:
                     return T_704ILR("MSG_RES_INVITADOS", "Indica la cantidad de invitados estimada: hace falta para confirmar y no puede ser negativa.");
-                case ReservaResult_704ILR.MontoInferiorPagado:
+                case ReservaResult_704ILR.MontoInferiorPagado_704ILR:
                     return T_704ILR("MSG_RES_MONTO_PAGADO", "El total de la reserva no puede quedar por debajo de lo ya cobrado.");
-                case ReservaResult_704ILR.Vencida:
+                case ReservaResult_704ILR.SinAdelanto_704ILR:
+                    return T_704ILR("MSG_RES_SIN_ADELANTO", "Para confirmar la reserva hay que registrar el adelanto: guardala y cobra el pago desde Pagos.");
+                case ReservaResult_704ILR.Vencida_704ILR:
                     return T_704ILR("MSG_RES_VENCIDA", "La operacion vencio: renovala antes de confirmarla.");
                 default:                           return Tr_704ILR.T_704ILR("MSG_RES_ERROR");
             }

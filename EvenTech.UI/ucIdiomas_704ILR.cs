@@ -272,7 +272,7 @@ namespace EvenTech.UI
             try
             {
                 IdiomaResult_704ILR res_704ILR = BLL_Idioma_704ILR.CrearIdioma_704ILR(_txtCodigo_704ILR.Text, _txtNombre_704ILR.Text, out int nuevoId_704ILR);
-                if (res_704ILR != IdiomaResult_704ILR.Success)
+                if (res_704ILR != IdiomaResult_704ILR.Success_704ILR)
                 {
                     Mensaje_704ILR(MensajeError_704ILR(res_704ILR), true);
                     return;
@@ -323,9 +323,9 @@ namespace EvenTech.UI
         {
             switch (r_704ILR)
             {
-                case IdiomaResult_704ILR.CodigoInvalido:  return Tr_704ILR.T_704ILR("MSG_IDI_COD_INV");
-                case IdiomaResult_704ILR.NombreInvalido:  return Tr_704ILR.T_704ILR("MSG_IDI_NOM_INV");
-                case IdiomaResult_704ILR.CodigoDuplicado: return Tr_704ILR.T_704ILR("MSG_IDI_DUP");
+                case IdiomaResult_704ILR.CodigoInvalido_704ILR:  return Tr_704ILR.T_704ILR("MSG_IDI_COD_INV");
+                case IdiomaResult_704ILR.NombreInvalido_704ILR:  return Tr_704ILR.T_704ILR("MSG_IDI_NOM_INV");
+                case IdiomaResult_704ILR.CodigoDuplicado_704ILR: return Tr_704ILR.T_704ILR("MSG_IDI_DUP");
                 default:                           return Tr_704ILR.T_704ILR("MSG_IDI_ERROR");
             }
         }

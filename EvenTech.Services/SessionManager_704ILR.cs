@@ -27,6 +27,11 @@ namespace EvenTech.Services
         public bool TienePermiso_704ILR(string clave_704ILR)
             => clave_704ILR != null && _permisos_704ILR.Contains(clave_704ILR);
 
+        // Constructor privado: sin el, C# genera uno publico y cualquiera podria crear
+        // una segunda sesion con 'new', salteando el control de instancia unica que es
+        // el proposito del patron. La instancia se arma desde Login_704ILR.
+        private SessionManager_704ILR() { }
+
         private static SessionManager_704ILR _session_704ILR;
         private static readonly object _lock_704ILR = new object();
 

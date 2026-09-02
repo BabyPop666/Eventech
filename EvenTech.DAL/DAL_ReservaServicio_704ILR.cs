@@ -40,25 +40,35 @@ namespace EvenTech.DAL
                 var conn_704ILR = cn_704ILR.OpenConnection_704ILR();
                 using (var tx_704ILR = conn_704ILR.BeginTransaction())
                 {
-                    using (var del_704ILR = new SqlCommand("DELETE FROM dbo.ReservaServicio WHERE ReservaId = @r", conn_704ILR, tx_704ILR))
-                    {
-                        del_704ILR.Parameters.Add("@r", SqlDbType.Int).Value = reservaId_704ILR;
-                        del_704ILR.ExecuteNonQuery();
-                    }
-                    foreach (var it_704ILR in items_704ILR)
-                    {
-                        using (var ins_704ILR = new SqlCommand(
-                            "INSERT INTO dbo.ReservaServicio (ReservaId, ServicioId, Cantidad, PrecioUnitario) " +
-                            "VALUES (@r, @s, @c, @p)", conn_704ILR, tx_704ILR))
-                        {
-                            ins_704ILR.Parameters.Add("@r", SqlDbType.Int).Value = reservaId_704ILR;
-                            ins_704ILR.Parameters.Add("@s", SqlDbType.Int).Value = it_704ILR.ServicioId_704ILR;
-                            ins_704ILR.Parameters.Add("@c", SqlDbType.Int).Value = it_704ILR.Cantidad_704ILR;
-                            ins_704ILR.Parameters.Add("@p", SqlDbType.Decimal).Value = it_704ILR.PrecioUnitario_704ILR;
-                            ins_704ILR.ExecuteNonQuery();
-                        }
-                    }
+                    ReplaceForReserva_704ILR(reservaId_704ILR, items_704ILR, conn_704ILR, tx_704ILR);
                     tx_704ILR.Commit();
+                }
+            }
+        }
+
+        // Sobrecarga transaccional: no abre ni cierra nada, escribe donde le digan.
+        // Asi la reserva y sus servicios se guardan bajo una unica transaccion y no
+        // puede quedar el Monto de la reserva sin las lineas que lo componen.
+        public static void ReplaceForReserva_704ILR(int reservaId_704ILR,
+            IEnumerable<BE_ReservaServicio_704ILR> items_704ILR,
+            SqlConnection conn_704ILR, SqlTransaction tx_704ILR)
+        {
+            using (var del_704ILR = new SqlCommand("DELETE FROM dbo.ReservaServicio WHERE ReservaId = @r", conn_704ILR, tx_704ILR))
+            {
+                del_704ILR.Parameters.Add("@r", SqlDbType.Int).Value = reservaId_704ILR;
+                del_704ILR.ExecuteNonQuery();
+            }
+            foreach (var it_704ILR in items_704ILR ?? new List<BE_ReservaServicio_704ILR>())
+            {
+                using (var ins_704ILR = new SqlCommand(
+                    "INSERT INTO dbo.ReservaServicio (ReservaId, ServicioId, Cantidad, PrecioUnitario) " +
+                    "VALUES (@r, @s, @c, @p)", conn_704ILR, tx_704ILR))
+                {
+                    ins_704ILR.Parameters.Add("@r", SqlDbType.Int).Value = reservaId_704ILR;
+                    ins_704ILR.Parameters.Add("@s", SqlDbType.Int).Value = it_704ILR.ServicioId_704ILR;
+                    ins_704ILR.Parameters.Add("@c", SqlDbType.Int).Value = it_704ILR.Cantidad_704ILR;
+                    ins_704ILR.Parameters.Add("@p", SqlDbType.Decimal).Value = it_704ILR.PrecioUnitario_704ILR;
+                    ins_704ILR.ExecuteNonQuery();
                 }
             }
         }

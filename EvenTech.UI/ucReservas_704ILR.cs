@@ -136,8 +136,10 @@ namespace EvenTech.UI
                 BackColor = Theme_704ILR.BgContent_704ILR,
                 Margin = new Padding(0)
             };
-            body_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62));
-            body_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
+            // 66/34: la grilla tiene ocho columnas y necesita el ancho; a la ficha le
+            // alcanza con algo mas de un tercio (su minimo son 300 px).
+            body_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 72));
+            body_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
             body_704ILR.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             body_704ILR.Controls.Add(BuildGridCard_704ILR(), 0, 0);
@@ -159,12 +161,12 @@ namespace EvenTech.UI
             _grid_704ILR = new DataGridView { Dock = DockStyle.Fill };
             UiGrid_704ILR.Style_704ILR(_grid_704ILR);
 
-            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cId",      HeaderText = "Id",      DataPropertyName = "Id_704ILR",            FillWeight = 5 });
-            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cCliente", HeaderText = "Cliente", DataPropertyName = "ClienteNombre_704ILR", FillWeight = 18 });
-            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cSalon",   HeaderText = "Salon",   DataPropertyName = "SalonNombre_704ILR",   FillWeight = 15 });
+            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cId",      HeaderText = "Id",      DataPropertyName = "Id_704ILR",            FillWeight = 6 });
+            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cCliente", HeaderText = "Cliente", DataPropertyName = "ClienteNombre_704ILR", FillWeight = 15 });
+            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cSalon",   HeaderText = "Salon",   DataPropertyName = "SalonNombre_704ILR",   FillWeight = 14 });
             _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cFecha",   HeaderText = "Fecha",   DataPropertyName = "FechaEvento_704ILR",   FillWeight = 12, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd" } });
-            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cEstado",  HeaderText = "Estado",  DataPropertyName = "Estado_704ILR",        FillWeight = 12 });
-            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cInvitados", HeaderText = "Invitados", DataPropertyName = "CantidadInvitados_704ILR", FillWeight = 10, DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleRight } });
+            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cEstado",  HeaderText = "Estado",  DataPropertyName = "Estado_704ILR",        FillWeight = 13 });
+            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cInvitados", HeaderText = "Invitados", DataPropertyName = "CantidadInvitados_704ILR", FillWeight = 13, DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleRight } });
             _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cMonto",   HeaderText = "Monto",   DataPropertyName = "Monto_704ILR",         FillWeight = 15, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
             // RN-01: vigencia de la cotizacion / reserva pendiente.
             _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cVence",   HeaderText = "Vence",   DataPropertyName = "VenceEl_704ILR",       FillWeight = 12, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd" } });
@@ -215,8 +217,10 @@ namespace EvenTech.UI
                 Margin = new Padding(0)
             };
             fields_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            for (int i_704ILR = 0; i_704ILR < 7; i_704ILR++) fields_704ILR.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            fields_704ILR.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // empuja los campos hacia arriba
+            // Las ocho filas van AutoSize: con una fila en Percent el panel se estiraba
+            // para ocupar el alto disponible y AutoScroll no llegaba a activarse nunca,
+            // de modo que en una ventana chica los ultimos campos quedaban inalcanzables.
+            for (int i_704ILR = 0; i_704ILR < 8; i_704ILR++) fields_704ILR.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             // Cliente: combo para elegir uno existente + boton de alta rapida.
             _cboCliente_704ILR = Ui_704ILR.Combo_704ILR();
@@ -328,8 +332,10 @@ namespace EvenTech.UI
 
             // Fila documental: comprobante + email lado a lado.
             var docRow_704ILR = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.Transparent, Margin = new Padding(0, Theme_704ILR.SpaceSm_704ILR, 0, 0) };
-            docRow_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            docRow_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            // "Comprobante" es la etiqueta mas larga de la ficha: se le da mas ancho
+            // que a "Email" para que el rotulo entre completo.
+            docRow_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62));
+            docRow_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
             docRow_704ILR.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             _btnComprobante_704ILR = Ui_704ILR.Secondary_704ILR("Comprobante", Theme_704ILR.IcoDocumento_704ILR);
@@ -494,7 +500,15 @@ namespace EvenTech.UI
             AjustarEstadosDisponibles_704ILR();
             _cboCliente_704ILR.SelectedValue = r_704ILR.ClienteId_704ILR;
             _cboSalon_704ILR.SelectedValue = r_704ILR.SalonId_704ILR;
-            _dtFecha_704ILR.Value = r_704ILR.FechaEvento_704ILR < _dtFecha_704ILR.MinDate ? _dtFecha_704ILR.MinDate : r_704ILR.FechaEvento_704ILR;
+            // Una reserva cuyo evento ya paso se muestra CON SU FECHA REAL: si se dejara
+            // el minimo en hoy, el control subiria la fecha al abrir la ficha y guardar
+            // reprogramaria el evento en silencio. Bajando el minimo, el dato se ve tal
+            // cual es y quien decide es la regla de negocio, que rechaza guardar con
+            // fecha anterior a hoy (CUN005, flujo alternativo de fecha pasada).
+            _dtFecha_704ILR.MinDate = r_704ILR.FechaEvento_704ILR.Date < DateTime.Today
+                ? r_704ILR.FechaEvento_704ILR.Date
+                : DateTime.Today;
+            _dtFecha_704ILR.Value = r_704ILR.FechaEvento_704ILR;
             _numInvitados_704ILR.Value = Math.Min(Math.Max(r_704ILR.CantidadInvitados_704ILR, _numInvitados_704ILR.Minimum), _numInvitados_704ILR.Maximum);
             _cboEstado_704ILR.SelectedItem = r_704ILR.Estado_704ILR;
             try { _serviciosReserva_704ILR = BLL_ReservaServicio_704ILR.GetByReserva_704ILR(r_704ILR.Id_704ILR); }
@@ -533,6 +547,9 @@ namespace EvenTech.UI
             AjustarEstadosDisponibles_704ILR();
             if (_cboCliente_704ILR.Items.Count > 0) _cboCliente_704ILR.SelectedIndex = 0;
             if (_cboSalon_704ILR.Items.Count > 0) _cboSalon_704ILR.SelectedIndex = 0;
+            // El minimo vuelve a hoy: una reserva nueva no se agenda en el pasado.
+            // (CargarEnForm lo baja cuando abre una reserva con el evento ya pasado.)
+            _dtFecha_704ILR.MinDate = DateTime.Today;
             _dtFecha_704ILR.Value = DateTime.Today;
             _numInvitados_704ILR.Value = 0;
             _cboEstado_704ILR.SelectedItem = EstadoReserva_704ILR.COTIZACION;
@@ -547,12 +564,22 @@ namespace EvenTech.UI
         // estado inicial. En el alta el combo no ofrece CANCELADA; al editar, si.
         private void AjustarEstadosDisponibles_704ILR()
         {
+            // En el alta solo se ofrecen los dos estados con los que una reserva puede
+            // nacer. CANCELADA es terminal y se llega por la via de cancelacion (RN-05);
+            // CONFIRMADA exige el adelanto cobrado, que necesita la reserva ya
+            // registrada (RN-07): se confirma despues, editandola.
             bool alta_704ILR = _editId_704ILR == 0;
-            bool tieneCancelada_704ILR = _cboEstado_704ILR.Items.Contains(EstadoReserva_704ILR.CANCELADA);
-            if (alta_704ILR && tieneCancelada_704ILR)
-                _cboEstado_704ILR.Items.Remove(EstadoReserva_704ILR.CANCELADA);
-            else if (!alta_704ILR && !tieneCancelada_704ILR)
-                _cboEstado_704ILR.Items.Add(EstadoReserva_704ILR.CANCELADA);
+            AjustarEstado_704ILR(EstadoReserva_704ILR.CANCELADA, !alta_704ILR);
+            AjustarEstado_704ILR(EstadoReserva_704ILR.CONFIRMADA, !alta_704ILR);
+        }
+
+        // Deja el estado presente o ausente en el combo, sin duplicarlo ni perder la
+        // seleccion actual si sigue siendo valida.
+        private void AjustarEstado_704ILR(EstadoReserva_704ILR estado_704ILR, bool presente_704ILR)
+        {
+            bool esta_704ILR = _cboEstado_704ILR.Items.Contains(estado_704ILR);
+            if (presente_704ILR && !esta_704ILR) _cboEstado_704ILR.Items.Add(estado_704ILR);
+            else if (!presente_704ILR && esta_704ILR) _cboEstado_704ILR.Items.Remove(estado_704ILR);
         }
 
         // Refleja el total (suma de servicios) en el campo Monto y el conteo en el boton.
@@ -748,30 +775,33 @@ namespace EvenTech.UI
 
                     var rc_704ILR = BLL_Reserva_704ILR.Cancelar_704ILR(_editId_704ILR,
                         out ret_704ILR, out reem_704ILR);
-                    if (rc_704ILR != ReservaResult_704ILR.Success)
+                    if (rc_704ILR != ReservaResult_704ILR.Success_704ILR)
                     {
                         ShowError_704ILR(MensajeError_704ILR(rc_704ILR));
                         return;
                     }
-                    LimpiarForm_704ILR();
                     SafeLoadData_704ILR();
+                    SeleccionarReserva_704ILR(_editId_704ILR);
                     return;
                 }
             }
 
+            // La reserva y sus servicios contratados se guardan JUNTOS, en una sola
+            // transaccion orquestada por la capa de negocio: el monto de la cabecera
+            // y las lineas que lo componen no pueden quedar desfasados.
             ReservaResult_704ILR result_704ILR = _editId_704ILR == 0
-                ? BLL_Reserva_704ILR.Crear_704ILR(reserva_704ILR, out idReserva_704ILR)
-                : BLL_Reserva_704ILR.Actualizar_704ILR(reserva_704ILR);
+                ? BLL_Reserva_704ILR.Crear_704ILR(reserva_704ILR, _serviciosReserva_704ILR, out idReserva_704ILR)
+                : BLL_Reserva_704ILR.Actualizar_704ILR(reserva_704ILR, _serviciosReserva_704ILR);
 
             // RN-01: si la operacion vencio, se ofrece renovar la vigencia en el acto
             // en vez de dejar al vendedor con una cotizacion trabada.
-            if (result_704ILR == ReservaResult_704ILR.Vencida)
+            if (result_704ILR == ReservaResult_704ILR.Vencida_704ILR)
             {
                 string preg_704ILR = MensajeError_704ILR(result_704ILR) + Environment.NewLine +
                                      Environment.NewLine + T_704ILR("BTN_RENOVAR", "Renovar") + "?";
                 if (MessageBox.Show(preg_704ILR, "EvenTech",
                         MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes &&
-                    BLL_Reserva_704ILR.Renovar_704ILR(_editId_704ILR) == ReservaResult_704ILR.Success)
+                    BLL_Reserva_704ILR.Renovar_704ILR(_editId_704ILR) == ReservaResult_704ILR.Success_704ILR)
                 {
                     result_704ILR = BLL_Reserva_704ILR.Actualizar_704ILR(reserva_704ILR);
                 }
@@ -779,7 +809,7 @@ namespace EvenTech.UI
 
             // RN-05: el rechazo se explica nombrando los dos estados involucrados,
             // que es la informacion que el vendedor necesita para corregir.
-            if (result_704ILR == ReservaResult_704ILR.TransicionInvalida)
+            if (result_704ILR == ReservaResult_704ILR.TransicionInvalida_704ILR)
             {
                 var persistida_704ILR = BLL_Reserva_704ILR.GetById_704ILR(_editId_704ILR);
                 ShowError_704ILR(string.Format(
@@ -789,12 +819,12 @@ namespace EvenTech.UI
                 return;
             }
 
-            if (result_704ILR == ReservaResult_704ILR.Success)
+            if (result_704ILR == ReservaResult_704ILR.Success_704ILR)
             {
-                try { BLL_ReservaServicio_704ILR.Guardar_704ILR(idReserva_704ILR, _serviciosReserva_704ILR); }
-                catch (Exception ex_704ILR) { BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Reservas", "Guardar servicios de reserva"); }
-                LimpiarForm_704ILR();
+                // La reserva recien guardada queda seleccionada: la ficha sigue
+                // mostrando la operacion sobre la que se trabajo.
                 SafeLoadData_704ILR();
+                SeleccionarReserva_704ILR(idReserva_704ILR);
             }
             else
             {
@@ -806,18 +836,19 @@ namespace EvenTech.UI
         {
             switch (r_704ILR)
             {
-                case ReservaResult_704ILR.InvalidCliente: return Tr_704ILR.T_704ILR("MSG_RES_CLIENTE");
-                case ReservaResult_704ILR.InvalidSalon:   return Tr_704ILR.T_704ILR("MSG_RES_SALON");
-                case ReservaResult_704ILR.InvalidFecha:   return Tr_704ILR.T_704ILR("MSG_RES_FECHA");
-                case ReservaResult_704ILR.InvalidMonto:   return Tr_704ILR.T_704ILR("MSG_RES_MONTO");
-                case ReservaResult_704ILR.SalonOcupado:   return Tr_704ILR.T_704ILR("MSG_RES_SALON_OCUPADO");
-                case ReservaResult_704ILR.NoModificable:  return T_704ILR("MSG_RES_NO_MODIFICABLE", "La reserva esta cancelada: no admite modificaciones.");
-                case ReservaResult_704ILR.Vencida:        return T_704ILR("MSG_RES_VENCIDA", "La operacion vencio: renovala antes de confirmarla.");
-                case ReservaResult_704ILR.InvalidInvitados: return T_704ILR("MSG_RES_INVITADOS", "Indica la cantidad de invitados estimada: hace falta para confirmar y no puede ser negativa.");
-                case ReservaResult_704ILR.CapacidadInsuficiente: return T_704ILR("MSG_RES_CAPACIDAD", "El salon no alcanza para la cantidad de invitados indicada.");
-                case ReservaResult_704ILR.TransicionInvalida: return T_704ILR("MSG_RES_TRANSICION_GEN", "El cambio de estado solicitado no esta admitido.");
-                case ReservaResult_704ILR.MontoInferiorPagado: return T_704ILR("MSG_RES_MONTO_PAGADO", "El total de la reserva no puede quedar por debajo de lo ya cobrado.");
-                case ReservaResult_704ILR.NotFound:       return Tr_704ILR.T_704ILR("MSG_RES_NOTFOUND");
+                case ReservaResult_704ILR.InvalidCliente_704ILR: return Tr_704ILR.T_704ILR("MSG_RES_CLIENTE");
+                case ReservaResult_704ILR.InvalidSalon_704ILR:   return Tr_704ILR.T_704ILR("MSG_RES_SALON");
+                case ReservaResult_704ILR.InvalidFecha_704ILR:   return Tr_704ILR.T_704ILR("MSG_RES_FECHA");
+                case ReservaResult_704ILR.InvalidMonto_704ILR:   return Tr_704ILR.T_704ILR("MSG_RES_MONTO");
+                case ReservaResult_704ILR.SalonOcupado_704ILR:   return Tr_704ILR.T_704ILR("MSG_RES_SALON_OCUPADO");
+                case ReservaResult_704ILR.NoModificable_704ILR:  return T_704ILR("MSG_RES_NO_MODIFICABLE", "La reserva esta cancelada: no admite modificaciones.");
+                case ReservaResult_704ILR.Vencida_704ILR:        return T_704ILR("MSG_RES_VENCIDA", "La operacion vencio: renovala antes de confirmarla.");
+                case ReservaResult_704ILR.InvalidInvitados_704ILR: return T_704ILR("MSG_RES_INVITADOS", "Indica la cantidad de invitados estimada: hace falta para confirmar y no puede ser negativa.");
+                case ReservaResult_704ILR.CapacidadInsuficiente_704ILR: return T_704ILR("MSG_RES_CAPACIDAD", "El salon no alcanza para la cantidad de invitados indicada.");
+                case ReservaResult_704ILR.TransicionInvalida_704ILR: return T_704ILR("MSG_RES_TRANSICION_GEN", "El cambio de estado solicitado no esta admitido.");
+                case ReservaResult_704ILR.MontoInferiorPagado_704ILR: return T_704ILR("MSG_RES_MONTO_PAGADO", "El total de la reserva no puede quedar por debajo de lo ya cobrado.");
+                case ReservaResult_704ILR.SinAdelanto_704ILR:    return T_704ILR("MSG_RES_SIN_ADELANTO", "Para confirmar la reserva hay que registrar el adelanto: guardala y cobra el pago desde Pagos.");
+                case ReservaResult_704ILR.NotFound_704ILR:       return Tr_704ILR.T_704ILR("MSG_RES_NOTFOUND");
                 default:                           return Tr_704ILR.T_704ILR("MSG_RES_ERROR");
             }
         }
@@ -846,21 +877,34 @@ namespace EvenTech.UI
                 ShowError_704ILR(Tr_704ILR.T_704ILR("MSG_RES_SELECCIONE"));
                 return;
             }
-            // Restaurar repone el estado de negocio: se exige el permiso de edicion.
-            if (!Permisos_704ILR.Exigir_704ILR("RESERVA_EDITAR", FindForm(), "restaurar una version de la reserva #" + _editId_704ILR)) return;
+            // Restaurar es una correccion ADMINISTRATIVA: no respeta la tabla de
+            // transiciones (RN-05) y puede deshacer una confirmacion, asi que lleva
+            // permiso propio y no el de edicion que tiene el vendedor. Consultar las
+            // versiones no se bloquea: para eso esta el dialogo en modo lectura.
+            if (!Permisos_704ILR.Exigir_704ILR("RESERVA_RESTAURAR", FindForm(), "restaurar una version de la reserva #" + _editId_704ILR)) return;
             using (var frm_704ILR = new frmVersionesReserva_704ILR(_editId_704ILR))
             {
                 if (frm_704ILR.ShowDialog(FindForm()) != DialogResult.OK) return;
 
                 int id_704ILR = _editId_704ILR;
                 SafeLoadData_704ILR();
-                foreach (DataGridViewRow row_704ILR in _grid_704ILR.Rows)
+                SeleccionarReserva_704ILR(id_704ILR);
+            }
+        }
+
+        // Deja seleccionada en la grilla la reserva indicada, de modo que la ficha
+        // muestre la operacion sobre la que se acaba de trabajar. Sin esto, recargar
+        // la grilla la reposiciona en la primera fila y la ficha termina mostrando
+        // una reserva distinta de la que se acaba de guardar.
+        private void SeleccionarReserva_704ILR(int id_704ILR)
+        {
+            if (id_704ILR <= 0) return;
+            foreach (DataGridViewRow row_704ILR in _grid_704ILR.Rows)
+            {
+                if (row_704ILR.DataBoundItem is BE_Reserva_704ILR r_704ILR && r_704ILR.Id_704ILR == id_704ILR)
                 {
-                    if (row_704ILR.DataBoundItem is BE_Reserva_704ILR r_704ILR && r_704ILR.Id_704ILR == id_704ILR)
-                    {
-                        _grid_704ILR.CurrentCell = row_704ILR.Cells[0];
-                        break;
-                    }
+                    _grid_704ILR.CurrentCell = row_704ILR.Cells[0];
+                    return;
                 }
             }
         }

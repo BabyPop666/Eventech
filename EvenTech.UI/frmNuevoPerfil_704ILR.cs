@@ -83,7 +83,7 @@ namespace EvenTech.UI
             try
             {
                 PerfilResult_704ILR r_704ILR = BLL_Perfil_704ILR.CrearPerfil_704ILR(_txtNombre_704ILR.Text, _txtDesc_704ILR.Text, out int id_704ILR);
-                if (r_704ILR != PerfilResult_704ILR.Success) { _lblMsg_704ILR.Text = MensajeError_704ILR(r_704ILR); return; }
+                if (r_704ILR != PerfilResult_704ILR.Success_704ILR) { _lblMsg_704ILR.Text = MensajeError_704ILR(r_704ILR); return; }
                 NuevoId_704ILR = id_704ILR;
                 DialogResult = DialogResult.OK;
                 Close();
@@ -99,8 +99,8 @@ namespace EvenTech.UI
         {
             switch (r_704ILR)
             {
-                case PerfilResult_704ILR.NombreInvalido:  return T_704ILR("MSG_PERF_NOM_INV", "Ingrese el nombre del perfil.");
-                case PerfilResult_704ILR.NombreDuplicado: return T_704ILR("MSG_PERF_DUP", "Ya existe un perfil con ese nombre.");
+                case PerfilResult_704ILR.NombreInvalido_704ILR:  return T_704ILR("MSG_PERF_NOM_INV", "Ingrese el nombre del perfil.");
+                case PerfilResult_704ILR.NombreDuplicado_704ILR: return T_704ILR("MSG_PERF_DUP", "Ya existe un perfil con ese nombre.");
                 default:                           return Tr_704ILR.T_704ILR("MSG_ERROR");
             }
         }
