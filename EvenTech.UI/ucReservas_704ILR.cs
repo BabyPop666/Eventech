@@ -820,8 +820,8 @@ namespace EvenTech.UI
                 decimal saldo_704ILR = BLL_Pago_704ILR.Saldo_704ILR(_editId_704ILR);
 
                 var cuerpo_704ILR = new System.Text.StringBuilder();
-                cuerpo_704ILR.Append(string.Format(Tr_704ILR.T_704ILR("EMAIL_SALUDO"), cliente_704ILR.NombreCompleto_704ILR)).Append("\n\n");
-                cuerpo_704ILR.Append(string.Format(Tr_704ILR.T_704ILR("EMAIL_INTRO"), _editId_704ILR)).Append("\n\n");
+                cuerpo_704ILR.Append(Tr_704ILR.F_704ILR("EMAIL_SALUDO", "Hola {0},", cliente_704ILR.NombreCompleto_704ILR)).Append("\n\n");
+                cuerpo_704ILR.Append(Tr_704ILR.F_704ILR("EMAIL_INTRO", "Le enviamos el comprobante de su reserva #{0}.", _editId_704ILR)).Append("\n\n");
                 cuerpo_704ILR.Append(Tr_704ILR.T_704ILR("COL_SALON")).Append(": ").Append(reserva_704ILR.SalonNombre_704ILR).Append("\n");
                 cuerpo_704ILR.Append(Tr_704ILR.T_704ILR("RES_LBL_FECHA")).Append(": ").Append(reserva_704ILR.FechaEvento_704ILR.ToString("yyyy-MM-dd")).Append("\n");
                 cuerpo_704ILR.Append(Tr_704ILR.T_704ILR("LBL_TOTAL")).Append(": ").Append(total_704ILR.ToString("N2")).Append("\n");

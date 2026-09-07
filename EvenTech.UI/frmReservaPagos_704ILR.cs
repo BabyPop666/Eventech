@@ -184,8 +184,8 @@ namespace EvenTech.UI
 
             decimal monto_704ILR = _grid_704ILR.CurrentRow.Cells["cMonto"].Value is decimal m_704ILR ? m_704ILR : 0m;
             var confirma_704ILR = MessageBox.Show(this,
-                string.Format(T_704ILR("MSG_PAGO_ANULAR_CONF",
-                    "Anular el pago de {0}? La operacion no se puede deshacer."), monto_704ILR.ToString("N2")),
+                Tr_704ILR.F_704ILR("MSG_PAGO_ANULAR_CONF",
+                    "Anular el pago de {0}? La operacion no se puede deshacer.", monto_704ILR.ToString("N2")),
                 "EvenTech", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
             if (confirma_704ILR != DialogResult.Yes) return;
 

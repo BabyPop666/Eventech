@@ -95,8 +95,8 @@ namespace EvenTech.UI
                 int total_704ILR = BLL_Integridad_704ILR.RecalcularTodo_704ILR();
                 var resultado_704ILR = BLL_Integridad_704ILR.Verificar_704ILR();
                 MessageBox.Show(
-                    string.Format(T_704ILR("AUD_RECALC_OK",
-                        "Linea base recalculada ({0} reservas). Verificacion posterior: {1} inconsistencia(s)."),
+                    Tr_704ILR.F_704ILR("AUD_RECALC_OK",
+                        "Linea base recalculada ({0} reservas). Verificacion posterior: {1} inconsistencia(s).",
                         total_704ILR, resultado_704ILR.Inconsistencias_704ILR.Count),
                     "EvenTech", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }

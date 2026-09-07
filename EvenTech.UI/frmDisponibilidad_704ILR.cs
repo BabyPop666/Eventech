@@ -165,7 +165,7 @@ namespace EvenTech.UI
             if (disponibles_704ILR > 0)
             {
                 _lblResumen_704ILR.ForeColor = Theme_704ILR.Success_704ILR;
-                _lblResumen_704ILR.Text = string.Format(T_704ILR("DISP_RESUMEN_OK", "{0} salon(es) disponible(s) para la fecha consultada."), disponibles_704ILR);
+                _lblResumen_704ILR.Text = Tr_704ILR.F_704ILR("DISP_RESUMEN_OK", "{0} salon(es) disponible(s) para la fecha consultada.", disponibles_704ILR);
             }
             else
             {

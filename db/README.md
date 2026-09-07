@@ -4,9 +4,11 @@ La cadena de fábrica apunta a `localhost\SQLEXPRESS`, base **`EvenTechDB`**, co
 seguridad integrada; se arma en
 `EvenTech.Services/ConfiguracionConexion_704ILR.cs`, que también guarda la cadena
 elegida por el usuario (cifrada con DPAPI). `EvenTech.DAL/DAL_DB_Connection_704ILR.cs`
-es el consumidor de esa cadena y, si la conexión falla, prueba las instancias más
-habituales —entre ellas `localhost\SQLEXPRESS`— para sugerir una en la pantalla de
-configuración.
+es el consumidor de esa cadena: al arrancar comprueba que el servidor responda, que
+la base exista y que tenga el esquema completo. Si algo falla, la aplicación abre la
+pantalla de configuración con el motivo y ofrece en un combo las instancias
+detectadas en la máquina (`sqlcmd -L`) más las instalaciones típicas —entre ellas
+`localhost\SQLEXPRESS`— para elegir o tipear una; no las prueba por su cuenta.
 
 Hay dos formas de tener la base:
 
@@ -15,22 +17,66 @@ Hay dos formas de tener la base:
 `schema.sql` es **idempotente**: crea las tablas que falten, aplica las migraciones
 de columnas y de valores por defecto, y siembra los datos base (idiomas y
 traducciones, permisos y perfiles, salones, servicios, métodos de pago y el usuario
-`admin`), agregando solo lo que no esté. Se puede correr varias veces sin romper
-datos.
+`admin`). Se puede correr varias veces: agrega lo que falte, regulariza el
+vencimiento (`VenceEl`) de las operaciones anteriores desde su emisión (o desde el
+último pase a PENDIENTE) y corrige los textos de fábrica solo mientras conserven su
+valor original; las traducciones editadas por el usuario y los idiomas agregados se
+conservan.
 
-Los comandos se corren **desde esta carpeta** (`db`), que es donde está el script:
+El script corre **sobre la base que indica `-d`**: no crea la base ni hace `USE`,
+y aborta con error si `-d` falta (para no ejecutarse sobre `master`). Por eso la
+base se crea aparte, en el primer comando. Los comandos se corren **desde esta
+carpeta** (`db`), que es donde está el script:
 
 ```bat
 sqlcmd -S localhost\SQLEXPRESS -d master -E -C -Q "IF DB_ID('EvenTechDB') IS NULL CREATE DATABASE EvenTechDB;"
-sqlcmd -S localhost\SQLEXPRESS -d EvenTechDB -E -C -i schema.sql
+sqlcmd -S localhost\SQLEXPRESS -d EvenTechDB -E -C -b -i schema.sql
 ```
+
+- `-b` corta la ejecución en el primer error en lugar de seguir y dejar la base a
+  medias; sin `-b`, el script igual desactiva el resto (`NOEXEC`) si detecta que
+  corre sobre una base del sistema.
+- `-I` (QUOTED_IDENTIFIER ON) es opcional: el script ya lo fija al inicio, que es
+  lo que exigen sus índices filtrados (`UX_Clientes_Dni`,
+  `UX_Reservas_SalonFecha_Confirmada`). Sirve como alternativa si se ejecuta con
+  una herramienta que no respete el `SET` inicial.
+- Si la base se llama distinto de `EvenTechDB`, se usa el mismo nombre en los dos
+  comandos y después en la pantalla de conexión de la aplicación.
+- `schema.sql` está guardado como **UTF-8 con BOM** (con CRLF): así `sqlcmd` lee
+  bien las tildes y la eñe de los textos sembrados. Si se lo edita, conservar esa
+  codificación.
+- `sqlcmd` no viene con el motor: se instala con SSMS, con *Microsoft Command Line
+  Utilities for SQL Server* o como `go-sqlcmd`. El script está verificado con el
+  `sqlcmd` ODBC y con `go-sqlcmd`; también se puede ejecutar desde SSMS sobre la
+  base ya creada.
 
 > Un `CREATE TABLE` dentro de un `IF OBJECT_ID(...) IS NULL` solo se ejecuta la
 > primera vez: editarlo **no** cambia una base ya creada. Toda corrección de una
 > columna o de un `DEFAULT` tiene que llevar además su `ALTER` idempotente en la
 > zona de migraciones del script.
 
-Usuario inicial: **admin / admin123** (perfil Administrador, acceso total).
+Usuario inicial: **admin / admin123** (perfil Administrador, acceso total). Es la
+única cuenta que siembra el script. Los perfiles sí los siembra: son **cuatro**
+—Administrador, Vendedor, Supervisor (incluye a Vendedor) y Gerencial (incluye a
+Supervisor)—, con sus permisos y las dos inclusiones del Composite.
+
+**Base de una revisión anterior.** La aplicación rechaza al conectar una base que
+tenga `Users` pero no todas las tablas o columnas de la versión actual, e indica
+qué falta. Se resuelve corriendo `schema.sql` sobre esa base (agrega solo lo que
+falte) y volviendo a probar la conexión.
+
+**Cuenta bloqueada.** Tres contraseñas erróneas seguidas bloquean la cuenta y el
+bloqueo no expira. Se levanta desde *Perfiles* (botón *Desbloquear*, exige otro
+usuario con `PERFILES_GESTION`, que solo tiene el Administrador). Si la bloqueada es
+la única cuenta de Administrador, se desbloquea por SQL:
+
+```bat
+sqlcmd -S localhost\SQLEXPRESS -d EvenTechDB -E -C -Q "UPDATE dbo.Users SET Blocked = 0, FailedAttempts = 0 WHERE Username = 'admin';"
+```
+
+El cambio de contraseña desde la aplicación no forma parte de esta versión; el
+procedimiento para reemplazar una contraseña por SQL está en el `README.md` de la
+raíz.
 
 ## Datos cifrados (Email/Telefono de Clientes)
 
@@ -48,10 +94,32 @@ email mal escrito), de modo que la ficha del cliente nunca queda trabada.
 
 ## Opción B — Restaurar el snapshot completo (con datos)
 
-`EvenTechDB.bak` es un backup full con los datos de demostración: 12 clientes,
-24 reservas repartidas en los tres salones y los cuatro estados, sus servicios
-contratados y pagos, tres perfiles (Administrador, Vendedor y Gerencial) y la
-bitácora de esas operaciones.
+`EvenTechDB.bak` es un backup full, **generado el 06/09/2026 a la 01:10**, con los
+datos de demostración: 12 clientes (contactos en texto plano), 24 reservas
+repartidas en los tres salones y los cuatro estados (11 CONFIRMADA, 6 COTIZACIÓN,
+5 PENDIENTE y 2 CANCELADA), 96 líneas de servicios contratados, 11 pagos (toda
+CONFIRMADA tiene su adelanto, RN-07), 13 versiones con sus 13 asientos de
+historial de cambios y 65 asientos de bitácora de esas operaciones. Trae los cuatro
+perfiles —Administrador, Vendedor, Supervisor (incluye a Vendedor) y Gerencial
+(incluye a Supervisor)— y cuatro cuentas:
+
+| Usuario | Contraseña | Perfil |
+|---|---|---|
+| `admin` | `admin123` | Administrador |
+| `dsosa` | `demo123` | Vendedor |
+| `mojeda` | `demo123` | Supervisor |
+| `mgutierrez` | `demo123` | Gerencial |
+
+Los datos se cargaron a través de la capa de negocio, así que respetan las reglas
+RN-01 a RN-07 y llevan sus dígitos verificadores calculados; la verificación de
+integridad del arranque da `Ok`.
+
+**Vigencia de las operaciones del snapshot (RN-01).** Las cotizaciones y las
+reservas PENDIENTE tienen el plazo que fija la RN-01: 15 días y 72 horas desde esa
+fecha de generación. Restaurado días después, figuran vencidas en la columna
+*Vence*. No es un defecto: al intentar avanzarlas el sistema lo informa y ofrece
+renovar la vigencia en el acto (CUN005, flujo 6.2). El orden para confirmar una
+PENDIENTE es siempre cobrar el adelanto (*Pagos*) y después confirmar (RN-07).
 
 Antes de restaurar, dos pasos que evitan los dos errores más comunes:
 
@@ -84,3 +152,7 @@ WITH MOVE 'EvenTechDB'     TO N'C:\...\MSSQL\DATA\EvenTechDB.mdf',
 (Ajustar las rutas `MOVE` a la carpeta DATA de la instancia local; ver
 `SELECT SERVERPROPERTY('InstanceDefaultDataPath')`.) Requiere SQL Server de
 igual o mayor versión que el de origen (SQL Server Express 2019 / MSSQL15).
+
+Si el `.bak` restaurado fuera anterior al `schema.sql` vigente, correr el script
+sobre la base restaurada (Opción A, segundo comando): agrega solo lo que falte, y
+la aplicación lo exige al conectar.
