@@ -173,11 +173,8 @@ namespace EvenTech.UI
                 _lblResumen_704ILR.Text = T_704ILR("DISP_RESUMEN_ALTERNATIVAS", "Ningun salon disponible para esa fecha: se proponen fechas alternativas.");
             }
             ActualizarBotonUsar_704ILR();
-
-            // La consulta es parte del proceso de venta: queda en la bitacora.
-            BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Disponibilidad consultada", CriticidadBitacora_704ILR.Info,
-                "Fecha " + _dtFecha_704ILR.Value.ToString("yyyy-MM-dd") + " | Invitados " + (int)_numCapacidad_704ILR.Value +
-                " | Disponibles: " + disponibles_704ILR + "/" + _resultado_704ILR.Count);
+            // El asiento en bitacora de la consulta lo hace la capa de negocio
+            // (BLL_Disponibilidad.Consultar), no el dialogo.
         }
 
         // "Usar" toma el salon seleccionado: si esta disponible usa la fecha

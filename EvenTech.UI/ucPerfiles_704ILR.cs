@@ -610,13 +610,27 @@ namespace EvenTech.UI
             try
             {
                 _gridUsuarios_704ILR.EndEdit();
+                // Se persisten SOLO las filas cuyo perfil cambio respecto del que se
+                // cargo (el original viaja en el Tag). Reescribir todas las filas
+                // asentaba una "Asignacion de perfil" por cada usuario aunque no se
+                // hubiera tocado ninguno (ruido en la bitacora) y reponia, con la foto
+                // vieja de la grilla, un perfil modificado desde otra sesion.
+                int cambios_704ILR = 0;
                 foreach (DataGridViewRow row_704ILR in _gridUsuarios_704ILR.Rows)
                 {
                     if (!(row_704ILR.Tag is BE_User_704ILR u_704ILR)) continue;
                     int val_704ILR = row_704ILR.Cells["cPerfil"].Value is int v_704ILR ? v_704ILR : 0;
-                    BLL_User_704ILR.AsignarPerfil_704ILR(u_704ILR.Id_704ILR, val_704ILR == 0 ? (int?)null : val_704ILR);
+                    int? nuevo_704ILR = val_704ILR == 0 ? (int?)null : val_704ILR;
+                    if (nuevo_704ILR == u_704ILR.PerfilId_704ILR) continue;
+                    BLL_User_704ILR.AsignarPerfil_704ILR(u_704ILR.Id_704ILR, nuevo_704ILR);
+                    cambios_704ILR++;
                 }
-                MensajeAsig_704ILR(Tr_704ILR.T_704ILR("MSG_PERF_ASIG_OK"), error_704ILR: false);
+                // La grilla se recarga con lo persistido: el proximo guardado parte
+                // del estado real de la base y no de la foto anterior.
+                CargarUsuarios_704ILR();
+                MensajeAsig_704ILR(cambios_704ILR > 0
+                    ? Tr_704ILR.T_704ILR("MSG_PERF_ASIG_OK")
+                    : T_704ILR("MSG_PERF_ASIG_SIN_CAMBIOS", "No hay cambios de perfil para guardar."), error_704ILR: false);
             }
             catch (Exception ex_704ILR)
             {

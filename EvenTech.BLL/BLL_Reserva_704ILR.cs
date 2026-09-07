@@ -16,12 +16,13 @@ namespace EvenTech.BLL
         InvalidMonto_704ILR,
         SalonOcupado_704ILR,        // ya hay otra reserva activa para ese salon y fecha
         NoModificable_704ILR,       // la reserva esta cancelada: es un estado terminal
-        Vencida_704ILR,             // se quiso confirmar una cotizacion/pendiente cuyo plazo expiro (RN-01)
+        Vencida_704ILR,             // se quiso cambiar de estado una cotizacion/pendiente cuyo plazo expiro (RN-01)
         TransicionInvalida_704ILR,  // el cambio de estado no figura en la tabla de transiciones (RN-05)
         InvalidInvitados_704ILR,    // cantidad de invitados negativa
         CapacidadInsuficiente_704ILR, // el salon no aloja a los invitados de la reserva (RN-06)
         MontoInferiorPagado_704ILR,   // RN-04: el total quedaria por debajo de lo ya cobrado
         SinAdelanto_704ILR,           // RN-07: se quiso confirmar sin ningun pago registrado
+        SinPlazo_704ILR,              // RN-01: la operacion no tiene plazo de vigencia que renovar
         NotFound_704ILR
     }
 
@@ -118,14 +119,21 @@ namespace EvenTech.BLL
             return null;   // CONFIRMADA / CANCELADA no vencen
         }
 
-        // Renueva el plazo de una cotizacion o pendiente que ya expiro.
+        // Renueva el plazo de una cotizacion o pendiente (RN-01). Solo actua sobre una
+        // operacion que TIENE plazo: CONFIRMADA no vence y una cotizacion sin
+        // vencimiento cargado no tiene nada que renovar. En esos casos no se escribe
+        // ni se asienta nada (antes quedaba un asiento con la fecha vacia).
         public static ReservaResult_704ILR Renovar_704ILR(int reservaId_704ILR)
         {
             BE_Reserva_704ILR r_704ILR = DAL_Reserva_704ILR.GetById_704ILR(reservaId_704ILR);
             if (r_704ILR == null) return ReservaResult_704ILR.NotFound_704ILR;
             if (!PuedeModificar_704ILR(r_704ILR)) return ReservaResult_704ILR.NoModificable_704ILR;
 
-            r_704ILR.VenceEl_704ILR = CalcularVencimiento_704ILR(r_704ILR.Estado_704ILR, DateTime.Now);
+            DateTime? nuevoPlazo_704ILR = CalcularVencimiento_704ILR(r_704ILR.Estado_704ILR, DateTime.Now);
+            if (!r_704ILR.VenceEl_704ILR.HasValue || !nuevoPlazo_704ILR.HasValue)
+                return ReservaResult_704ILR.SinPlazo_704ILR;
+
+            r_704ILR.VenceEl_704ILR = nuevoPlazo_704ILR;
             DAL_Reserva_704ILR.Update_704ILR(r_704ILR);
             BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Renovacion de vigencia", CriticidadBitacora_704ILR.Info,
                 $"Reserva #{reservaId_704ILR} renovada hasta {r_704ILR.VenceEl_704ILR:yyyy-MM-dd HH:mm}");
@@ -207,6 +215,12 @@ namespace EvenTech.BLL
             nuevoId_704ILR = 0;
             if (reserva_704ILR == null) return ReservaResult_704ILR.InvalidCliente_704ILR;
 
+            // RN-05: el estado tiene que ser uno de los cuatro del ciclo de vida. Un
+            // valor fuera del enum pasaria las guardas por estado y se persistiria
+            // como un texto sin significado para la tabla de transiciones.
+            if (!EstadoDefinido_704ILR(reserva_704ILR.Estado_704ILR, "Alta rechazada"))
+                return ReservaResult_704ILR.TransicionInvalida_704ILR;
+
             // RN-05: CANCELADA es un estado al que se LLEGA dando de baja una operacion
             // existente, no uno con el que se nace. Admitirlo en el alta dejaria una
             // reserva en estado terminal sin liquidacion de la RN-02, sin version previa
@@ -232,6 +246,12 @@ namespace EvenTech.BLL
                 return ReservaResult_704ILR.SinAdelanto_704ILR;
             }
 
+            // El monto de la operacion ES la suma de sus lineas: cuando viajan los
+            // servicios, la capa de negocio valida cada linea y fija el total desde
+            // ellas en vez de confiar en el que armo la pantalla.
+            if (!AplicarServicios_704ILR(reserva_704ILR, servicios_704ILR))
+                return ReservaResult_704ILR.InvalidMonto_704ILR;
+
             var validacion_704ILR = Validar_704ILR(reserva_704ILR);
             if (validacion_704ILR != ReservaResult_704ILR.Success_704ILR)
             {
@@ -246,32 +266,53 @@ namespace EvenTech.BLL
             // DV horizontal: se calcula sobre los campos de negocio antes de persistir.
             reserva_704ILR.Dvh_704ILR = ValidadorDeIntegridad_704ILR.CalcularDVH_704ILR(reserva_704ILR);
 
-            using (var cn_704ILR = new DAL_DB_Connection_704ILR())
+            try
             {
-                SqlConnection conn_704ILR = cn_704ILR.OpenConnection_704ILR();
-                using (SqlTransaction tx_704ILR = conn_704ILR.BeginTransaction())
+                using (var cn_704ILR = new DAL_DB_Connection_704ILR())
                 {
-                    nuevoId_704ILR = DAL_Reserva_704ILR.Insert_704ILR(reserva_704ILR, conn_704ILR, tx_704ILR);
-                    if (servicios_704ILR != null)
-                        DAL_ReservaServicio_704ILR.ReplaceForReserva_704ILR(nuevoId_704ILR, servicios_704ILR, conn_704ILR, tx_704ILR);
-                    tx_704ILR.Commit();
+                    SqlConnection conn_704ILR = cn_704ILR.OpenConnection_704ILR();
+                    using (SqlTransaction tx_704ILR = conn_704ILR.BeginTransaction())
+                    {
+                        nuevoId_704ILR = DAL_Reserva_704ILR.Insert_704ILR(reserva_704ILR, conn_704ILR, tx_704ILR);
+                        if (servicios_704ILR != null)
+                            DAL_ReservaServicio_704ILR.ReplaceForReserva_704ILR(nuevoId_704ILR, servicios_704ILR, conn_704ILR, tx_704ILR);
+                        tx_704ILR.Commit();
+                    }
                 }
             }
+            catch (SqlException ex_704ILR) when (EsChoqueDeUnicidad_704ILR(ex_704ILR))
+            {
+                nuevoId_704ILR = 0;
+                AsentarRechazoDelMotor_704ILR(0, "Alta rechazada");
+                return ReservaResult_704ILR.SalonOcupado_704ILR;
+            }
 
-            // El DV vertical es un dato derivado del conjunto: se recalcula despues del
-            // commit y, si fallara, se vuelve a calcular en el proximo arranque.
-            BLL_Integridad_704ILR.RecalcularDVVerticalReservas_704ILR();
+            // La operacion ya quedo confirmada en la base: lo que sigue es evidencia
+            // derivada (DV vertical y asiento). Un fallo aca no se informa como error,
+            // porque el reintento duplicaria el alta; queda asentado como excepcion y
+            // la verificacion del proximo arranque detecta y alerta un DV vertical
+            // desactualizado (no lo repara sola: lo recalcula el administrador desde
+            // la herramienta de integridad).
+            try
+            {
+                BLL_Integridad_704ILR.RecalcularDVVerticalReservas_704ILR();
 
-            // El asiento nombra el documento que se emitio: una cotizacion y una
-            // reserva pendiente son operaciones distintas para el negocio, y el estado
-            // inicial es lo unico que las separa en el alta (RN-07).
-            BLL_Bitacora_704ILR.Registrar_704ILR("Reservas",
-                reserva_704ILR.Estado_704ILR == EstadoReserva_704ILR.COTIZACION
-                    ? "Cotizacion generada"
-                    : "Reserva generada",
-                CriticidadBitacora_704ILR.Info,
-                $"Reserva #{nuevoId_704ILR} - cliente #{reserva_704ILR.ClienteId_704ILR}, " +
-                $"estado {reserva_704ILR.Estado_704ILR}, monto {reserva_704ILR.Monto_704ILR:0.00}");
+                // El asiento nombra el documento que se emitio: una cotizacion y una
+                // reserva pendiente son operaciones distintas para el negocio, y el estado
+                // inicial es lo unico que las separa en el alta (RN-07).
+                BLL_Bitacora_704ILR.Registrar_704ILR("Reservas",
+                    reserva_704ILR.Estado_704ILR == EstadoReserva_704ILR.COTIZACION
+                        ? "Cotizacion generada"
+                        : "Reserva generada",
+                    CriticidadBitacora_704ILR.Info,
+                    $"Reserva #{nuevoId_704ILR} - cliente #{reserva_704ILR.ClienteId_704ILR}, " +
+                    $"estado {reserva_704ILR.Estado_704ILR}, monto {reserva_704ILR.Monto_704ILR:0.00}");
+            }
+            catch (Exception ex_704ILR)
+            {
+                BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Reservas",
+                    $"evidencia posterior al alta de la reserva #{nuevoId_704ILR}");
+            }
             return ReservaResult_704ILR.Success_704ILR;
         }
 
@@ -301,6 +342,12 @@ namespace EvenTech.BLL
                     $"Reserva #{reserva_704ILR.Id_704ILR} cancelada: no admite modificaciones.");
                 return ReservaResult_704ILR.NoModificable_704ILR;
             }
+
+            // RN-05: el estado pedido tiene que ser uno de los cuatro del ciclo de vida
+            // (ver Crear_704ILR). Se controla antes que la tabla de transiciones, que
+            // no puede opinar sobre un valor que no figura en ella.
+            if (!EstadoDefinido_704ILR(reserva_704ILR.Estado_704ILR, "Modificacion rechazada"))
+                return ReservaResult_704ILR.TransicionInvalida_704ILR;
 
             // RN-05: el cambio de estado tiene que figurar en la tabla de transiciones.
             // Se evalua sobre el estado PERSISTIDO contra el pedido, antes que nada:
@@ -334,9 +381,9 @@ namespace EvenTech.BLL
             // Se evalua sobre lo PERSISTIDO: el formulario no puede saltear el
             // vencimiento. Conservar el mismo estado sigue permitido (se puede seguir
             // editando una cotizacion vencida); la baja va por Cancelar, que se rechaza
-            // antes y no llega hasta aca.
-            if (reserva_704ILR.Estado_704ILR != antes_704ILR.Estado_704ILR &&
-                antes_704ILR.EstaVencida_704ILR)
+            // antes y no llega hasta aca. El criterio es el mismo que aplica la
+            // restauracion de versiones (AvanceConVigenciaVencida_704ILR).
+            if (AvanceConVigenciaVencida_704ILR(antes_704ILR, reserva_704ILR.Estado_704ILR))
             {
                 BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Cambio de estado rechazado",
                     CriticidadBitacora_704ILR.Advertencia,
@@ -345,6 +392,11 @@ namespace EvenTech.BLL
                     $"{reserva_704ILR.Estado_704ILR} hasta renovarla (RN-01).");
                 return ReservaResult_704ILR.Vencida_704ILR;
             }
+
+            // Monto = suma de las lineas cuando viajan los servicios (ver Crear_704ILR).
+            // Va antes de Validar y de la RN-04 para que las dos juzguen el total real.
+            if (!AplicarServicios_704ILR(reserva_704ILR, servicios_704ILR))
+                return ReservaResult_704ILR.InvalidMonto_704ILR;
 
             var validacion_704ILR = Validar_704ILR(reserva_704ILR);
             if (validacion_704ILR != ReservaResult_704ILR.Success_704ILR)
@@ -385,6 +437,19 @@ namespace EvenTech.BLL
                     ? CalcularVencimiento_704ILR(reserva_704ILR.Estado_704ILR, DateTime.Now)
                     : antes_704ILR.VenceEl_704ILR;
 
+            // Composicion de servicios: se compara contra lo persistido por (servicio,
+            // cantidad, precio) y no por Id de linea, porque ReplaceForReserva recrea
+            // las filas y un Id nuevo no significa un cambio.
+            bool lineasCambiaron_704ILR = servicios_704ILR != null &&
+                !BLL_ReservaServicio_704ILR.MismasLineas_704ILR(
+                    DAL_ReservaServicio_704ILR.GetByReserva_704ILR(reserva_704ILR.Id_704ILR), servicios_704ILR);
+
+            // Guardar sin cambiar nada no es una modificacion: no se versiona ni se
+            // asienta, para que el historial de versiones y la bitacora no acumulen
+            // entradas vacias. Las reglas de arriba ya se evaluaron igual.
+            if (!lineasCambiaron_704ILR && !CabeceraCambio_704ILR(antes_704ILR, reserva_704ILR))
+                return ReservaResult_704ILR.Success_704ILR;
+
             // Memento: antes de pisar el estado actual se guarda una version
             // completa (reserva + servicios) para poder volver atras.
             CaretakerReserva_704ILR.GuardarVersion_704ILR(antes_704ILR);
@@ -392,24 +457,46 @@ namespace EvenTech.BLL
             // Recalcular DV horizontal con los nuevos valores antes de persistir.
             reserva_704ILR.Dvh_704ILR = ValidadorDeIntegridad_704ILR.CalcularDVH_704ILR(reserva_704ILR);
 
-            using (var cn_704ILR = new DAL_DB_Connection_704ILR())
+            try
             {
-                SqlConnection conn_704ILR = cn_704ILR.OpenConnection_704ILR();
-                using (SqlTransaction tx_704ILR = conn_704ILR.BeginTransaction())
+                using (var cn_704ILR = new DAL_DB_Connection_704ILR())
                 {
-                    DAL_Reserva_704ILR.Update_704ILR(reserva_704ILR, conn_704ILR, tx_704ILR);
-                    if (servicios_704ILR != null)
-                        DAL_ReservaServicio_704ILR.ReplaceForReserva_704ILR(reserva_704ILR.Id_704ILR, servicios_704ILR, conn_704ILR, tx_704ILR);
-                    tx_704ILR.Commit();
+                    SqlConnection conn_704ILR = cn_704ILR.OpenConnection_704ILR();
+                    using (SqlTransaction tx_704ILR = conn_704ILR.BeginTransaction())
+                    {
+                        DAL_Reserva_704ILR.Update_704ILR(reserva_704ILR, conn_704ILR, tx_704ILR);
+                        if (servicios_704ILR != null)
+                            DAL_ReservaServicio_704ILR.ReplaceForReserva_704ILR(reserva_704ILR.Id_704ILR, servicios_704ILR, conn_704ILR, tx_704ILR);
+                        tx_704ILR.Commit();
+                    }
                 }
             }
+            catch (SqlException ex_704ILR) when (EsChoqueDeUnicidad_704ILR(ex_704ILR))
+            {
+                AsentarRechazoDelMotor_704ILR(reserva_704ILR.Id_704ILR, "Modificacion rechazada");
+                return ReservaResult_704ILR.SalonOcupado_704ILR;
+            }
 
-            BLL_Integridad_704ILR.RecalcularDVVerticalReservas_704ILR();
+            // Evidencia posterior al commit (ver Crear_704ILR): la modificacion ya
+            // esta guardada, un fallo aca se asienta y no se informa como error.
+            try
+            {
+                BLL_Integridad_704ILR.RecalcularDVVerticalReservas_704ILR();
 
-            // Control de cambios: registra campo por campo lo que cambio.
-            int cambios_704ILR = RegistradorDeCambios_704ILR.RegistrarCambios_704ILR("Reserva", reserva_704ILR.Id_704ILR, antes_704ILR, reserva_704ILR, CamposAuditados_704ILR);
-            BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Modificacion de reserva", CriticidadBitacora_704ILR.Info,
-                $"Reserva #{reserva_704ILR.Id_704ILR} - {cambios_704ILR} campo(s) modificado(s)");
+                // Control de cambios: registra campo por campo lo que cambio en la
+                // cabecera; el cambio de composicion se nombra en el asiento para que
+                // "0 campo(s)" no se lea como "no cambio nada".
+                int cambios_704ILR = RegistradorDeCambios_704ILR.RegistrarCambios_704ILR("Reserva", reserva_704ILR.Id_704ILR, antes_704ILR, reserva_704ILR, CamposAuditados_704ILR);
+                string detalle_704ILR = $"Reserva #{reserva_704ILR.Id_704ILR} - {cambios_704ILR} campo(s) modificado(s)";
+                if (lineasCambiaron_704ILR)
+                    detalle_704ILR += $"; servicios modificados: {servicios_704ILR.Count} linea(s)";
+                BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Modificacion de reserva", CriticidadBitacora_704ILR.Info, detalle_704ILR);
+            }
+            catch (Exception ex_704ILR)
+            {
+                BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Reservas",
+                    $"evidencia posterior a la modificacion de la reserva #{reserva_704ILR.Id_704ILR}");
+            }
             return ReservaResult_704ILR.Success_704ILR;
         }
 
@@ -457,18 +544,18 @@ namespace EvenTech.BLL
             }
 
             // RN-01: la restauracion esta exceptuada de la TABLA de transiciones, no del
-            // plazo de vigencia. Si la version que se repone deja la operacion CONFIRMADA
-            // y la actual ya vencio, confirmar por esta via seria saltear el vencimiento
-            // que Actualizar rechaza; hay que renovar primero, igual que en la edicion.
-            if (memento_704ILR.Estado_704ILR == EstadoReserva_704ILR.CONFIRMADA &&
-                actual_704ILR.Estado_704ILR != EstadoReserva_704ILR.CONFIRMADA &&
-                actual_704ILR.EstaVencida_704ILR)
+            // plazo de vigencia. Si la version que se repone cambia el estado de una
+            // operacion ya vencida (a CONFIRMADA, a PENDIENTE o de vuelta a COTIZACION),
+            // restaurar le daria plazo nuevo sin renovar y sin asiento, que es justo lo
+            // que Actualizar rechaza; se aplica el mismo criterio. Restaurar una version
+            // del mismo estado sigue permitido porque conserva el vencimiento vigente.
+            if (AvanceConVigenciaVencida_704ILR(actual_704ILR, memento_704ILR.Estado_704ILR))
             {
                 BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Restauracion rechazada",
                     CriticidadBitacora_704ILR.Advertencia,
                     $"Reserva #{reservaId_704ILR} vencida el " +
                     $"{actual_704ILR.VenceEl_704ILR:yyyy-MM-dd HH:mm}: hay que renovarla antes de " +
-                    "restaurar una version confirmada (RN-01).");
+                    $"restaurar una version con otro estado ({memento_704ILR.Estado_704ILR}) (RN-01).");
                 return ReservaResult_704ILR.Vencida_704ILR;
             }
 
@@ -520,26 +607,102 @@ namespace EvenTech.BLL
             // La cabecera repuesta y los servicios de esa version entran juntos, igual
             // que en el alta y en la edicion: el monto restaurado y las lineas que lo
             // componen no pueden quedar desfasados.
-            using (var cn_704ILR = new DAL_DB_Connection_704ILR())
+            try
             {
-                SqlConnection conn_704ILR = cn_704ILR.OpenConnection_704ILR();
-                using (SqlTransaction tx_704ILR = conn_704ILR.BeginTransaction())
+                using (var cn_704ILR = new DAL_DB_Connection_704ILR())
                 {
-                    DAL_Reserva_704ILR.Update_704ILR(restaurada_704ILR, conn_704ILR, tx_704ILR);
-                    DAL_ReservaServicio_704ILR.ReplaceForReserva_704ILR(
-                        reservaId_704ILR, memento_704ILR.Servicios_704ILR, conn_704ILR, tx_704ILR);
-                    tx_704ILR.Commit();
+                    SqlConnection conn_704ILR = cn_704ILR.OpenConnection_704ILR();
+                    using (SqlTransaction tx_704ILR = conn_704ILR.BeginTransaction())
+                    {
+                        DAL_Reserva_704ILR.Update_704ILR(restaurada_704ILR, conn_704ILR, tx_704ILR);
+                        DAL_ReservaServicio_704ILR.ReplaceForReserva_704ILR(
+                            reservaId_704ILR, memento_704ILR.Servicios_704ILR, conn_704ILR, tx_704ILR);
+                        tx_704ILR.Commit();
+                    }
                 }
             }
+            catch (SqlException ex_704ILR) when (EsChoqueDeUnicidad_704ILR(ex_704ILR))
+            {
+                AsentarRechazoDelMotor_704ILR(reservaId_704ILR, "Restauracion rechazada");
+                return ReservaResult_704ILR.SalonOcupado_704ILR;
+            }
 
-            BLL_Integridad_704ILR.RecalcularDVVerticalReservas_704ILR();
+            // Evidencia posterior al commit (ver Crear_704ILR): la version ya esta
+            // repuesta, un fallo aca se asienta y no se informa como error.
+            try
+            {
+                BLL_Integridad_704ILR.RecalcularDVVerticalReservas_704ILR();
 
-            // El control de cambios registra la restauracion como una modificacion
-            // mas, campo por campo (queda trazado en el historial de la reserva).
-            int cambios_704ILR = RegistradorDeCambios_704ILR.RegistrarCambios_704ILR("Reserva", reservaId_704ILR, actual_704ILR, restaurada_704ILR, CamposAuditados_704ILR);
-            BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Restauracion de version", CriticidadBitacora_704ILR.Info,
-                $"Reserva #{reservaId_704ILR} restaurada a la version #{mementoId_704ILR} ({cambios_704ILR} campo(s) repuestos)");
+                // El control de cambios registra la restauracion como una modificacion
+                // mas, campo por campo (queda trazado en el historial de la reserva).
+                int cambios_704ILR = RegistradorDeCambios_704ILR.RegistrarCambios_704ILR("Reserva", reservaId_704ILR, actual_704ILR, restaurada_704ILR, CamposAuditados_704ILR);
+                BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Restauracion de version", CriticidadBitacora_704ILR.Info,
+                    $"Reserva #{reservaId_704ILR} restaurada a la version #{mementoId_704ILR} ({cambios_704ILR} campo(s) repuestos)");
+            }
+            catch (Exception ex_704ILR)
+            {
+                BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Reservas",
+                    $"evidencia posterior a la restauracion de la reserva #{reservaId_704ILR}");
+            }
             return ReservaResult_704ILR.Success_704ILR;
+        }
+
+        // ---------------------------------------------------------------
+        // Helpers privados de las reglas.
+
+        // RN-01: true si la operacion persistida ya vencio y se la quiere llevar a
+        // OTRO estado. Es el unico criterio de vigencia y lo comparten la edicion y
+        // la restauracion de versiones: conservar el estado sigue permitido,
+        // cualquier cambio exige renovar antes.
+        private static bool AvanceConVigenciaVencida_704ILR(BE_Reserva_704ILR persistida_704ILR, EstadoReserva_704ILR destino_704ILR)
+            => persistida_704ILR.Estado_704ILR != destino_704ILR && persistida_704ILR.EstaVencida_704ILR;
+
+        // RN-05: un estado fuera del enum (posible por casteo desde un entero) no
+        // figura en la tabla de transiciones y no puede persistirse. Deja asiento
+        // porque no es un error de tipeo: no hay pantalla que lo produzca.
+        private static bool EstadoDefinido_704ILR(EstadoReserva_704ILR estado_704ILR, string accion_704ILR)
+        {
+            if (Enum.IsDefined(typeof(EstadoReserva_704ILR), estado_704ILR)) return true;
+            BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", accion_704ILR, CriticidadBitacora_704ILR.Advertencia,
+                $"Estado '{(int)estado_704ILR}' fuera del ciclo de vida de la reserva (RN-05).");
+            return false;
+        }
+
+        // Cuando viajan los servicios, valida cada linea y fija el monto de la
+        // cabecera como su suma. Con 'servicios' en null no hay lineas que juzgar y
+        // el monto queda como lo informo el llamador (cabecera sola).
+        // Devuelve false si alguna linea es invalida.
+        private static bool AplicarServicios_704ILR(BE_Reserva_704ILR reserva_704ILR,
+            IList<BE_ReservaServicio_704ILR> servicios_704ILR)
+        {
+            if (servicios_704ILR == null) return true;
+            if (!BLL_ReservaServicio_704ILR.ValidarLineas_704ILR(servicios_704ILR)) return false;
+            reserva_704ILR.Monto_704ILR = BLL_ReservaServicio_704ILR.Total_704ILR(servicios_704ILR);
+            return true;
+        }
+
+        // True si algun campo auditado de la cabecera difiere entre lo persistido y
+        // lo pedido (mismos campos que CamposAuditados_704ILR).
+        private static bool CabeceraCambio_704ILR(BE_Reserva_704ILR antes_704ILR, BE_Reserva_704ILR despues_704ILR)
+            => antes_704ILR.ClienteId_704ILR != despues_704ILR.ClienteId_704ILR
+            || antes_704ILR.SalonId_704ILR != despues_704ILR.SalonId_704ILR
+            || antes_704ILR.FechaEvento_704ILR != despues_704ILR.FechaEvento_704ILR
+            || antes_704ILR.Estado_704ILR != despues_704ILR.Estado_704ILR
+            || antes_704ILR.Monto_704ILR != despues_704ILR.Monto_704ILR
+            || antes_704ILR.CantidadInvitados_704ILR != despues_704ILR.CantidadInvitados_704ILR;
+
+        // RN-03 en el motor: el indice unico de (salon, fecha) sobre las confirmadas
+        // es la red de seguridad cuando dos operaciones pasaron la validacion previa a
+        // la vez. 2601 y 2627 son los errores de indice unico y de restriccion unica.
+        private static bool EsChoqueDeUnicidad_704ILR(SqlException ex_704ILR)
+            => ex_704ILR.Number == 2601 || ex_704ILR.Number == 2627;
+
+        private static void AsentarRechazoDelMotor_704ILR(int reservaId_704ILR, string accion_704ILR)
+        {
+            string referencia_704ILR = reservaId_704ILR > 0 ? "Reserva #" + reservaId_704ILR : "Reserva nueva";
+            BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", accion_704ILR, CriticidadBitacora_704ILR.Advertencia,
+                $"{referencia_704ILR}: el motor rechazo la escritura, el salon ya tiene una reserva " +
+                "confirmada para esa fecha (RN-03).");
         }
 
         // Criterio de auditoria de los rechazos de Validar_704ILR: se asientan los que

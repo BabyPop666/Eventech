@@ -18,6 +18,7 @@ namespace EvenTech.UI
         private readonly TabPage _tabBitacora_704ILR;   // null si el usuario no tiene BITACORA_VER
         private readonly TabPage _tabLogin_704ILR;      // null si el usuario no tiene AUDIT_LOGIN_VER
         private readonly AppButton_704ILR _btnRecalc_704ILR;   // null si el usuario no tiene permiso
+        private readonly Label _lblSinConsulta_704ILR;   // solo cuando no hay ninguna pestana
 
         public ucAuditoriaHub_704ILR()
         {
@@ -42,6 +43,19 @@ namespace EvenTech.UI
                 _tabs_704ILR.TabPages.Add(_tabLogin_704ILR);
             }
             Controls.Add(_tabs_704ILR);
+            // La seccion tambien se abre con solo INTEGRIDAD_RECALC (el recalculo de
+            // la linea base vive aca). Sin ninguna pestana, en lugar de un control de
+            // pestanas vacio se explica que la consulta no esta habilitada.
+            if (_tabs_704ILR.TabPages.Count == 0)
+            {
+                _tabs_704ILR.Visible = false;
+                _lblSinConsulta_704ILR = new Label
+                {
+                    Dock = DockStyle.Fill, Font = Theme_704ILR.FontBody_704ILR, ForeColor = Theme_704ILR.TextMuted_704ILR,
+                    TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.Transparent
+                };
+                Controls.Add(_lblSinConsulta_704ILR);
+            }
 
             if (Permisos_704ILR.Tiene_704ILR("INTEGRIDAD_RECALC"))
             {
@@ -106,6 +120,8 @@ namespace EvenTech.UI
             if (_tabBitacora_704ILR != null) _tabBitacora_704ILR.Text = Tr_704ILR.T_704ILR("AUD_TAB_BITACORA");
             if (_tabLogin_704ILR != null) _tabLogin_704ILR.Text = Tr_704ILR.T_704ILR("AUD_TAB_LOGIN");
             if (_btnRecalc_704ILR != null) _btnRecalc_704ILR.Text = T_704ILR("AUD_RECALC_BTN", "Recalcular linea base");
+            if (_lblSinConsulta_704ILR != null)
+                _lblSinConsulta_704ILR.Text = T_704ILR("AUD_SIN_CONSULTA", "El perfil no tiene permisos de consulta de auditoria.");
         }
     }
 }

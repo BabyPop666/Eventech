@@ -117,14 +117,16 @@ namespace EvenTech.UI
                     ? new RowStyle(SizeType.Percent, 100)
                     : new RowStyle(SizeType.Absolute, heights_704ILR[i_704ILR]));
 
-            // El isologotipo encabeza la pantalla de acceso (G05). Sin el recurso, el
-            // rotulo de texto cumple la misma funcion.
+            // El isologotipo encabeza la pantalla de acceso (G05). A este tamano se
+            // usa la variante compacta (isotipo + EVENTECH, sin lema): el lema no se
+            // lee a 64 px de alto. Sin el recurso, el rotulo de texto cumple la misma
+            // funcion.
             Control lblLogo_704ILR;
             if (Theme_704ILR.Logo_704ILR != null)
             {
                 lblLogo_704ILR = new PictureBox
                 {
-                    Image = Theme_704ILR.Logo_704ILR,
+                    Image = Theme_704ILR.LogoCompacto_704ILR ?? Theme_704ILR.Logo_704ILR,
                     SizeMode = PictureBoxSizeMode.Zoom,
                     Dock = DockStyle.Fill,
                     BackColor = Color.Transparent
@@ -240,13 +242,12 @@ namespace EvenTech.UI
                     _txtUser_704ILR.Focus();
                     Show();
                     break;
-                case LoginResult_704ILR.UserNotFound_704ILR:
-                    SetError_704ILR(T_704ILR("LOGIN_ERR_USUARIO", "Usuario no encontrado."));
-                    break;
                 case LoginResult_704ILR.IncorrectPassword_704ILR:
-                    // Muestra el intento actual: "Contraseña incorrecta. Intento 2 de 3."
-                    SetError_704ILR(T_704ILR("LOGIN_ERR_PASS", "Contraseña incorrecta.") + " " +
-                             string.Format(T_704ILR("LOGIN_INTENTOS", "Intento {0} de {1}."), resp_704ILR.FailedAttempts_704ILR, resp_704ILR.MaxAttempts_704ILR));
+                    // Mismo mensaje para usuario inexistente y contrasena incorrecta:
+                    // la pantalla no revela si el nombre existe. Muestra el intento
+                    // actual: "Usuario o contraseña incorrectos. Intento 2 de 3."
+                    SetError_704ILR(T_704ILR("LOGIN_ERR_CREDENCIALES", "Usuario o contraseña incorrectos.") + " " +
+                             Tr_704ILR.F_704ILR("LOGIN_INTENTOS", "Intento {0} de {1}.", resp_704ILR.FailedAttempts_704ILR, resp_704ILR.MaxAttempts_704ILR));
                     break;
                 case LoginResult_704ILR.UserBlocked_704ILR:
                     SetError_704ILR(T_704ILR("LOGIN_BLOQUEADA", "Cuenta bloqueada. Contactate con un administrador."));

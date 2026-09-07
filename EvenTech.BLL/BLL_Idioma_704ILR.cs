@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using EvenTech.BE;
 using EvenTech.DAL;
 using EvenTech.Services;
@@ -67,9 +69,55 @@ namespace EvenTech.BLL
             return IdiomaResult_704ILR.Success_704ILR;
         }
 
+        // Marcadores {n} de una plantilla ("{0}", "{1:N2}"); las llaves escapadas
+        // "{{" se quitan antes de buscar.
+        private static readonly Regex Marcador_704ILR = new Regex(@"\{(\d+)", RegexOptions.Compiled);
+
+        // Un texto editado solo puede usar los marcadores {n} que ya tiene el texto
+        // de fabrica de la misma clave (el del idioma por defecto) y sus llaves
+        // tienen que cerrar: string.Format con una plantilla rota lanza en la
+        // pantalla que la usa, no en el editor.
+        public static bool PlantillaValida_704ILR(string textoFabrica_704ILR, string textoNuevo_704ILR)
+        {
+            if (string.IsNullOrEmpty(textoNuevo_704ILR)) return true;
+
+            var permitidos_704ILR = new HashSet<int>();
+            foreach (Match m_704ILR in Marcador_704ILR.Matches((textoFabrica_704ILR ?? "").Replace("{{", "")))
+                permitidos_704ILR.Add(int.Parse(m_704ILR.Groups[1].Value));
+            foreach (Match m_704ILR in Marcador_704ILR.Matches(textoNuevo_704ILR.Replace("{{", "")))
+                if (!permitidos_704ILR.Contains(int.Parse(m_704ILR.Groups[1].Value))) return false;
+
+            int cantidad_704ILR = permitidos_704ILR.Count == 0 ? 0 : permitidos_704ILR.Max() + 1;
+            try { string.Format(textoNuevo_704ILR, new object[cantidad_704ILR]); return true; }
+            catch (FormatException) { return false; }
+        }
+
+        // Primera clave del lote cuyo texto no respeta la plantilla de fabrica, o
+        // null si todas son validas.
+        public static string PrimeraPlantillaInvalida_704ILR(IDictionary<string, string> textos_704ILR)
+        {
+            var idiomas_704ILR = DAL_Idioma_704ILR.GetIdiomas_704ILR();
+            var baseIdioma_704ILR = idiomas_704ILR.FirstOrDefault(i_704ILR => i_704ILR.Codigo_704ILR == CodigoPorDefecto_704ILR);
+            var fabrica_704ILR = baseIdioma_704ILR == null
+                ? new Dictionary<string, string>()
+                : DAL_Idioma_704ILR.GetTraducciones_704ILR(baseIdioma_704ILR.Id_704ILR);
+
+            foreach (var kv_704ILR in textos_704ILR)
+            {
+                fabrica_704ILR.TryGetValue(kv_704ILR.Key, out string textoFabrica_704ILR);
+                if (!PlantillaValida_704ILR(textoFabrica_704ILR, kv_704ILR.Value)) return kv_704ILR.Key;
+            }
+            return null;
+        }
+
         // Guarda los textos editados de un idioma y recarga el gestor en caliente.
+        // Un lote con una plantilla invalida se rechaza entero, sin guardar nada.
         public static void GuardarTraducciones_704ILR(int idiomaId_704ILR, IDictionary<string, string> textos_704ILR)
         {
+            string claveInvalida_704ILR = PrimeraPlantillaInvalida_704ILR(textos_704ILR);
+            if (claveInvalida_704ILR != null)
+                throw new ArgumentException("La traduccion de '" + claveInvalida_704ILR + "' tiene llaves sin cerrar o marcadores que la clave no admite.");
+
             foreach (var kv_704ILR in textos_704ILR)
                 DAL_Idioma_704ILR.UpsertTraduccion_704ILR(idiomaId_704ILR, kv_704ILR.Key, kv_704ILR.Value);
 

@@ -1,11 +1,38 @@
--- EvenTech - Schema inicial
--- Solamente Users + LoginAuditLog (login + auditoria)
+﻿-- EvenTech - Esquema de la base de datos (db/schema.sql)
+--
+-- Script idempotente: crea lo que falte y migra lo que exista, asi que sirve
+-- tanto para levantar una base nueva como para actualizar una base anterior.
+-- Se ejecuta SOBRE la base que indica -d (no crea la base ni cambia de
+-- contexto); la base se crea aparte, ver db/README.md.
+--
+-- Inventario (20 tablas):
+--   Seguridad y acceso ...... Users, LoginAuditLog, Perfiles, Permisos,
+--                             PerfilPermiso, PerfilIncluido
+--   Negocio (RFN1) .......... Clientes, Salones, Reservas, Servicios,
+--                             ReservaServicio, MetodosPago, Pagos
+--   Auditoria e integridad .. Bitacora, HistorialCambios, ReservaMemento,
+--                             ReservaMementoServicio, DVVertical
+--   Idiomas ................. Idiomas, Traducciones
+-- Semillas: usuario admin/admin123, arbol de permisos, perfiles Administrador,
+-- Vendedor, Supervisor y Gerencial, catalogos de ejemplo (salones, servicios,
+-- metodos de pago, dos clientes) y las traducciones ES/EN/PT de la interfaz.
 
-IF DB_ID('EvenTechDB') IS NULL
-    CREATE DATABASE [EvenTechDB];
+-- Los indices filtrados (UX_Clientes_Dni, UX_Reservas_SalonFecha_Confirmada)
+-- exigen QUOTED_IDENTIFIER ON. El sqlcmd que instala SQL Server arranca con
+-- OFF salvo que se pase -I, asi que se fija aca para no depender del cliente.
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 GO
 
-USE [EvenTechDB];
+-- Guarda: el script no debe correr sobre una base del sistema (pasa al
+-- olvidar -d). Con sqlcmd -b el error corta la ejecucion; sin -b, NOEXEC deja
+-- el resto del script sin ejecutar.
+IF DB_NAME() IN (N'master', N'tempdb', N'model', N'msdb')
+BEGIN
+    DECLARE @baseActual SYSNAME = DB_NAME();
+    RAISERROR(N'schema.sql: la base actual es "%s". Ejecutar con -d <base> sobre la base de EvenTech (ver db/README.md).', 16, 1, @baseActual);
+    SET NOEXEC ON;
+END
 GO
 
 -- Tabla de usuarios.
@@ -61,7 +88,7 @@ END
 GO
 
 -- ===========================================================================
--- Negocio: Salones + Reservas
+-- Negocio: Salones + Clientes + Reservas
 -- ===========================================================================
 
 -- Catalogo de salones donde se realizan los eventos.
@@ -76,31 +103,7 @@ BEGIN
 END
 GO
 
--- Reserva de un evento sobre un salon. Entidad central del dominio.
--- Dvh: digito verificador horizontal (lo completa el modulo de integridad; por
--- eso admite NULL hasta que ese modulo este implementado).
-IF OBJECT_ID('dbo.Reservas','U') IS NULL
-BEGIN
-    CREATE TABLE dbo.Reservas (
-        Id            INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Reservas PRIMARY KEY,
-        ClienteNombre NVARCHAR(150)     NOT NULL,
-        SalonId       INT               NOT NULL,
-        FechaEvento   DATETIME          NOT NULL,
-        Estado        NVARCHAR(20)      NOT NULL CONSTRAINT DF_Reservas_Estado DEFAULT 'COTIZACION',
-        Monto         DECIMAL(12,2)     NOT NULL CONSTRAINT DF_Reservas_Monto DEFAULT 0,
-        CreatedAt     DATETIME          NOT NULL CONSTRAINT DF_Reservas_CreatedAt DEFAULT GETDATE(),
-        Dvh           NVARCHAR(64)      NULL,
-        CONSTRAINT FK_Reservas_Salones FOREIGN KEY (SalonId) REFERENCES dbo.Salones(Id)
-    );
-
-    CREATE INDEX IX_Reservas_FechaEvento ON dbo.Reservas(FechaEvento DESC);
-    CREATE INDEX IX_Reservas_SalonId ON dbo.Reservas(SalonId);
-END
-GO
-
--- ===========================================================================
--- Clientes (Proceso 1) + normalizacion de Reservas (ClienteNombre -> ClienteId)
--- ===========================================================================
+-- Clientes (Proceso 1). Toda reserva pertenece a un cliente registrado.
 IF OBJECT_ID('dbo.Clientes','U') IS NULL
 BEGIN
     CREATE TABLE dbo.Clientes (
@@ -112,10 +115,45 @@ BEGIN
         Telefono  NVARCHAR(200)     NULL,  -- cifrado AES + Base64 (CryptoService)
         CreatedAt DATETIME          NOT NULL CONSTRAINT DF_Clientes_CreatedAt DEFAULT GETDATE()
     );
-    -- DNI unico solo cuando esta cargado (permite varios clientes sin DNI).
-    CREATE UNIQUE INDEX UX_Clientes_Dni ON dbo.Clientes(Dni) WHERE Dni IS NOT NULL;
 END
 GO
+
+-- DNI unico solo cuando esta cargado (permite varios clientes sin DNI). Va en
+-- bloque propio y no dentro del CREATE TABLE: si el indice no pudo crearse en
+-- una corrida anterior (QUOTED_IDENTIFIER OFF), la tabla ya existia y el
+-- bloque de creacion no volvia a intentarlo.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Clientes_Dni' AND object_id = OBJECT_ID('dbo.Clientes'))
+    CREATE UNIQUE INDEX UX_Clientes_Dni ON dbo.Clientes(Dni) WHERE Dni IS NOT NULL;
+GO
+
+-- Reserva de un evento sobre un salon. Entidad central del dominio.
+-- Dvh: digito verificador horizontal (T07/T08). Lo calcula y graba la capa de
+-- negocio en cada alta o modificacion; admite NULL para que una fila cargada
+-- por fuera de la aplicacion no rompa el alta y quede detectable como
+-- inconsistencia en la verificacion de arranque.
+IF OBJECT_ID('dbo.Reservas','U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Reservas (
+        Id            INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Reservas PRIMARY KEY,
+        ClienteId     INT               NOT NULL,
+        SalonId       INT               NOT NULL,
+        FechaEvento   DATETIME          NOT NULL,
+        Estado        NVARCHAR(20)      NOT NULL CONSTRAINT DF_Reservas_Estado DEFAULT 'COTIZACION',
+        Monto         DECIMAL(12,2)     NOT NULL CONSTRAINT DF_Reservas_Monto DEFAULT 0,
+        CreatedAt     DATETIME          NOT NULL CONSTRAINT DF_Reservas_CreatedAt DEFAULT GETDATE(),
+        Dvh           NVARCHAR(64)      NULL,
+        CONSTRAINT FK_Reservas_Clientes FOREIGN KEY (ClienteId) REFERENCES dbo.Clientes(Id),
+        CONSTRAINT FK_Reservas_Salones  FOREIGN KEY (SalonId)   REFERENCES dbo.Salones(Id)
+    );
+
+    CREATE INDEX IX_Reservas_FechaEvento ON dbo.Reservas(FechaEvento DESC);
+    CREATE INDEX IX_Reservas_SalonId ON dbo.Reservas(SalonId);
+END
+GO
+
+-- ===========================================================================
+-- Migraciones de Reservas para bases anteriores (idempotentes)
+-- ===========================================================================
 
 -- Email/Telefono se almacenan cifrados (AES-256 + Base64, prefijo 'ENC:'), lo que
 -- requiere mas ancho que el texto plano. Idempotente: solo amplia si estan cortas.
@@ -128,7 +166,8 @@ IF EXISTS (SELECT 1 FROM sys.columns
     ALTER TABLE dbo.Clientes ALTER COLUMN Telefono NVARCHAR(200) NULL;
 GO
 
--- Reservas.ClienteId (FK -> Clientes)
+-- Bases creadas con la primera version de Reservas (ClienteNombre en texto):
+-- se agrega ClienteId (FK -> Clientes), nace NULL para poder migrar las filas.
 IF COL_LENGTH('dbo.Reservas','ClienteId') IS NULL
     ALTER TABLE dbo.Reservas ADD ClienteId INT NULL
         CONSTRAINT FK_Reservas_Clientes FOREIGN KEY REFERENCES dbo.Clientes(Id);
@@ -138,13 +177,6 @@ GO
 -- y luego elimina la columna ClienteNombre (queda normalizado en Clientes / 3FN).
 -- Se usa EXEC (dynamic SQL) para que la referencia a ClienteNombre no se compile
 -- cuando la columna ya no existe (si no, el re-run del script fallaria).
--- Vencimiento de la operacion (RN-01): una COTIZACION o una reserva PENDIENTE
--- tienen un plazo de validez. Al confirmarse o cancelarse deja de aplicar y queda
--- en NULL. Es un dato administrativo: NO entra en el digito verificador.
-IF COL_LENGTH('dbo.Reservas','VenceEl') IS NULL
-    ALTER TABLE dbo.Reservas ADD VenceEl DATETIME NULL;
-GO
-
 IF COL_LENGTH('dbo.Reservas','ClienteNombre') IS NOT NULL
 BEGIN
     EXEC('INSERT INTO dbo.Clientes (Nombre)
@@ -178,6 +210,13 @@ BEGIN
 END
 GO
 
+-- Vencimiento de la operacion (RN-01): una COTIZACION o una reserva PENDIENTE
+-- tienen un plazo de validez. Al confirmarse o cancelarse deja de aplicar y queda
+-- en NULL. Es un dato administrativo: NO entra en el digito verificador.
+IF COL_LENGTH('dbo.Reservas','VenceEl') IS NULL
+    ALTER TABLE dbo.Reservas ADD VenceEl DATETIME NULL;
+GO
+
 -- Cantidad de invitados estimada (PN1: "Cantidad_Invitados"). Es el dato que el
 -- vendedor usa para consultar disponibilidad y el que sostiene la RN-06: al
 -- confirmar, el salon elegido tiene que poder alojar a los invitados. Se persiste
@@ -189,6 +228,17 @@ GO
 IF COL_LENGTH('dbo.Reservas','CantidadInvitados') IS NULL
     ALTER TABLE dbo.Reservas ADD CantidadInvitados INT NOT NULL
         CONSTRAINT DF_Reservas_CantidadInvitados DEFAULT 0;
+GO
+
+-- Anti-doble-reserva a nivel de motor (RN-03): no puede haber dos reservas
+-- CONFIRMADA para el mismo salon y fecha. Es la red de seguridad ante una
+-- carrera entre dos confirmaciones simultaneas (la BLL igual lo pre-valida por
+-- dia con CAST AS DATE). Indice UNICO filtrado: solo aplica a las CONFIRMADA;
+-- cotizaciones, pendientes y canceladas no compiten. La app guarda FechaEvento
+-- con hora 00:00, asi (SalonId, FechaEvento) = (salon, dia).
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Reservas_SalonFecha_Confirmada' AND object_id = OBJECT_ID('dbo.Reservas'))
+    CREATE UNIQUE INDEX UX_Reservas_SalonFecha_Confirmada
+        ON dbo.Reservas(SalonId, FechaEvento) WHERE Estado = 'CONFIRMADA';
 GO
 
 -- ---------------------------------------------------------------------------
@@ -364,6 +414,25 @@ BEGIN
 
     CREATE INDEX IX_HistorialCambios_Entidad ON dbo.HistorialCambios(Entidad, EntidadId);
 END
+GO
+
+-- RN-01 en bases anteriores a la columna VenceEl: las operaciones activas
+-- quedaban sin plazo y NULL se lee como "no vence", asi que avanzaban de estado
+-- sin renovar. El plazo se cuenta desde la emision (CreatedAt) para COTIZACION
+-- (15 dias) y, para PENDIENTE (72 horas), desde el ultimo pase a ese estado
+-- asentado en HistorialCambios o, si no hay asiento, desde la emision, que es
+-- la cota mas conservadora (una operacion realmente vieja queda vencida y la
+-- aplicacion exige renovarla). Las constantes son las de BLL_Reserva
+-- (DiasValidezCotizacion / HorasValidezPendiente). Solo toca filas sin plazo:
+-- re-ejecutar no prolonga nada. VenceEl no integra el digito verificador.
+UPDATE r SET r.VenceEl = CASE r.Estado
+        WHEN 'COTIZACION' THEN DATEADD(DAY, 15, r.CreatedAt)
+        WHEN 'PENDIENTE'  THEN DATEADD(HOUR, 72, COALESCE(
+            (SELECT MAX(h.Fecha) FROM dbo.HistorialCambios h
+              WHERE h.Entidad = N'Reserva' AND h.EntidadId = r.Id
+                AND h.NombreCampo = N'Estado' AND h.ValorNuevo = N'PENDIENTE'), r.CreatedAt)) END
+FROM dbo.Reservas r
+WHERE r.VenceEl IS NULL AND r.Estado IN ('COTIZACION', 'PENDIENTE');
 GO
 
 -- ===========================================================================
@@ -561,7 +630,7 @@ GO
 -- Seed de idiomas + leyendas (ES por defecto, EN).
 IF NOT EXISTS (SELECT 1 FROM dbo.Idiomas)
 BEGIN
-    INSERT INTO dbo.Idiomas (Codigo, Nombre) VALUES (N'ES', N'Espanol');
+    INSERT INTO dbo.Idiomas (Codigo, Nombre) VALUES (N'ES', N'Español');
     DECLARE @es INT = SCOPE_IDENTITY();
     INSERT INTO dbo.Idiomas (Codigo, Nombre) VALUES (N'EN', N'English');
     DECLARE @en INT = SCOPE_IDENTITY();
@@ -571,15 +640,14 @@ BEGIN
         (@es, N'MENU_RESERVAS',  N'Reservas'),
         (@es, N'MENU_PERFILES',  N'Perfiles'),
         (@es, N'MENU_IDIOMAS',   N'Idiomas'),
-        (@es, N'MENU_BITACORA',  N'Bitacora'),
-        (@es, N'MENU_AUDITORIA', N'Auditoria login'),
-        (@es, N'MENU_SALIR',     N'Cerrar sesion'),
+        (@es, N'MENU_BITACORA', N'Bitácora'),
+        (@es, N'MENU_AUDITORIA', N'Auditoría'),
+        (@es, N'MENU_SALIR', N'Cerrar sesión'),
         (@es, N'MAIN_WELCOME',   N'Bienvenido a EvenTech'),
-        (@es, N'MAIN_USER',      N'Usuario'),
         (@es, N'LOGIN_USER',     N'Usuario'),
-        (@es, N'LOGIN_PASS',     N'Contrasena'),
+        (@es, N'LOGIN_PASS', N'Contraseña'),
         (@es, N'LOGIN_ENTER',    N'Ingresar'),
-        (@es, N'LOGIN_CREATE',   N'No tenes cuenta? Crear');
+        (@es, N'LOGIN_CREATE', N'¿No tenés cuenta? Crear');
 
     INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto) VALUES
         (@en, N'MENU_INICIO',    N'Home'),
@@ -587,10 +655,9 @@ BEGIN
         (@en, N'MENU_PERFILES',  N'Profiles'),
         (@en, N'MENU_IDIOMAS',   N'Languages'),
         (@en, N'MENU_BITACORA',  N'Audit log'),
-        (@en, N'MENU_AUDITORIA', N'Login audit'),
+        (@en, N'MENU_AUDITORIA', N'Audit'),
         (@en, N'MENU_SALIR',     N'Log out'),
         (@en, N'MAIN_WELCOME',   N'Welcome to EvenTech'),
-        (@en, N'MAIN_USER',      N'User'),
         (@en, N'LOGIN_USER',     N'Username'),
         (@en, N'LOGIN_PASS',     N'Password'),
         (@en, N'LOGIN_ENTER',    N'Sign in'),
@@ -602,23 +669,22 @@ GO
 -- funciona tanto en base nueva como en una ya creada con ES/EN.
 IF NOT EXISTS (SELECT 1 FROM dbo.Idiomas WHERE Codigo = 'PT')
 BEGIN
-    INSERT INTO dbo.Idiomas (Codigo, Nombre) VALUES (N'PT', N'Portugues');
+    INSERT INTO dbo.Idiomas (Codigo, Nombre) VALUES (N'PT', N'Português');
     DECLARE @pt INT = SCOPE_IDENTITY();
 
     INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto) VALUES
-        (@pt, N'MENU_INICIO',    N'Inicio'),
+        (@pt, N'MENU_INICIO', N'Início'),
         (@pt, N'MENU_RESERVAS',  N'Reservas'),
         (@pt, N'MENU_PERFILES',  N'Perfis'),
         (@pt, N'MENU_IDIOMAS',   N'Idiomas'),
         (@pt, N'MENU_BITACORA',  N'Registro'),
-        (@pt, N'MENU_AUDITORIA', N'Auditoria de login'),
+        (@pt, N'MENU_AUDITORIA', N'Auditoria'),
         (@pt, N'MENU_SALIR',     N'Sair'),
         (@pt, N'MAIN_WELCOME',   N'Bem-vindo ao EvenTech'),
-        (@pt, N'MAIN_USER',      N'Usuario'),
-        (@pt, N'LOGIN_USER',     N'Usuario'),
+        (@pt, N'LOGIN_USER', N'Usuário'),
         (@pt, N'LOGIN_PASS',     N'Senha'),
         (@pt, N'LOGIN_ENTER',    N'Entrar'),
-        (@pt, N'LOGIN_CREATE',   N'Nao tem conta? Criar');
+        (@pt, N'LOGIN_CREATE', N'Não tem conta? Criar');
 END
 GO
 
@@ -645,24 +711,24 @@ GO
 ;WITH Txt(Codigo, Clave, Texto) AS (
     SELECT * FROM (VALUES
         -- Inicio
-        (N'ES', N'MAIN_SESSION',  N'Sesion iniciada por:'), (N'EN', N'MAIN_SESSION',  N'Signed in as:'),               (N'PT', N'MAIN_SESSION',  N'Sessao iniciada por:'),
-        (N'ES', N'MAIN_SUBTITLE', N'Usa el menu de la izquierda para gestionar el sistema.'), (N'EN', N'MAIN_SUBTITLE', N'Use the left menu to manage the system.'), (N'PT', N'MAIN_SUBTITLE', N'Use o menu a esquerda para gerenciar o sistema.'),
+        (N'ES', N'MAIN_SESSION', N'Sesión iniciada por:'), (N'EN', N'MAIN_SESSION',  N'Signed in as:'),               (N'PT', N'MAIN_SESSION', N'Sessão iniciada por:'),
+        (N'ES', N'MAIN_SUBTITLE', N'Usa el menú de la izquierda para gestionar el sistema.'), (N'EN', N'MAIN_SUBTITLE', N'Use the left menu to manage the system.'), (N'PT', N'MAIN_SUBTITLE', N'Use o menu à esquerda para gerenciar o sistema.'),
         (N'ES', N'MAIN_HELLO',    N'Bienvenido'), (N'EN', N'MAIN_HELLO',    N'Welcome'), (N'PT', N'MAIN_HELLO',    N'Bem-vindo'),
         (N'ES', N'MAIN_SIN_ROL_TIT', N'Acceso restringido'), (N'EN', N'MAIN_SIN_ROL_TIT', N'Access restricted'), (N'PT', N'MAIN_SIN_ROL_TIT', N'Acesso restrito'),
-        (N'ES', N'MAIN_SIN_ROL', N'Tu cuenta todavia no tiene un perfil asignado. Contactate con un administrador para que te asigne uno.'), (N'EN', N'MAIN_SIN_ROL', N'Your account does not have a profile assigned yet. Contact an administrator to get one.'), (N'PT', N'MAIN_SIN_ROL', N'Sua conta ainda nao tem um perfil atribuido. Entre em contato com um administrador para receber um.'),
+        (N'ES', N'MAIN_SIN_ROL', N'Tu cuenta todavía no tiene un perfil asignado. Contactate con un administrador para que te asigne uno.'), (N'EN', N'MAIN_SIN_ROL', N'Your account does not have a profile assigned yet. Contact an administrator to get one.'), (N'PT', N'MAIN_SIN_ROL', N'Sua conta ainda não tem um perfil atribuído. Entre em contato com um administrador para receber um.'),
         -- Columnas compartidas
         (N'ES', N'COL_ID',         N'Id'),        (N'EN', N'COL_ID',         N'Id'),        (N'PT', N'COL_ID',         N'Id'),
         (N'ES', N'COL_CLIENTE',    N'Cliente'),   (N'EN', N'COL_CLIENTE',    N'Client'),    (N'PT', N'COL_CLIENTE',    N'Cliente'),
-        (N'ES', N'COL_SALON',      N'Salon'),     (N'EN', N'COL_SALON',      N'Hall'),      (N'PT', N'COL_SALON',      N'Salao'),
+        (N'ES', N'COL_SALON', N'Salón'),     (N'EN', N'COL_SALON',      N'Hall'),      (N'PT', N'COL_SALON', N'Salão'),
         (N'ES', N'COL_FECHA',      N'Fecha'),     (N'EN', N'COL_FECHA',      N'Date'),      (N'PT', N'COL_FECHA',      N'Data'),
         (N'ES', N'COL_ESTADO',     N'Estado'),    (N'EN', N'COL_ESTADO',     N'Status'),    (N'PT', N'COL_ESTADO',     N'Estado'),
         (N'ES', N'COL_MONTO',      N'Monto'),     (N'EN', N'COL_MONTO',      N'Amount'),    (N'PT', N'COL_MONTO',      N'Valor'),
-        (N'ES', N'COL_USUARIO',    N'Usuario'),   (N'EN', N'COL_USUARIO',    N'User'),      (N'PT', N'COL_USUARIO',    N'Usuario'),
-        (N'ES', N'COL_MODULO',     N'Modulo'),    (N'EN', N'COL_MODULO',     N'Module'),    (N'PT', N'COL_MODULO',     N'Modulo'),
-        (N'ES', N'COL_ACCION',     N'Accion'),    (N'EN', N'COL_ACCION',     N'Action'),    (N'PT', N'COL_ACCION',     N'Acao'),
+        (N'ES', N'COL_USUARIO',    N'Usuario'),   (N'EN', N'COL_USUARIO',    N'User'),      (N'PT', N'COL_USUARIO', N'Usuário'),
+        (N'ES', N'COL_MODULO', N'Módulo'),    (N'EN', N'COL_MODULO',     N'Module'),    (N'PT', N'COL_MODULO', N'Módulo'),
+        (N'ES', N'COL_ACCION', N'Acción'),    (N'EN', N'COL_ACCION',     N'Action'),    (N'PT', N'COL_ACCION', N'Ação'),
         (N'ES', N'COL_CRITICIDAD', N'Criticidad'),(N'EN', N'COL_CRITICIDAD', N'Severity'),  (N'PT', N'COL_CRITICIDAD', N'Criticidade'),
         (N'ES', N'COL_DETALLE',    N'Detalle'),   (N'EN', N'COL_DETALLE',    N'Detail'),    (N'PT', N'COL_DETALLE',    N'Detalhe'),
-        (N'ES', N'COL_MAQUINA',    N'Maquina'),   (N'EN', N'COL_MAQUINA',    N'Machine'),   (N'PT', N'COL_MAQUINA',    N'Maquina'),
+        (N'ES', N'COL_MAQUINA', N'Máquina'),   (N'EN', N'COL_MAQUINA',    N'Machine'),   (N'PT', N'COL_MAQUINA', N'Máquina'),
         (N'ES', N'COL_CAMPO',      N'Campo'),     (N'EN', N'COL_CAMPO',      N'Field'),     (N'PT', N'COL_CAMPO',      N'Campo'),
         (N'ES', N'COL_ANTERIOR',   N'Anterior'),  (N'EN', N'COL_ANTERIOR',   N'Previous'),  (N'PT', N'COL_ANTERIOR',   N'Anterior'),
         (N'ES', N'COL_NUEVO',      N'Nuevo'),     (N'EN', N'COL_NUEVO',      N'New'),       (N'PT', N'COL_NUEVO',      N'Novo'),
@@ -675,100 +741,102 @@ GO
         (N'ES', N'BTN_GUARDAR',    N'Guardar'),   (N'EN', N'BTN_GUARDAR',    N'Save'),      (N'PT', N'BTN_GUARDAR',    N'Salvar'),
         (N'ES', N'BTN_BUSCAR',     N'Buscar'),    (N'EN', N'BTN_BUSCAR',     N'Search'),    (N'PT', N'BTN_BUSCAR',     N'Buscar'),
         (N'ES', N'BTN_LIMPIAR',    N'Limpiar'),   (N'EN', N'BTN_LIMPIAR',    N'Clear'),     (N'PT', N'BTN_LIMPIAR',    N'Limpar'),
-        (N'ES', N'BTN_REFRESCAR',  N'Refrescar'), (N'EN', N'BTN_REFRESCAR',  N'Refresh'),   (N'PT', N'BTN_REFRESCAR',  N'Atualizar'),
         -- Reservas
-        (N'ES', N'RES_TITULO',     N'Gestion de Reservas'),       (N'EN', N'RES_TITULO',     N'Reservations Management'),  (N'PT', N'RES_TITULO',     N'Gestao de Reservas'),
-        (N'ES', N'RES_HISTORIAL',  N'Historial'),                 (N'EN', N'RES_HISTORIAL',  N'History'),                  (N'PT', N'RES_HISTORIAL',  N'Historico'),
+        (N'ES', N'RES_TITULO', N'Gestión de Reservas'),       (N'EN', N'RES_TITULO',     N'Reservations Management'),  (N'PT', N'RES_TITULO', N'Gestão de Reservas'),
+        (N'ES', N'RES_HISTORIAL',  N'Historial'),                 (N'EN', N'RES_HISTORIAL',  N'History'),                  (N'PT', N'RES_HISTORIAL', N'Histórico'),
         (N'ES', N'RES_FORM_NUEVA', N'Nueva reserva'),             (N'EN', N'RES_FORM_NUEVA', N'New reservation'),          (N'PT', N'RES_FORM_NUEVA', N'Nova reserva'),
         (N'ES', N'RES_FORM_EDITAR',N'Editar reserva'),            (N'EN', N'RES_FORM_EDITAR',N'Edit reservation'),         (N'PT', N'RES_FORM_EDITAR',N'Editar reserva'),
         (N'ES', N'RES_LBL_FECHA',  N'Fecha del evento'),          (N'EN', N'RES_LBL_FECHA',  N'Event date'),               (N'PT', N'RES_LBL_FECHA',  N'Data do evento'),
         (N'ES', N'RES_COUNT',      N'reservas'),                  (N'EN', N'RES_COUNT',      N'reservations'),             (N'PT', N'RES_COUNT',      N'reservas'),
         -- Bitacora
-        (N'ES', N'BIT_TITULO',     N'Bitacora del Sistema'),      (N'EN', N'BIT_TITULO',     N'System Audit Log'),         (N'PT', N'BIT_TITULO',     N'Registro do Sistema'),
+        (N'ES', N'BIT_TITULO', N'Bitácora del Sistema'),      (N'EN', N'BIT_TITULO',     N'System Audit Log'),         (N'PT', N'BIT_TITULO',     N'Registro do Sistema'),
         (N'ES', N'BIT_DESDE',      N'Desde'),                     (N'EN', N'BIT_DESDE',      N'From'),                     (N'PT', N'BIT_DESDE',      N'De'),
-        (N'ES', N'BIT_HASTA',      N'Hasta'),                     (N'EN', N'BIT_HASTA',      N'To'),                       (N'PT', N'BIT_HASTA',      N'Ate'),
+        (N'ES', N'BIT_HASTA',      N'Hasta'),                     (N'EN', N'BIT_HASTA',      N'To'),                       (N'PT', N'BIT_HASTA', N'Até'),
         (N'ES', N'BIT_COUNT',      N'registros'),                 (N'EN', N'BIT_COUNT',      N'records'),                  (N'PT', N'BIT_COUNT',      N'registros'),
         -- Perfiles
-        (N'ES', N'PERF_TITULO',    N'Gestion de Perfiles'),       (N'EN', N'PERF_TITULO',    N'Profiles Management'),      (N'PT', N'PERF_TITULO',    N'Gestao de Perfis'),
+        (N'ES', N'PERF_TITULO', N'Gestión de Perfiles'),       (N'EN', N'PERF_TITULO',    N'Profiles Management'),      (N'PT', N'PERF_TITULO', N'Gestão de Perfis'),
         (N'ES', N'PERF_PERFIL',    N'Perfil:'),                   (N'EN', N'PERF_PERFIL',    N'Profile:'),                 (N'PT', N'PERF_PERFIL',    N'Perfil:'),
-        (N'ES', N'PERF_HINT',      N'Tilde los permisos del perfil. Marcar un grupo incluye a sus hijos.'), (N'EN', N'PERF_HINT', N'Check the profile permissions. Checking a group includes its children.'), (N'PT', N'PERF_HINT', N'Marque as permissoes do perfil. Marcar um grupo inclui seus filhos.'),
-        (N'ES', N'PERF_GUARDAR',   N'Guardar permisos'),          (N'EN', N'PERF_GUARDAR',   N'Save permissions'),         (N'PT', N'PERF_GUARDAR',   N'Salvar permissoes'),
+        (N'ES', N'PERF_HINT',      N'Tilde los permisos del perfil. Marcar un grupo incluye a sus hijos; en "Perfiles incluidos" podés contener otros perfiles y heredar sus permisos.'), (N'EN', N'PERF_HINT', N'Check the profile permissions. Checking a group includes its children; under "Included profiles" you can nest other profiles and inherit their permissions.'), (N'PT', N'PERF_HINT', N'Marque as permissões do perfil. Marcar um grupo inclui seus filhos; em "Perfis incluídos" você pode conter outros perfis e herdar suas permissões.'),
+        (N'ES', N'PERF_GUARDAR',   N'Guardar permisos'),          (N'EN', N'PERF_GUARDAR',   N'Save permissions'),         (N'PT', N'PERF_GUARDAR', N'Salvar permissões'),
         (N'ES', N'MSG_PERF_SELECCIONE', N'Seleccione un perfil.'),(N'EN', N'MSG_PERF_SELECCIONE', N'Select a profile.'),  (N'PT', N'MSG_PERF_SELECCIONE', N'Selecione um perfil.'),
-        (N'ES', N'MSG_PERF_OK',    N'Permisos guardados.'),       (N'EN', N'MSG_PERF_OK',    N'Permissions saved.'),       (N'PT', N'MSG_PERF_OK',    N'Permissoes salvas.'),
+        (N'ES', N'MSG_PERF_OK',    N'Permisos guardados.'),       (N'EN', N'MSG_PERF_OK',    N'Permissions saved.'),       (N'PT', N'MSG_PERF_OK', N'Permissões salvas.'),
         -- Idiomas
-        (N'ES', N'IDI_TITULO',     N'Gestion de Idiomas'),        (N'EN', N'IDI_TITULO',     N'Languages Management'),     (N'PT', N'IDI_TITULO',     N'Gestao de Idiomas'),
+        (N'ES', N'IDI_TITULO', N'Gestión de Idiomas'),        (N'EN', N'IDI_TITULO',     N'Languages Management'),     (N'PT', N'IDI_TITULO', N'Gestão de Idiomas'),
         (N'ES', N'IDI_NUEVO',      N'Nuevo idioma'),              (N'EN', N'IDI_NUEVO',      N'New language'),             (N'PT', N'IDI_NUEVO',      N'Novo idioma'),
-        (N'ES', N'IDI_CODIGO',     N'Codigo (ej. PT)'),           (N'EN', N'IDI_CODIGO',     N'Code (e.g. PT)'),           (N'PT', N'IDI_CODIGO',     N'Codigo (ex. PT)'),
+        (N'ES', N'IDI_CODIGO', N'Código (ej. PT)'),           (N'EN', N'IDI_CODIGO',     N'Code (e.g. PT)'),           (N'PT', N'IDI_CODIGO', N'Código (ex. PT)'),
         (N'ES', N'IDI_NOMBRE',     N'Nombre'),                    (N'EN', N'IDI_NOMBRE',     N'Name'),                     (N'PT', N'IDI_NOMBRE',     N'Nome'),
         (N'ES', N'IDI_CREAR',      N'Crear idioma'),              (N'EN', N'IDI_CREAR',      N'Create language'),          (N'PT', N'IDI_CREAR',      N'Criar idioma'),
         (N'ES', N'IDI_IDIOMA',     N'Idioma:'),                   (N'EN', N'IDI_IDIOMA',     N'Language:'),                (N'PT', N'IDI_IDIOMA',     N'Idioma:'),
-        (N'ES', N'IDI_GUARDAR',    N'Guardar traducciones'),      (N'EN', N'IDI_GUARDAR',    N'Save translations'),        (N'PT', N'IDI_GUARDAR',    N'Salvar traducoes'),
+        (N'ES', N'IDI_GUARDAR',    N'Guardar traducciones'),      (N'EN', N'IDI_GUARDAR',    N'Save translations'),        (N'PT', N'IDI_GUARDAR', N'Salvar traduções'),
         (N'ES', N'MSG_IDI_CREADO', N'Idioma creado. Edite los textos y guarde.'), (N'EN', N'MSG_IDI_CREADO', N'Language created. Edit the texts and save.'), (N'PT', N'MSG_IDI_CREADO', N'Idioma criado. Edite os textos e salve.'),
         (N'ES', N'MSG_IDI_SELECCIONE', N'Seleccione un idioma.'), (N'EN', N'MSG_IDI_SELECCIONE', N'Select a language.'),   (N'PT', N'MSG_IDI_SELECCIONE', N'Selecione um idioma.'),
-        (N'ES', N'MSG_IDI_GUARDADO', N'Traducciones guardadas.'), (N'EN', N'MSG_IDI_GUARDADO', N'Translations saved.'),    (N'PT', N'MSG_IDI_GUARDADO', N'Traducoes salvas.'),
-        (N'ES', N'MSG_IDI_COD_INV', N'Codigo invalido (1 a 5 caracteres).'), (N'EN', N'MSG_IDI_COD_INV', N'Invalid code (1 to 5 chars).'), (N'PT', N'MSG_IDI_COD_INV', N'Codigo invalido (1 a 5 caracteres).'),
+        (N'ES', N'MSG_IDI_GUARDADO', N'Traducciones guardadas.'), (N'EN', N'MSG_IDI_GUARDADO', N'Translations saved.'),    (N'PT', N'MSG_IDI_GUARDADO', N'Traduções salvas.'),
+        (N'ES', N'MSG_IDI_COD_INV', N'Código inválido (1 a 5 caracteres).'), (N'EN', N'MSG_IDI_COD_INV', N'Invalid code (1 to 5 chars).'), (N'PT', N'MSG_IDI_COD_INV', N'Código inválido (1 a 5 caracteres).'),
         (N'ES', N'MSG_IDI_NOM_INV', N'Ingrese el nombre del idioma.'), (N'EN', N'MSG_IDI_NOM_INV', N'Enter the language name.'), (N'PT', N'MSG_IDI_NOM_INV', N'Informe o nome do idioma.'),
-        (N'ES', N'MSG_IDI_DUP',    N'Ya existe un idioma con ese codigo.'), (N'EN', N'MSG_IDI_DUP', N'A language with that code already exists.'), (N'PT', N'MSG_IDI_DUP', N'Ja existe um idioma com esse codigo.'),
-        (N'ES', N'MSG_IDI_ERROR',  N'No se pudo crear el idioma.'),(N'EN', N'MSG_IDI_ERROR',  N'Could not create the language.'), (N'PT', N'MSG_IDI_ERROR', N'Nao foi possivel criar o idioma.'),
+        (N'ES', N'MSG_IDI_DUP', N'Ya existe un idioma con ese código.'), (N'EN', N'MSG_IDI_DUP', N'A language with that code already exists.'), (N'PT', N'MSG_IDI_DUP', N'Já existe um idioma com esse código.'),
+        (N'ES', N'MSG_IDI_ERROR',  N'No se pudo crear el idioma.'),(N'EN', N'MSG_IDI_ERROR',  N'Could not create the language.'), (N'PT', N'MSG_IDI_ERROR', N'Não foi possível criar o idioma.'),
+        (N'ES', N'IDI_PLANTILLA_INVALIDA', N'El texto de ''{0}'' tiene llaves sin cerrar o marcadores que la clave no admite.'), (N'EN', N'IDI_PLANTILLA_INVALIDA', N'The text for ''{0}'' has unclosed braces or placeholders that the key does not allow.'), (N'PT', N'IDI_PLANTILLA_INVALIDA', N'O texto de ''{0}'' tem chaves sem fechar ou marcadores que a chave não admite.'),
         -- Auditoria
-        (N'ES', N'AUD_TITULO',     N'Registro de Auditoria'),     (N'EN', N'AUD_TITULO',     N'Login Audit Log'),          (N'PT', N'AUD_TITULO',     N'Registro de Auditoria'),
+        (N'ES', N'AUD_TITULO', N'Registro de Auditoría'),     (N'EN', N'AUD_TITULO',     N'Login Audit Log'),          (N'PT', N'AUD_TITULO',     N'Registro de Auditoria'),
         (N'ES', N'AUD_COUNT',      N'registros'),                 (N'EN', N'AUD_COUNT',      N'records'),                  (N'PT', N'AUD_COUNT',      N'registros'),
+        (N'ES', N'AUD_SIN_CONSULTA', N'El perfil no tiene permisos de consulta de auditoría.'), (N'EN', N'AUD_SIN_CONSULTA', N'The profile has no audit viewing permissions.'), (N'PT', N'AUD_SIN_CONSULTA', N'O perfil não tem permissões de consulta de auditoria.'),
         -- Historial de reserva
-        (N'ES', N'HIST_TITULO',    N'Historial de la reserva'),   (N'EN', N'HIST_TITULO',    N'Reservation history'),      (N'PT', N'HIST_TITULO',    N'Historico da reserva'),
+        (N'ES', N'HIST_TITULO',    N'Historial de la reserva'),   (N'EN', N'HIST_TITULO',    N'Reservation history'),      (N'PT', N'HIST_TITULO', N'Histórico da reserva'),
         -- Alerta de integridad
         (N'ES', N'ALERT_TITULO',   N'Se detectaron problemas de integridad'), (N'EN', N'ALERT_TITULO', N'Integrity problems detected'), (N'PT', N'ALERT_TITULO', N'Problemas de integridade detectados'),
-        (N'ES', N'ALERT_HINT',     N'La verificacion de digitos verificadores encontro datos alterados por fuera del sistema. Avise al administrador antes de operar.'), (N'EN', N'ALERT_HINT', N'The check-digit verification found data altered outside the system. Notify the administrator before operating.'), (N'PT', N'ALERT_HINT', N'A verificacao de digitos verificadores encontrou dados alterados fora do sistema. Avise o administrador antes de operar.'),
+        (N'ES', N'ALERT_HINT', N'La verificación de dígitos verificadores encontró datos alterados por fuera del sistema. Avise al administrador antes de operar.'), (N'EN', N'ALERT_HINT', N'The check-digit verification found data altered outside the system. Notify the administrator before operating.'), (N'PT', N'ALERT_HINT', N'A verificação de dígitos verificadores encontrou dados alterados fora do sistema. Avise o administrador antes de operar.'),
         (N'ES', N'ALERT_BTN',      N'Revisado, continuar'),       (N'EN', N'ALERT_BTN',      N'Reviewed, continue'),       (N'PT', N'ALERT_BTN',      N'Revisado, continuar'),
+        (N'ES', N'ALERT_NO_VERIFICADA', N'La verificación de integridad no pudo ejecutarse: {0}'), (N'EN', N'ALERT_NO_VERIFICADA', N'The integrity check could not run: {0}'), (N'PT', N'ALERT_NO_VERIFICADA', N'A verificação de integridade não pôde ser executada: {0}'),
         -- Crear cuenta
         (N'ES', N'CC_TITULO',      N'Crear cuenta'),              (N'EN', N'CC_TITULO',      N'Create account'),           (N'PT', N'CC_TITULO',      N'Criar conta'),
-        (N'ES', N'CC_USER',        N'Usuario'),                   (N'EN', N'CC_USER',        N'Username'),                 (N'PT', N'CC_USER',        N'Usuario'),
-        (N'ES', N'CC_PASS',        N'Contrasena'),                (N'EN', N'CC_PASS',        N'Password'),                 (N'PT', N'CC_PASS',        N'Senha'),
-        (N'ES', N'CC_PASS2',       N'Repetir contrasena'),        (N'EN', N'CC_PASS2',       N'Repeat password'),          (N'PT', N'CC_PASS2',       N'Repetir senha'),
+        (N'ES', N'CC_USER',        N'Usuario'),                   (N'EN', N'CC_USER',        N'Username'),                 (N'PT', N'CC_USER', N'Usuário'),
+        (N'ES', N'CC_PASS', N'Contraseña'),                (N'EN', N'CC_PASS',        N'Password'),                 (N'PT', N'CC_PASS',        N'Senha'),
+        (N'ES', N'CC_PASS2', N'Repetir contraseña'),        (N'EN', N'CC_PASS2',       N'Repeat password'),          (N'PT', N'CC_PASS2',       N'Repetir senha'),
         (N'ES', N'CC_CREAR',       N'Crear'),                     (N'EN', N'CC_CREAR',       N'Create'),                   (N'PT', N'CC_CREAR',       N'Criar'),
         -- Mensajes de reservas
-        (N'ES', N'MSG_MONTO_INVALIDO', N'El monto no es un numero valido.'), (N'EN', N'MSG_MONTO_INVALIDO', N'The amount is not a valid number.'), (N'PT', N'MSG_MONTO_INVALIDO', N'O valor nao e um numero valido.'),
-        (N'ES', N'MSG_RES_CLIENTE', N'Ingrese el nombre del cliente.'), (N'EN', N'MSG_RES_CLIENTE', N'Enter the client name.'), (N'PT', N'MSG_RES_CLIENTE', N'Informe o nome do cliente.'),
-        (N'ES', N'MSG_RES_SALON',  N'Seleccione un salon valido.'),(N'EN', N'MSG_RES_SALON',  N'Select a valid hall.'),     (N'PT', N'MSG_RES_SALON',  N'Selecione um salao valido.'),
-        (N'ES', N'MSG_RES_FECHA',  N'La fecha del evento no puede ser anterior a hoy.'), (N'EN', N'MSG_RES_FECHA', N'The event date cannot be before today.'), (N'PT', N'MSG_RES_FECHA', N'A data do evento nao pode ser anterior a hoje.'),
-        (N'ES', N'MSG_RES_MONTO',  N'El monto no puede ser negativo.'), (N'EN', N'MSG_RES_MONTO', N'The amount cannot be negative.'), (N'PT', N'MSG_RES_MONTO', N'O valor nao pode ser negativo.'),
-        (N'ES', N'MSG_RES_NOTFOUND', N'La reserva ya no existe.'),(N'EN', N'MSG_RES_NOTFOUND', N'The reservation no longer exists.'), (N'PT', N'MSG_RES_NOTFOUND', N'A reserva nao existe mais.'),
-        (N'ES', N'MSG_RES_ERROR',  N'No se pudo guardar la reserva.'), (N'EN', N'MSG_RES_ERROR', N'Could not save the reservation.'), (N'PT', N'MSG_RES_ERROR', N'Nao foi possivel salvar a reserva.'),
-        (N'ES', N'MSG_RES_SELECCIONE', N'Seleccione una reserva existente para ver su historial.'), (N'EN', N'MSG_RES_SELECCIONE', N'Select an existing reservation to view its history.'), (N'PT', N'MSG_RES_SELECCIONE', N'Selecione uma reserva existente para ver seu historico.'),
+        (N'ES', N'MSG_MONTO_INVALIDO', N'El monto no es un número válido.'), (N'EN', N'MSG_MONTO_INVALIDO', N'The amount is not a valid number.'), (N'PT', N'MSG_MONTO_INVALIDO', N'O valor não é um número válido.'),
+        (N'ES', N'MSG_RES_CLIENTE', N'Seleccione un cliente válido.'), (N'EN', N'MSG_RES_CLIENTE', N'Select a valid client.'), (N'PT', N'MSG_RES_CLIENTE', N'Selecione um cliente válido.'),
+        (N'ES', N'MSG_RES_SALON', N'Seleccione un salón válido.'),(N'EN', N'MSG_RES_SALON',  N'Select a valid hall.'),     (N'PT', N'MSG_RES_SALON', N'Selecione um salão válido.'),
+        (N'ES', N'MSG_RES_FECHA',  N'La fecha del evento no puede ser anterior a hoy.'), (N'EN', N'MSG_RES_FECHA', N'The event date cannot be before today.'), (N'PT', N'MSG_RES_FECHA', N'A data do evento não pode ser anterior a hoje.'),
+        (N'ES', N'MSG_RES_MONTO',  N'El monto no puede ser negativo.'), (N'EN', N'MSG_RES_MONTO', N'The amount cannot be negative.'), (N'PT', N'MSG_RES_MONTO', N'O valor não pode ser negativo.'),
+        (N'ES', N'MSG_RES_NOTFOUND', N'La reserva ya no existe.'),(N'EN', N'MSG_RES_NOTFOUND', N'The reservation no longer exists.'), (N'PT', N'MSG_RES_NOTFOUND', N'A reserva não existe mais.'),
+        (N'ES', N'MSG_RES_ERROR',  N'No se pudo guardar la reserva.'), (N'EN', N'MSG_RES_ERROR', N'Could not save the reservation.'), (N'PT', N'MSG_RES_ERROR', N'Não foi possível salvar a reserva.'),
+        (N'ES', N'MSG_RES_SELECCIONE', N'Seleccione una reserva existente para ver su historial.'), (N'EN', N'MSG_RES_SELECCIONE', N'Select an existing reservation to view its history.'), (N'PT', N'MSG_RES_SELECCIONE', N'Selecione uma reserva existente para ver seu histórico.'),
         -- Login (tagline, recordar, mensajes)
-        (N'ES', N'LOGIN_TAGLINE',  N'Gestion de eventos y reservas'), (N'EN', N'LOGIN_TAGLINE',  N'Event and booking management'), (N'PT', N'LOGIN_TAGLINE',  N'Gestao de eventos e reservas'),
+        (N'ES', N'LOGIN_TAGLINE', N'Gestión de eventos y reservas'), (N'EN', N'LOGIN_TAGLINE',  N'Event and booking management'), (N'PT', N'LOGIN_TAGLINE', N'Gestão de eventos e reservas'),
         (N'ES', N'LOGIN_REMEMBER', N'Recordar cuenta'),                (N'EN', N'LOGIN_REMEMBER', N'Remember me'),                   (N'PT', N'LOGIN_REMEMBER', N'Lembrar conta'),
-        (N'ES', N'LOGIN_COMPLETAR', N'Completar usuario y contrasena.'), (N'EN', N'LOGIN_COMPLETAR', N'Enter username and password.'), (N'PT', N'LOGIN_COMPLETAR', N'Preencha usuario e senha.'),
-        (N'ES', N'LOGIN_ERR_CONEXION', N'Error de conexion:'),         (N'EN', N'LOGIN_ERR_CONEXION', N'Connection error:'),         (N'PT', N'LOGIN_ERR_CONEXION', N'Erro de conexao:'),
-        (N'ES', N'LOGIN_ERR_USUARIO', N'Usuario no encontrado.'),       (N'EN', N'LOGIN_ERR_USUARIO', N'User not found.'),            (N'PT', N'LOGIN_ERR_USUARIO', N'Usuario nao encontrado.'),
-        (N'ES', N'LOGIN_ERR_PASS', N'Contrasena incorrecta.'),         (N'EN', N'LOGIN_ERR_PASS', N'Incorrect password.'),           (N'PT', N'LOGIN_ERR_PASS', N'Senha incorreta.'),
+        (N'ES', N'LOGIN_COMPLETAR', N'Completar usuario y contraseña.'), (N'EN', N'LOGIN_COMPLETAR', N'Enter username and password.'), (N'PT', N'LOGIN_COMPLETAR', N'Preencha usuário e senha.'),
+        (N'ES', N'LOGIN_ERR_CONEXION', N'Error de conexión:'),         (N'EN', N'LOGIN_ERR_CONEXION', N'Connection error:'),         (N'PT', N'LOGIN_ERR_CONEXION', N'Erro de conexão:'),
+        -- Un solo mensaje para usuario inexistente y clave incorrecta: no revela cual de los dos fallo.
+        (N'ES', N'LOGIN_ERR_CREDENCIALES', N'Usuario o contraseña incorrectos.'), (N'EN', N'LOGIN_ERR_CREDENCIALES', N'Incorrect username or password.'), (N'PT', N'LOGIN_ERR_CREDENCIALES', N'Usuário ou senha incorretos.'),
         -- Crear cuenta (mensajes)
         (N'ES', N'CC_MSG_COMPLETAR', N'Completar todos los campos.'),   (N'EN', N'CC_MSG_COMPLETAR', N'Fill in all fields.'),         (N'PT', N'CC_MSG_COMPLETAR', N'Preencha todos os campos.'),
-        (N'ES', N'CC_MSG_NO_COINCIDEN', N'Las contrasenas no coinciden.'), (N'EN', N'CC_MSG_NO_COINCIDEN', N'Passwords do not match.'), (N'PT', N'CC_MSG_NO_COINCIDEN', N'As senhas nao coincidem.'),
-        (N'ES', N'CC_MSG_PASS_CORTA', N'La contrasena debe tener al menos 4 caracteres.'), (N'EN', N'CC_MSG_PASS_CORTA', N'Password must be at least 4 characters.'), (N'PT', N'CC_MSG_PASS_CORTA', N'A senha deve ter ao menos 4 caracteres.'),
-        (N'ES', N'CC_MSG_OK', N'Usuario creado. Ya podes iniciar sesion.'), (N'EN', N'CC_MSG_OK', N'Account created. You can sign in now.'), (N'PT', N'CC_MSG_OK', N'Conta criada. Voce ja pode entrar.'),
-        (N'ES', N'CC_MSG_USER_INVALIDO', N'Usuario invalido (3-50, letras/numeros/._-).'), (N'EN', N'CC_MSG_USER_INVALIDO', N'Invalid username (3-50, letters/digits/._-).'), (N'PT', N'CC_MSG_USER_INVALIDO', N'Usuario invalido (3-50, letras/numeros/._-).'),
-        (N'ES', N'CC_MSG_USER_EXISTE', N'Ese usuario ya existe.'),      (N'EN', N'CC_MSG_USER_EXISTE', N'That username already exists.'), (N'PT', N'CC_MSG_USER_EXISTE', N'Esse usuario ja existe.'),
-        (N'ES', N'CC_MSG_PASS_INVALIDA', N'Contrasena invalida.'),      (N'EN', N'CC_MSG_PASS_INVALIDA', N'Invalid password.'),       (N'PT', N'CC_MSG_PASS_INVALIDA', N'Senha invalida.'),
+        (N'ES', N'CC_MSG_NO_COINCIDEN', N'Las contraseñas no coinciden.'), (N'EN', N'CC_MSG_NO_COINCIDEN', N'Passwords do not match.'), (N'PT', N'CC_MSG_NO_COINCIDEN', N'As senhas não coincidem.'),
+        (N'ES', N'CC_MSG_PASS_CORTA', N'La contraseña debe tener al menos 4 caracteres.'), (N'EN', N'CC_MSG_PASS_CORTA', N'Password must be at least 4 characters.'), (N'PT', N'CC_MSG_PASS_CORTA', N'A senha deve ter ao menos 4 caracteres.'),
+        (N'ES', N'CC_MSG_OK', N'Usuario creado. Ya podés iniciar sesión.'), (N'EN', N'CC_MSG_OK', N'Account created. You can sign in now.'), (N'PT', N'CC_MSG_OK', N'Conta criada. Você já pode entrar.'),
+        (N'ES', N'CC_MSG_USER_INVALIDO', N'Usuario inválido (3-50, letras/números/._-).'), (N'EN', N'CC_MSG_USER_INVALIDO', N'Invalid username (3-50, letters/digits/._-).'), (N'PT', N'CC_MSG_USER_INVALIDO', N'Usuário inválido (3-50, letras/números/._-).'),
+        (N'ES', N'CC_MSG_USER_EXISTE', N'Ese usuario ya existe.'),      (N'EN', N'CC_MSG_USER_EXISTE', N'That username already exists.'), (N'PT', N'CC_MSG_USER_EXISTE', N'Esse usuário já existe.'),
+        (N'ES', N'CC_MSG_PASS_INVALIDA', N'Contraseña inválida.'),      (N'EN', N'CC_MSG_PASS_INVALIDA', N'Invalid password.'),       (N'PT', N'CC_MSG_PASS_INVALIDA', N'Senha inválida.'),
         (N'ES', N'CC_MSG_ERROR', N'Error:'),                           (N'EN', N'CC_MSG_ERROR', N'Error:'),                          (N'PT', N'CC_MSG_ERROR', N'Erro:'),
         -- Varios
-        (N'ES', N'HIST_VACIO', N'Sin cambios registrados.'),           (N'EN', N'HIST_VACIO', N'No changes recorded.'),              (N'PT', N'HIST_VACIO', N'Sem alteracoes registradas.'),
+        (N'ES', N'HIST_VACIO', N'Sin cambios registrados.'),           (N'EN', N'HIST_VACIO', N'No changes recorded.'),              (N'PT', N'HIST_VACIO', N'Sem alterações registradas.'),
         (N'ES', N'BTN_CANCELAR', N'Cancelar'),                         (N'EN', N'BTN_CANCELAR', N'Cancel'),                          (N'PT', N'BTN_CANCELAR', N'Cancelar'),
         (N'ES', N'IDI_GESTION', N'Gestionar idiomas'),                 (N'EN', N'IDI_GESTION', N'Manage languages'),                 (N'PT', N'IDI_GESTION', N'Gerenciar idiomas'),
         -- Perfiles (alta + asignacion a usuarios)
         (N'ES', N'COL_PERFIL', N'Perfil'),                             (N'EN', N'COL_PERFIL', N'Profile'),                           (N'PT', N'COL_PERFIL', N'Perfil'),
         (N'ES', N'PERF_NUEVO', N'Nuevo perfil'),                       (N'EN', N'PERF_NUEVO', N'New profile'),                       (N'PT', N'PERF_NUEVO', N'Novo perfil'),
-        (N'ES', N'PERF_DESC', N'Descripcion'),                         (N'EN', N'PERF_DESC', N'Description'),                        (N'PT', N'PERF_DESC', N'Descricao'),
+        (N'ES', N'PERF_DESC', N'Descripción'),                         (N'EN', N'PERF_DESC', N'Description'),                        (N'PT', N'PERF_DESC', N'Descrição'),
         (N'ES', N'PERF_CREAR', N'Crear perfil'),                       (N'EN', N'PERF_CREAR', N'Create profile'),                    (N'PT', N'PERF_CREAR', N'Criar perfil'),
-        (N'ES', N'PERF_ASIGNAR_TITULO', N'Asignar perfil a usuarios'), (N'EN', N'PERF_ASIGNAR_TITULO', N'Assign profile to users'),  (N'PT', N'PERF_ASIGNAR_TITULO', N'Atribuir perfil a usuarios'),
-        (N'ES', N'PERF_GUARDAR_ASIG', N'Guardar asignaciones'),        (N'EN', N'PERF_GUARDAR_ASIG', N'Save assignments'),           (N'PT', N'PERF_GUARDAR_ASIG', N'Salvar atribuicoes'),
+        (N'ES', N'PERF_ASIGNAR_TITULO', N'Asignar perfil a usuarios'), (N'EN', N'PERF_ASIGNAR_TITULO', N'Assign profile to users'),  (N'PT', N'PERF_ASIGNAR_TITULO', N'Atribuir perfil a usuários'),
+        (N'ES', N'PERF_GUARDAR_ASIG', N'Guardar asignaciones'),        (N'EN', N'PERF_GUARDAR_ASIG', N'Save assignments'),           (N'PT', N'PERF_GUARDAR_ASIG', N'Salvar atribuições'),
         (N'ES', N'PERF_SIN', N'(sin perfil)'),                         (N'EN', N'PERF_SIN', N'(no profile)'),                        (N'PT', N'PERF_SIN', N'(sem perfil)'),
-        (N'ES', N'MSG_PERF_ASIG_OK', N'Asignaciones guardadas.'),      (N'EN', N'MSG_PERF_ASIG_OK', N'Assignments saved.'),          (N'PT', N'MSG_PERF_ASIG_OK', N'Atribuicoes salvas.'),
+        (N'ES', N'MSG_PERF_ASIG_OK', N'Asignaciones guardadas.'),      (N'EN', N'MSG_PERF_ASIG_OK', N'Assignments saved.'),          (N'PT', N'MSG_PERF_ASIG_OK', N'Atribuições salvas.'),
+        (N'ES', N'MSG_PERF_ASIG_SIN_CAMBIOS', N'No hay cambios de perfil para guardar.'), (N'EN', N'MSG_PERF_ASIG_SIN_CAMBIOS', N'There are no profile changes to save.'), (N'PT', N'MSG_PERF_ASIG_SIN_CAMBIOS', N'Não há alterações de perfil para salvar.'),
         (N'ES', N'MSG_PERF_NOM_INV', N'Ingrese el nombre del perfil.'),(N'EN', N'MSG_PERF_NOM_INV', N'Enter the profile name.'),     (N'PT', N'MSG_PERF_NOM_INV', N'Informe o nome do perfil.'),
-        (N'ES', N'MSG_PERF_DUP', N'Ya existe un perfil con ese nombre.'), (N'EN', N'MSG_PERF_DUP', N'A profile with that name already exists.'), (N'PT', N'MSG_PERF_DUP', N'Ja existe um perfil com esse nome.'),
-        (N'ES', N'MSG_PERF_CREADO', N'Perfil creado.'),               (N'EN', N'MSG_PERF_CREADO', N'Profile created.'),             (N'PT', N'MSG_PERF_CREADO', N'Perfil criado.'),
+        (N'ES', N'MSG_PERF_DUP', N'Ya existe un perfil con ese nombre.'), (N'EN', N'MSG_PERF_DUP', N'A profile with that name already exists.'), (N'PT', N'MSG_PERF_DUP', N'Já existe um perfil com esse nome.'),
         -- Login: bloqueo / estado / intentos
         (N'ES', N'LOGIN_BLOQUEADA', N'Cuenta bloqueada. Contactate con un administrador.'), (N'EN', N'LOGIN_BLOQUEADA', N'Account blocked. Contact an administrator.'), (N'PT', N'LOGIN_BLOQUEADA', N'Conta bloqueada. Entre em contato com um administrador.'),
-        (N'ES', N'LOGIN_INACTIVA', N'La cuenta esta inactiva. Contactate con un administrador.'), (N'EN', N'LOGIN_INACTIVA', N'The account is inactive. Contact an administrator.'), (N'PT', N'LOGIN_INACTIVA', N'A conta esta inativa. Entre em contato com um administrador.'),
+        (N'ES', N'LOGIN_INACTIVA', N'La cuenta está inactiva. Contactate con un administrador.'), (N'EN', N'LOGIN_INACTIVA', N'The account is inactive. Contact an administrator.'), (N'PT', N'LOGIN_INACTIVA', N'A conta está inativa. Entre em contato com um administrador.'),
         (N'ES', N'LOGIN_INTENTOS', N'Intento {0} de {1}.'), (N'EN', N'LOGIN_INTENTOS', N'Attempt {0} of {1}.'), (N'PT', N'LOGIN_INTENTOS', N'Tentativa {0} de {1}.'),
         -- Estado de usuario (grilla de asignacion). La clave COL_ESTADO ya viene
         -- sembrada mas arriba (encabezados de grilla): repetirla aca hacia que las
@@ -778,10 +846,10 @@ GO
         (N'ES', N'EST_BLOQUEADO', N'Bloqueado'), (N'EN', N'EST_BLOQUEADO', N'Blocked'), (N'PT', N'EST_BLOQUEADO', N'Bloqueado'),
         (N'ES', N'EST_INACTIVO', N'Inactivo'), (N'EN', N'EST_INACTIVO', N'Inactive'), (N'PT', N'EST_INACTIVO', N'Inativo'),
         (N'ES', N'PERF_DESBLOQUEAR', N'Desbloquear'), (N'EN', N'PERF_DESBLOQUEAR', N'Unblock'), (N'PT', N'PERF_DESBLOQUEAR', N'Desbloquear'),
-        (N'ES', N'MSG_PERF_DESBLOQ', N'Usuario desbloqueado.'), (N'EN', N'MSG_PERF_DESBLOQ', N'User unblocked.'), (N'PT', N'MSG_PERF_DESBLOQ', N'Usuario desbloqueado.'),
+        (N'ES', N'MSG_PERF_DESBLOQ', N'Usuario desbloqueado.'), (N'EN', N'MSG_PERF_DESBLOQ', N'User unblocked.'), (N'PT', N'MSG_PERF_DESBLOQ', N'Usuário desbloqueado.'),
         -- Clientes (Proceso 1)
         (N'ES', N'MENU_CLIENTES', N'Clientes'), (N'EN', N'MENU_CLIENTES', N'Clients'), (N'PT', N'MENU_CLIENTES', N'Clientes'),
-        (N'ES', N'CLI_TITULO', N'Gestion de Clientes'), (N'EN', N'CLI_TITULO', N'Clients Management'), (N'PT', N'CLI_TITULO', N'Gestao de Clientes'),
+        (N'ES', N'CLI_TITULO', N'Gestión de Clientes'), (N'EN', N'CLI_TITULO', N'Clients Management'), (N'PT', N'CLI_TITULO', N'Gestão de Clientes'),
         (N'ES', N'CLI_NUEVO', N'Nuevo cliente'), (N'EN', N'CLI_NUEVO', N'New client'), (N'PT', N'CLI_NUEVO', N'Novo cliente'),
         (N'ES', N'CLI_FORM_EDITAR', N'Editar cliente'), (N'EN', N'CLI_FORM_EDITAR', N'Edit client'), (N'PT', N'CLI_FORM_EDITAR', N'Editar cliente'),
         (N'ES', N'CLI_COUNT', N'clientes'), (N'EN', N'CLI_COUNT', N'clients'), (N'PT', N'CLI_COUNT', N'clientes'),
@@ -789,31 +857,30 @@ GO
         (N'ES', N'COL_APELLIDO', N'Apellido'), (N'EN', N'COL_APELLIDO', N'Last name'), (N'PT', N'COL_APELLIDO', N'Sobrenome'),
         (N'ES', N'COL_DNI', N'DNI'), (N'EN', N'COL_DNI', N'ID'), (N'PT', N'COL_DNI', N'Documento'),
         (N'ES', N'COL_EMAIL', N'Email'), (N'EN', N'COL_EMAIL', N'Email'), (N'PT', N'COL_EMAIL', N'Email'),
-        (N'ES', N'COL_TELEFONO', N'Telefono'), (N'EN', N'COL_TELEFONO', N'Phone'), (N'PT', N'COL_TELEFONO', N'Telefone'),
+        (N'ES', N'COL_TELEFONO', N'Teléfono'), (N'EN', N'COL_TELEFONO', N'Phone'), (N'PT', N'COL_TELEFONO', N'Telefone'),
         (N'ES', N'MSG_CLI_NOMBRE', N'Ingrese el nombre del cliente.'), (N'EN', N'MSG_CLI_NOMBRE', N'Enter the client name.'), (N'PT', N'MSG_CLI_NOMBRE', N'Informe o nome do cliente.'),
-        (N'ES', N'MSG_CLI_DNI_DUP', N'Ya existe un cliente con ese DNI.'), (N'EN', N'MSG_CLI_DNI_DUP', N'A client with that ID already exists.'), (N'PT', N'MSG_CLI_DNI_DUP', N'Ja existe um cliente com esse documento.'),
-        (N'ES', N'MSG_CLI_EMAIL', N'El email no es valido.'), (N'EN', N'MSG_CLI_EMAIL', N'The email is not valid.'), (N'PT', N'MSG_CLI_EMAIL', N'O email nao e valido.'),
+        (N'ES', N'MSG_CLI_DNI_DUP', N'Ya existe un cliente con ese DNI.'), (N'EN', N'MSG_CLI_DNI_DUP', N'A client with that ID already exists.'), (N'PT', N'MSG_CLI_DNI_DUP', N'Já existe um cliente com esse documento.'),
+        (N'ES', N'MSG_CLI_EMAIL', N'El email no es válido.'), (N'EN', N'MSG_CLI_EMAIL', N'The email is not valid.'), (N'PT', N'MSG_CLI_EMAIL', N'O email não é válido.'),
         (N'ES', N'MSG_CLI_OK', N'Cliente guardado.'), (N'EN', N'MSG_CLI_OK', N'Client saved.'), (N'PT', N'MSG_CLI_OK', N'Cliente salvo.'),
-        (N'ES', N'MSG_CLI_SELECCIONE', N'Seleccione un cliente.'), (N'EN', N'MSG_CLI_SELECCIONE', N'Select a client.'), (N'PT', N'MSG_CLI_SELECCIONE', N'Selecione um cliente.'),
-        (N'ES', N'MSG_RES_SALON_OCUPADO', N'El salon ya esta reservado para esa fecha.'), (N'EN', N'MSG_RES_SALON_OCUPADO', N'The hall is already booked for that date.'), (N'PT', N'MSG_RES_SALON_OCUPADO', N'O salao ja esta reservado para essa data.'),
+        (N'ES', N'MSG_RES_SALON_OCUPADO', N'El salón ya está reservado para esa fecha.'), (N'EN', N'MSG_RES_SALON_OCUPADO', N'The hall is already booked for that date.'), (N'PT', N'MSG_RES_SALON_OCUPADO', N'O salão já está reservado para essa data.'),
         -- Servicios (Proceso 1)
-        (N'ES', N'MENU_SERVICIOS', N'Servicios'), (N'EN', N'MENU_SERVICIOS', N'Services'), (N'PT', N'MENU_SERVICIOS', N'Servicos'),
-        (N'ES', N'SRV_TITULO', N'Gestion de Servicios'), (N'EN', N'SRV_TITULO', N'Services Management'), (N'PT', N'SRV_TITULO', N'Gestao de Servicos'),
-        (N'ES', N'SRV_NUEVO', N'Nuevo servicio'), (N'EN', N'SRV_NUEVO', N'New service'), (N'PT', N'SRV_NUEVO', N'Novo servico'),
-        (N'ES', N'SRV_FORM_EDITAR', N'Editar servicio'), (N'EN', N'SRV_FORM_EDITAR', N'Edit service'), (N'PT', N'SRV_FORM_EDITAR', N'Editar servico'),
-        (N'ES', N'SRV_COUNT', N'servicios'), (N'EN', N'SRV_COUNT', N'services'), (N'PT', N'SRV_COUNT', N'servicos'),
-        (N'ES', N'COL_DESCRIPCION', N'Descripcion'), (N'EN', N'COL_DESCRIPCION', N'Description'), (N'PT', N'COL_DESCRIPCION', N'Descricao'),
-        (N'ES', N'COL_PRECIO', N'Precio'), (N'EN', N'COL_PRECIO', N'Price'), (N'PT', N'COL_PRECIO', N'Preco'),
+        (N'ES', N'MENU_SERVICIOS', N'Servicios'), (N'EN', N'MENU_SERVICIOS', N'Services'), (N'PT', N'MENU_SERVICIOS', N'Serviços'),
+        (N'ES', N'SRV_TITULO', N'Gestión de Servicios'), (N'EN', N'SRV_TITULO', N'Services Management'), (N'PT', N'SRV_TITULO', N'Gestão de Serviços'),
+        (N'ES', N'SRV_NUEVO', N'Nuevo servicio'), (N'EN', N'SRV_NUEVO', N'New service'), (N'PT', N'SRV_NUEVO', N'Novo serviço'),
+        (N'ES', N'SRV_FORM_EDITAR', N'Editar servicio'), (N'EN', N'SRV_FORM_EDITAR', N'Edit service'), (N'PT', N'SRV_FORM_EDITAR', N'Editar serviço'),
+        (N'ES', N'SRV_COUNT', N'servicios'), (N'EN', N'SRV_COUNT', N'services'), (N'PT', N'SRV_COUNT', N'serviços'),
+        (N'ES', N'COL_DESCRIPCION', N'Descripción'), (N'EN', N'COL_DESCRIPCION', N'Description'), (N'PT', N'COL_DESCRIPCION', N'Descrição'),
+        (N'ES', N'COL_PRECIO', N'Precio'), (N'EN', N'COL_PRECIO', N'Price'), (N'PT', N'COL_PRECIO', N'Preço'),
         (N'ES', N'COL_ACTIVO', N'Activo'), (N'EN', N'COL_ACTIVO', N'Active'), (N'PT', N'COL_ACTIVO', N'Ativo'),
         (N'ES', N'COL_CANTIDAD', N'Cantidad'), (N'EN', N'COL_CANTIDAD', N'Qty'), (N'PT', N'COL_CANTIDAD', N'Qtd'),
         (N'ES', N'COL_SUBTOTAL', N'Subtotal'), (N'EN', N'COL_SUBTOTAL', N'Subtotal'), (N'PT', N'COL_SUBTOTAL', N'Subtotal'),
-        (N'ES', N'MSG_SRV_NOMBRE', N'Ingrese el nombre del servicio.'), (N'EN', N'MSG_SRV_NOMBRE', N'Enter the service name.'), (N'PT', N'MSG_SRV_NOMBRE', N'Informe o nome do servico.'),
-        (N'ES', N'MSG_SRV_PRECIO', N'El precio no puede ser negativo.'), (N'EN', N'MSG_SRV_PRECIO', N'The price cannot be negative.'), (N'PT', N'MSG_SRV_PRECIO', N'O preco nao pode ser negativo.'),
-        (N'ES', N'MSG_SRV_DUP', N'Ya existe un servicio con ese nombre.'), (N'EN', N'MSG_SRV_DUP', N'A service with that name already exists.'), (N'PT', N'MSG_SRV_DUP', N'Ja existe um servico com esse nome.'),
-        (N'ES', N'MSG_SRV_OK', N'Servicio guardado.'), (N'EN', N'MSG_SRV_OK', N'Service saved.'), (N'PT', N'MSG_SRV_OK', N'Servico salvo.'),
+        (N'ES', N'MSG_SRV_NOMBRE', N'Ingrese el nombre del servicio.'), (N'EN', N'MSG_SRV_NOMBRE', N'Enter the service name.'), (N'PT', N'MSG_SRV_NOMBRE', N'Informe o nome do serviço.'),
+        (N'ES', N'MSG_SRV_PRECIO', N'El precio no puede ser negativo.'), (N'EN', N'MSG_SRV_PRECIO', N'The price cannot be negative.'), (N'PT', N'MSG_SRV_PRECIO', N'O preço não pode ser negativo.'),
+        (N'ES', N'MSG_SRV_DUP', N'Ya existe un servicio con ese nombre.'), (N'EN', N'MSG_SRV_DUP', N'A service with that name already exists.'), (N'PT', N'MSG_SRV_DUP', N'Já existe um serviço com esse nome.'),
+        (N'ES', N'MSG_SRV_OK', N'Servicio guardado.'), (N'EN', N'MSG_SRV_OK', N'Service saved.'), (N'PT', N'MSG_SRV_OK', N'Serviço salvo.'),
         -- Servicios contratados en una reserva (M:N)
-        (N'ES', N'RES_SERVICIOS', N'Servicios de la reserva'), (N'EN', N'RES_SERVICIOS', N'Reservation services'), (N'PT', N'RES_SERVICIOS', N'Servicos da reserva'),
-        (N'ES', N'COL_SERVICIO', N'Servicio'), (N'EN', N'COL_SERVICIO', N'Service'), (N'PT', N'COL_SERVICIO', N'Servico'),
+        (N'ES', N'RES_SERVICIOS', N'Servicios de la reserva'), (N'EN', N'RES_SERVICIOS', N'Reservation services'), (N'PT', N'RES_SERVICIOS', N'Serviços da reserva'),
+        (N'ES', N'COL_SERVICIO', N'Servicio'), (N'EN', N'COL_SERVICIO', N'Service'), (N'PT', N'COL_SERVICIO', N'Serviço'),
         (N'ES', N'LBL_TOTAL', N'Total'), (N'EN', N'LBL_TOTAL', N'Total'), (N'PT', N'LBL_TOTAL', N'Total'),
         (N'ES', N'BTN_AGREGAR', N'Agregar'), (N'EN', N'BTN_AGREGAR', N'Add'), (N'PT', N'BTN_AGREGAR', N'Adicionar'),
         (N'ES', N'BTN_QUITAR', N'Quitar'), (N'EN', N'BTN_QUITAR', N'Remove'), (N'PT', N'BTN_QUITAR', N'Remover'),
@@ -821,26 +888,26 @@ GO
         -- Pagos de la reserva (Proceso 1, paso 5)
         (N'ES', N'RES_PAGOS', N'Pagos de la reserva'), (N'EN', N'RES_PAGOS', N'Reservation payments'), (N'PT', N'RES_PAGOS', N'Pagamentos da reserva'),
         (N'ES', N'RES_PAGOS_BTN', N'Pagos'), (N'EN', N'RES_PAGOS_BTN', N'Payments'), (N'PT', N'RES_PAGOS_BTN', N'Pagamentos'),
-        (N'ES', N'COL_METODO', N'Metodo'), (N'EN', N'COL_METODO', N'Method'), (N'PT', N'COL_METODO', N'Metodo'),
-        (N'ES', N'COL_OBSERVACION', N'Observacion'), (N'EN', N'COL_OBSERVACION', N'Note'), (N'PT', N'COL_OBSERVACION', N'Observacao'),
+        (N'ES', N'COL_METODO', N'Método'), (N'EN', N'COL_METODO', N'Method'), (N'PT', N'COL_METODO', N'Método'),
+        (N'ES', N'COL_OBSERVACION', N'Observación'), (N'EN', N'COL_OBSERVACION', N'Note'), (N'PT', N'COL_OBSERVACION', N'Observação'),
         (N'ES', N'LBL_PAGADO', N'Pagado'), (N'EN', N'LBL_PAGADO', N'Paid'), (N'PT', N'LBL_PAGADO', N'Pago'),
         (N'ES', N'LBL_SALDO', N'Saldo'), (N'EN', N'LBL_SALDO', N'Balance'), (N'PT', N'LBL_SALDO', N'Saldo'),
         (N'ES', N'BTN_REGISTRAR', N'Registrar'), (N'EN', N'BTN_REGISTRAR', N'Add payment'), (N'PT', N'BTN_REGISTRAR', N'Registrar'),
         (N'ES', N'BTN_CERRAR', N'Cerrar'), (N'EN', N'BTN_CERRAR', N'Close'), (N'PT', N'BTN_CERRAR', N'Fechar'),
-        (N'ES', N'MSG_PAGO_MONTO', N'Ingrese un monto valido.'), (N'EN', N'MSG_PAGO_MONTO', N'Enter a valid amount.'), (N'PT', N'MSG_PAGO_MONTO', N'Informe um valor valido.'),
-        (N'ES', N'MSG_PAGO_METODO', N'Seleccione un metodo de pago.'), (N'EN', N'MSG_PAGO_METODO', N'Select a payment method.'), (N'PT', N'MSG_PAGO_METODO', N'Selecione um metodo de pagamento.'),
+        (N'ES', N'MSG_PAGO_MONTO', N'Ingrese un monto válido.'), (N'EN', N'MSG_PAGO_MONTO', N'Enter a valid amount.'), (N'PT', N'MSG_PAGO_MONTO', N'Informe um valor válido.'),
+        (N'ES', N'MSG_PAGO_METODO', N'Seleccione un método de pago.'), (N'EN', N'MSG_PAGO_METODO', N'Select a payment method.'), (N'PT', N'MSG_PAGO_METODO', N'Selecione um método de pagamento.'),
         (N'ES', N'MSG_PAGO_EXCEDE', N'El pago supera el saldo pendiente.'), (N'EN', N'MSG_PAGO_EXCEDE', N'The payment exceeds the pending balance.'), (N'PT', N'MSG_PAGO_EXCEDE', N'O pagamento excede o saldo pendente.'),
-        (N'ES', N'MSG_PAGO_RESERVA', N'Reserva invalida.'), (N'EN', N'MSG_PAGO_RESERVA', N'Invalid reservation.'), (N'PT', N'MSG_PAGO_RESERVA', N'Reserva invalida.'),
+        (N'ES', N'MSG_PAGO_RESERVA', N'Reserva inválida.'), (N'EN', N'MSG_PAGO_RESERVA', N'Invalid reservation.'), (N'PT', N'MSG_PAGO_RESERVA', N'Reserva inválida.'),
         (N'ES', N'MSG_PAGO_GUARDAR_RESERVA', N'Guarde la reserva antes de registrar pagos.'), (N'EN', N'MSG_PAGO_GUARDAR_RESERVA', N'Save the reservation before adding payments.'), (N'PT', N'MSG_PAGO_GUARDAR_RESERVA', N'Salve a reserva antes de registrar pagamentos.'),
         -- Comprobante / presupuesto (Proceso 1, paso 6)
         (N'ES', N'RES_COMPROBANTE_BTN', N'Comprobante'), (N'EN', N'RES_COMPROBANTE_BTN', N'Receipt'), (N'PT', N'RES_COMPROBANTE_BTN', N'Comprovante'),
         (N'ES', N'CMP_TITULO', N'Comprobante de Reserva'), (N'EN', N'CMP_TITULO', N'Reservation Receipt'), (N'PT', N'CMP_TITULO', N'Comprovante de Reserva'),
-        (N'ES', N'CMP_TAGLINE', N'GESTION DE EVENTOS'), (N'EN', N'CMP_TAGLINE', N'EVENT MANAGEMENT'), (N'PT', N'CMP_TAGLINE', N'GESTAO DE EVENTOS'),
+        (N'ES', N'CMP_TAGLINE', N'GESTIÓN DE EVENTOS'), (N'EN', N'CMP_TAGLINE', N'EVENT MANAGEMENT'), (N'PT', N'CMP_TAGLINE', N'GESTÃO DE EVENTOS'),
         (N'ES', N'CMP_DOC_NRO', N'Comprobante N'), (N'EN', N'CMP_DOC_NRO', N'Receipt No'), (N'PT', N'CMP_DOC_NRO', N'Comprovante N'),
         (N'ES', N'CMP_EMITIDO', N'Emitido'), (N'EN', N'CMP_EMITIDO', N'Issued'), (N'PT', N'CMP_EMITIDO', N'Emitido'),
         (N'ES', N'CMP_EVENTO', N'Evento'), (N'EN', N'CMP_EVENTO', N'Event'), (N'PT', N'CMP_EVENTO', N'Evento'),
-        (N'ES', N'CMP_DETALLE_SERVICIOS', N'Detalle de servicios'), (N'EN', N'CMP_DETALLE_SERVICIOS', N'Services detail'), (N'PT', N'CMP_DETALLE_SERVICIOS', N'Detalhe de servicos'),
-        (N'ES', N'CMP_SIN_SERVICIOS', N'Sin servicios contratados.'), (N'EN', N'CMP_SIN_SERVICIOS', N'No services added.'), (N'PT', N'CMP_SIN_SERVICIOS', N'Sem servicos contratados.'),
+        (N'ES', N'CMP_DETALLE_SERVICIOS', N'Detalle de servicios'), (N'EN', N'CMP_DETALLE_SERVICIOS', N'Services detail'), (N'PT', N'CMP_DETALLE_SERVICIOS', N'Detalhe de serviços'),
+        (N'ES', N'CMP_SIN_SERVICIOS', N'Sin servicios contratados.'), (N'EN', N'CMP_SIN_SERVICIOS', N'No services added.'), (N'PT', N'CMP_SIN_SERVICIOS', N'Sem serviços contratados.'),
         (N'ES', N'CMP_SIN_PAGOS', N'Sin pagos registrados.'), (N'EN', N'CMP_SIN_PAGOS', N'No payments recorded.'), (N'PT', N'CMP_SIN_PAGOS', N'Sem pagamentos registrados.'),
         (N'ES', N'CMP_GRACIAS', N'Gracias por su reserva.'), (N'EN', N'CMP_GRACIAS', N'Thank you for your reservation.'), (N'PT', N'CMP_GRACIAS', N'Obrigado pela sua reserva.'),
         (N'ES', N'CMP_EST_PAGADO', N'Pagado'), (N'EN', N'CMP_EST_PAGADO', N'Paid'), (N'PT', N'CMP_EST_PAGADO', N'Pago'),
@@ -849,24 +916,24 @@ GO
         -- Envio del comprobante por email (Proceso 1, paso 7 - mailto)
         (N'ES', N'RES_EMAIL_BTN', N'Email'), (N'EN', N'RES_EMAIL_BTN', N'Email'), (N'PT', N'RES_EMAIL_BTN', N'Email'),
         (N'ES', N'EMAIL_ASUNTO', N'Comprobante de reserva'), (N'EN', N'EMAIL_ASUNTO', N'Reservation receipt'), (N'PT', N'EMAIL_ASUNTO', N'Comprovante de reserva'),
-        (N'ES', N'EMAIL_SALUDO', N'Hola {0},'), (N'EN', N'EMAIL_SALUDO', N'Hello {0},'), (N'PT', N'EMAIL_SALUDO', N'Ola {0},'),
+        (N'ES', N'EMAIL_SALUDO', N'Hola {0},'), (N'EN', N'EMAIL_SALUDO', N'Hello {0},'), (N'PT', N'EMAIL_SALUDO', N'Olá {0},'),
         (N'ES', N'EMAIL_INTRO', N'Le enviamos el comprobante de su reserva #{0}.'), (N'EN', N'EMAIL_INTRO', N'We are sending you the receipt for your reservation #{0}.'), (N'PT', N'EMAIL_INTRO', N'Enviamos o comprovante da sua reserva #{0}.'),
-        (N'ES', N'EMAIL_CIERRE', N'Adjuntamos el comprobante. Saludos, EvenTech.'), (N'EN', N'EMAIL_CIERRE', N'The receipt is attached. Regards, EvenTech.'), (N'PT', N'EMAIL_CIERRE', N'O comprovante esta anexado. Saudacoes, EvenTech.'),
-        (N'ES', N'MSG_EMAIL_SIN_CORREO', N'El cliente no tiene email cargado.'), (N'EN', N'MSG_EMAIL_SIN_CORREO', N'The client has no email on file.'), (N'PT', N'MSG_EMAIL_SIN_CORREO', N'O cliente nao tem email cadastrado.'),
-        (N'ES', N'MSG_EMAIL_ADJUNTAR', N'Se abrio tu correo con el mensaje listo. Adjunta el comprobante (abrimos su carpeta) y envialo.'), (N'EN', N'MSG_EMAIL_ADJUNTAR', N'Your email client opened with the message. Attach the receipt (we opened its folder) and send it.'), (N'PT', N'MSG_EMAIL_ADJUNTAR', N'Seu cliente de email abriu com a mensagem. Anexe o comprovante (abrimos a pasta) e envie.'),
+        (N'ES', N'EMAIL_CIERRE', N'Adjuntamos el comprobante. Saludos, EvenTech.'), (N'EN', N'EMAIL_CIERRE', N'The receipt is attached. Regards, EvenTech.'), (N'PT', N'EMAIL_CIERRE', N'O comprovante está anexado. Saudações, EvenTech.'),
+        (N'ES', N'MSG_EMAIL_SIN_CORREO', N'El cliente no tiene email cargado.'), (N'EN', N'MSG_EMAIL_SIN_CORREO', N'The client has no email on file.'), (N'PT', N'MSG_EMAIL_SIN_CORREO', N'O cliente não tem email cadastrado.'),
+        (N'ES', N'MSG_EMAIL_ADJUNTAR', N'Se abrió tu correo con el mensaje listo. Adjunta el comprobante (abrimos su carpeta) y envialo.'), (N'EN', N'MSG_EMAIL_ADJUNTAR', N'Your email client opened with the message. Attach the receipt (we opened its folder) and send it.'), (N'PT', N'MSG_EMAIL_ADJUNTAR', N'Seu cliente de email abriu com a mensagem. Anexe o comprovante (abrimos a pasta) e envie.'),
         -- Pulido i18n: estados de reserva (mostrados en grilla/combo/comprobante)
-        (N'ES', N'EST_COTIZACION', N'Cotizacion'), (N'EN', N'EST_COTIZACION', N'Quote'), (N'PT', N'EST_COTIZACION', N'Orcamento'),
+        (N'ES', N'EST_COTIZACION', N'Cotización'), (N'EN', N'EST_COTIZACION', N'Quote'), (N'PT', N'EST_COTIZACION', N'Orçamento'),
         (N'ES', N'EST_PENDIENTE', N'Pendiente'), (N'EN', N'EST_PENDIENTE', N'Pending'), (N'PT', N'EST_PENDIENTE', N'Pendente'),
         (N'ES', N'EST_CONFIRMADA', N'Confirmada'), (N'EN', N'EST_CONFIRMADA', N'Confirmed'), (N'PT', N'EST_CONFIRMADA', N'Confirmada'),
         (N'ES', N'EST_CANCELADA', N'Cancelada'), (N'EN', N'EST_CANCELADA', N'Cancelled'), (N'PT', N'EST_CANCELADA', N'Cancelada'),
         -- Pulido i18n: criticidad de bitacora (combo + grilla)
-        (N'ES', N'CRIT_INFO', N'Informacion'), (N'EN', N'CRIT_INFO', N'Information'), (N'PT', N'CRIT_INFO', N'Informacao'),
+        (N'ES', N'CRIT_INFO', N'Información'), (N'EN', N'CRIT_INFO', N'Information'), (N'PT', N'CRIT_INFO', N'Informação'),
         (N'ES', N'CRIT_ADVERTENCIA', N'Advertencia'), (N'EN', N'CRIT_ADVERTENCIA', N'Warning'), (N'PT', N'CRIT_ADVERTENCIA', N'Aviso'),
         (N'ES', N'CRIT_ERROR', N'Error'), (N'EN', N'CRIT_ERROR', N'Error'), (N'PT', N'CRIT_ERROR', N'Erro'),
         -- Pulido i18n: acciones de auditoria de login (combo + grilla)
         (N'ES', N'ACC_LOGIN_OK', N'Ingreso correcto'), (N'EN', N'ACC_LOGIN_OK', N'Login OK'), (N'PT', N'ACC_LOGIN_OK', N'Login OK'),
         (N'ES', N'ACC_LOGIN_FAIL', N'Ingreso fallido'), (N'EN', N'ACC_LOGIN_FAIL', N'Login failed'), (N'PT', N'ACC_LOGIN_FAIL', N'Falha no login'),
-        (N'ES', N'ACC_LOGOUT', N'Cierre de sesion'), (N'EN', N'ACC_LOGOUT', N'Logout'), (N'PT', N'ACC_LOGOUT', N'Encerramento de sessao'),
+        (N'ES', N'ACC_LOGOUT', N'Cierre de sesión'), (N'EN', N'ACC_LOGOUT', N'Logout'), (N'PT', N'ACC_LOGOUT', N'Encerramento de sessão'),
         -- Pulido i18n: mensajes de error genericos
         (N'ES', N'MSG_ERROR', N'Error'), (N'EN', N'MSG_ERROR', N'Error'), (N'PT', N'MSG_ERROR', N'Erro'),
         (N'ES', N'MSG_ERROR_PREFIJO', N'Error: '), (N'EN', N'MSG_ERROR_PREFIJO', N'Error: '), (N'PT', N'MSG_ERROR_PREFIJO', N'Erro: '),
@@ -877,12 +944,12 @@ GO
         (N'ES', N'CMP_FILTER', N'Documento HTML (*.html)|*.html'), (N'EN', N'CMP_FILTER', N'HTML document (*.html)|*.html'), (N'PT', N'CMP_FILTER', N'Documento HTML (*.html)|*.html'),
         (N'ES', N'CMP_FILENAME', N'Comprobante_Reserva_'), (N'EN', N'CMP_FILENAME', N'Reservation_Receipt_'), (N'PT', N'CMP_FILENAME', N'Comprovante_Reserva_'),
         -- Auditoria unificada (tabs)
-        (N'ES', N'AUD_TAB_BITACORA', N'Bitacora general'),            (N'EN', N'AUD_TAB_BITACORA', N'General audit log'),           (N'PT', N'AUD_TAB_BITACORA', N'Registro geral'),
-        (N'ES', N'AUD_TAB_LOGIN', N'Auditoria de login'),             (N'EN', N'AUD_TAB_LOGIN', N'Login audit'),                    (N'PT', N'AUD_TAB_LOGIN', N'Auditoria de login'),
+        (N'ES', N'AUD_TAB_BITACORA', N'Bitácora general'),            (N'EN', N'AUD_TAB_BITACORA', N'General audit log'),           (N'PT', N'AUD_TAB_BITACORA', N'Registro geral'),
+        (N'ES', N'AUD_TAB_LOGIN', N'Auditoría de login'),             (N'EN', N'AUD_TAB_LOGIN', N'Login audit'),                    (N'PT', N'AUD_TAB_LOGIN', N'Auditoria de login'),
         -- Integridad (T08): recalculo de linea base desde Auditoria
-        (N'ES', N'AUD_RECALC_BTN', N'Recalcular linea base'), (N'EN', N'AUD_RECALC_BTN', N'Recalculate baseline'), (N'PT', N'AUD_RECALC_BTN', N'Recalcular linha de base'),
-        (N'ES', N'AUD_RECALC_CONFIRMA', N'Recalcular los digitos verificadores de todas las reservas? Usar despues de corregir datos alterados: la linea base nueva pasa a ser la referencia de integridad.'), (N'EN', N'AUD_RECALC_CONFIRMA', N'Recalculate the verification digits of all reservations? Use after fixing altered data: the new baseline becomes the integrity reference.'), (N'PT', N'AUD_RECALC_CONFIRMA', N'Recalcular os digitos verificadores de todas as reservas? Usar apos corrigir dados alterados: a nova linha de base passa a ser a referencia de integridade.'),
-        (N'ES', N'AUD_RECALC_OK', N'Linea base recalculada ({0} reservas). Verificacion posterior: {1} inconsistencia(s).'), (N'EN', N'AUD_RECALC_OK', N'Baseline recalculated ({0} reservations). Post-check: {1} inconsistency(ies).'), (N'PT', N'AUD_RECALC_OK', N'Linha de base recalculada ({0} reservas). Verificacao posterior: {1} inconsistencia(s).')
+        (N'ES', N'AUD_RECALC_BTN', N'Recalcular línea base'), (N'EN', N'AUD_RECALC_BTN', N'Recalculate baseline'), (N'PT', N'AUD_RECALC_BTN', N'Recalcular linha de base'),
+        (N'ES', N'AUD_RECALC_CONFIRMA', N'¿Recalcular los dígitos verificadores de todas las reservas? Usar después de corregir datos alterados: la línea base nueva pasa a ser la referencia de integridad.'), (N'EN', N'AUD_RECALC_CONFIRMA', N'Recalculate the verification digits of all reservations? Use after fixing altered data: the new baseline becomes the integrity reference.'), (N'PT', N'AUD_RECALC_CONFIRMA', N'Recalcular os dígitos verificadores de todas as reservas? Usar após corrigir dados alterados: a nova linha de base passa a ser a referência de integridade.'),
+        (N'ES', N'AUD_RECALC_OK', N'Línea base recalculada ({0} reservas). Verificación posterior: {1} inconsistencia(s).'), (N'EN', N'AUD_RECALC_OK', N'Baseline recalculated ({0} reservations). Post-check: {1} inconsistency(ies).'), (N'PT', N'AUD_RECALC_OK', N'Linha de base recalculada ({0} reservas). Verificação posterior: {1} inconsistência(s).')
     ) AS v(Codigo, Clave, Texto)
 )
 INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
@@ -896,26 +963,36 @@ GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida 
                           -- bloque de arriba no puede romper UQ_Traducciones.
 GO
 
--- La seccion de auditoria ahora unifica bitacora general + auditoria de login,
--- por eso el item del menu pasa a llamarse simplemente "Auditoria".
-UPDATE t SET Texto = CASE i.Codigo WHEN N'EN' THEN N'Audit' ELSE N'Auditoria' END
+-- ===========================================================================
+-- Correcciones de textos de fabrica para bases sembradas por versiones
+-- anteriores. Las semillas de arriba ya traen el texto final (una base nueva
+-- no pasa por aca); en una base existente se corrige solo si el texto vigente
+-- es exactamente el que sembro una version anterior, asi una traduccion
+-- editada por el usuario desde Gestion de Idiomas se conserva. Aplican solo a
+-- los tres idiomas del sistema: un idioma agregado por el usuario conserva su
+-- traduccion propia.
+-- ===========================================================================
+
+-- La seccion de auditoria unifica bitacora general + auditoria de login, por
+-- eso el item del menu pasa a llamarse simplemente "Auditoria".
+UPDATE t SET Texto = CASE i.Codigo WHEN N'EN' THEN N'Audit' WHEN N'PT' THEN N'Auditoria' ELSE N'Auditoría' END
 FROM dbo.Traducciones t
 JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
 WHERE t.Clave = N'MENU_AUDITORIA'
-  AND i.Codigo IN (N'ES', N'EN', N'PT');   -- solo los tres idiomas del sistema:
-                                           -- un idioma agregado por el usuario
-                                           -- conserva su traduccion propia.
+  AND ((i.Codigo = N'ES' AND t.Texto IN (N'Auditoria login', N'Auditoria'))
+    OR (i.Codigo = N'EN' AND t.Texto = N'Login audit')
+    OR (i.Codigo = N'PT' AND t.Texto = N'Auditoria de login'));
 GO
 
 -- El boton de historial comparte fila con "Pagos" en la ficha de reserva:
 -- se acorta para no truncarse a media anchura.
-UPDATE t SET Texto = CASE i.Codigo WHEN N'EN' THEN N'History' WHEN N'PT' THEN N'Historico' ELSE N'Historial' END
+UPDATE t SET Texto = CASE i.Codigo WHEN N'EN' THEN N'History' WHEN N'PT' THEN N'Histórico' ELSE N'Historial' END
 FROM dbo.Traducciones t
 JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
 WHERE t.Clave = N'RES_HISTORIAL'
-  AND i.Codigo IN (N'ES', N'EN', N'PT');   -- solo los tres idiomas del sistema:
-                                           -- un idioma agregado por el usuario
-                                           -- conserva su traduccion propia.
+  AND ((i.Codigo = N'ES' AND t.Texto = N'Ver historial de cambios')
+    OR (i.Codigo = N'EN' AND t.Texto = N'View change history')
+    OR (i.Codigo = N'PT' AND t.Texto IN (N'Ver historico de alteracoes', N'Historico')));
 GO
 
 -- ===========================================================================
@@ -983,31 +1060,33 @@ BEGIN
 END
 GO
 
--- La rama "Perfiles incluidos" del arbol de gestion de perfiles.
+-- La rama "Perfiles incluidos" del arbol de gestion de perfiles (bases que
+-- sembraron la leyenda corta o la larga sin tildes; ver la nota sobre las
+-- correcciones de textos de fabrica).
 UPDATE t SET Texto = CASE i.Codigo
         WHEN N'EN' THEN N'Check the profile permissions. Checking a group includes its children; under "Included profiles" you can nest other profiles and inherit their permissions.'
-        WHEN N'PT' THEN N'Marque as permissoes do perfil. Marcar um grupo inclui seus filhos; em "Perfis incluidos" voce pode conter outros perfis e herdar suas permissoes.'
-        ELSE N'Tilde los permisos del perfil. Marcar un grupo incluye a sus hijos; en "Perfiles incluidos" podes contener otros perfiles y heredar sus permisos.' END
+        WHEN N'PT' THEN N'Marque as permissões do perfil. Marcar um grupo inclui seus filhos; em "Perfis incluídos" você pode conter outros perfis e herdar suas permissões.'
+        ELSE N'Tilde los permisos del perfil. Marcar un grupo incluye a sus hijos; en "Perfiles incluidos" podés contener otros perfiles y heredar sus permisos.' END
 FROM dbo.Traducciones t
 JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
 WHERE t.Clave = N'PERF_HINT'
-  AND i.Codigo IN (N'ES', N'EN', N'PT');   -- solo los tres idiomas del sistema:
-                                           -- un idioma agregado por el usuario
-                                           -- conserva su traduccion propia.
+  AND ((i.Codigo = N'ES' AND t.Texto IN (N'Tilde los permisos del perfil. Marcar un grupo incluye a sus hijos.', N'Tilde los permisos del perfil. Marcar un grupo incluye a sus hijos; en "Perfiles incluidos" podes contener otros perfiles y heredar sus permisos.'))
+    OR (i.Codigo = N'EN' AND t.Texto = N'Check the profile permissions. Checking a group includes its children.')
+    OR (i.Codigo = N'PT' AND t.Texto IN (N'Marque as permissoes do perfil. Marcar um grupo inclui seus filhos.', N'Marque as permissoes do perfil. Marcar um grupo inclui seus filhos; em "Perfis incluidos" voce pode conter outros perfis e herdar suas permissoes.')));
 GO
 
 -- Traducciones del modulo de versiones (idempotente: solo inserta las que falten).
 ;WITH Txt(Codigo, Clave, Texto) AS (
     SELECT * FROM (VALUES
-        (N'ES', N'PERF_INCLUIDOS', N'Perfiles incluidos'), (N'EN', N'PERF_INCLUIDOS', N'Included profiles'), (N'PT', N'PERF_INCLUIDOS', N'Perfis incluidos'),
+        (N'ES', N'PERF_INCLUIDOS', N'Perfiles incluidos'), (N'EN', N'PERF_INCLUIDOS', N'Included profiles'), (N'PT', N'PERF_INCLUIDOS', N'Perfis incluídos'),
         (N'ES', N'PERF_HEREDADO', N'(heredado)'), (N'EN', N'PERF_HEREDADO', N'(inherited)'), (N'PT', N'PERF_HEREDADO', N'(herdado)'),
-        (N'ES', N'MSG_PERF_CICLO', N'No se puede incluir ese perfil: generaria una referencia circular.'), (N'EN', N'MSG_PERF_CICLO', N'That profile cannot be included: it would create a circular reference.'), (N'PT', N'MSG_PERF_CICLO', N'Nao e possivel incluir esse perfil: geraria uma referencia circular.'),
-        (N'ES', N'RES_VERSIONES', N'Versiones'), (N'EN', N'RES_VERSIONES', N'Versions'), (N'PT', N'RES_VERSIONES', N'Versoes'),
-        (N'ES', N'VER_TITULO', N'Versiones de la reserva'), (N'EN', N'VER_TITULO', N'Reservation versions'), (N'PT', N'VER_TITULO', N'Versoes da reserva'),
+        (N'ES', N'MSG_PERF_CICLO', N'No se puede incluir ese perfil: generaría una referencia circular.'), (N'EN', N'MSG_PERF_CICLO', N'That profile cannot be included: it would create a circular reference.'), (N'PT', N'MSG_PERF_CICLO', N'Não é possível incluir esse perfil: geraria uma referência circular.'),
+        (N'ES', N'RES_VERSIONES', N'Versiones'), (N'EN', N'RES_VERSIONES', N'Versions'), (N'PT', N'RES_VERSIONES', N'Versões'),
+        (N'ES', N'VER_TITULO', N'Versiones de la reserva'), (N'EN', N'VER_TITULO', N'Reservation versions'), (N'PT', N'VER_TITULO', N'Versões da reserva'),
         (N'ES', N'VER_RESTAURAR', N'Restaurar seleccionada'), (N'EN', N'VER_RESTAURAR', N'Restore selected'), (N'PT', N'VER_RESTAURAR', N'Restaurar selecionada'),
-        (N'ES', N'VER_VACIO', N'Sin versiones guardadas. Se crea una automaticamente al modificar la reserva.'), (N'EN', N'VER_VACIO', N'No saved versions. One is created automatically when the reservation is modified.'), (N'PT', N'VER_VACIO', N'Sem versoes salvas. Uma e criada automaticamente ao modificar a reserva.'),
-        (N'ES', N'VER_CONFIRMA', N'Restaurar la reserva al estado de la version seleccionada? El estado actual se guardara como una nueva version.'), (N'EN', N'VER_CONFIRMA', N'Restore the reservation to the selected version? The current state will be saved as a new version.'), (N'PT', N'VER_CONFIRMA', N'Restaurar a reserva ao estado da versao selecionada? O estado atual sera salvo como uma nova versao.'),
-        (N'ES', N'MSG_VER_OK', N'Version restaurada.'), (N'EN', N'MSG_VER_OK', N'Version restored.'), (N'PT', N'MSG_VER_OK', N'Versao restaurada.')
+        (N'ES', N'VER_VACIO', N'Sin versiones guardadas. Se crea una automáticamente al modificar la reserva.'), (N'EN', N'VER_VACIO', N'No saved versions. One is created automatically when the reservation is modified.'), (N'PT', N'VER_VACIO', N'Sem versões salvas. Uma é criada automaticamente ao modificar a reserva.'),
+        (N'ES', N'VER_CONFIRMA', N'¿Restaurar la reserva al estado de la versión seleccionada? El estado actual se guardará como una nueva versión.'), (N'EN', N'VER_CONFIRMA', N'Restore the reservation to the selected version? The current state will be saved as a new version.'), (N'PT', N'VER_CONFIRMA', N'Restaurar a reserva ao estado da versão selecionada? O estado atual será salvo como uma nova versão.'),
+        (N'ES', N'MSG_VER_OK', N'Versión restaurada.'), (N'EN', N'MSG_VER_OK', N'Version restored.'), (N'PT', N'MSG_VER_OK', N'Versão restaurada.')
     ) AS v(Codigo, Clave, Texto)
 )
 INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
@@ -1028,28 +1107,32 @@ GO
 ;WITH Txt(Codigo, Clave, Texto) AS (
     SELECT * FROM (VALUES
         -- Segunda capa de permisos
-        (N'ES', N'MSG_SIN_PERMISO', N'No tenes permiso para realizar esta accion.'), (N'EN', N'MSG_SIN_PERMISO', N'You do not have permission to perform this action.'), (N'PT', N'MSG_SIN_PERMISO', N'Voce nao tem permissao para realizar esta acao.'),
-        (N'ES', N'MAIN_PERMISOS_ERROR', N'No se pudieron cargar los permisos de tu perfil, asi que la sesion quedo sin acceso a las secciones. Volve a iniciar sesion; si el problema sigue, avisale a un administrador.'), (N'EN', N'MAIN_PERMISOS_ERROR', N'Your profile permissions could not be loaded, so this session has no access to the sections. Sign in again; if the problem persists, contact an administrator.'), (N'PT', N'MAIN_PERMISOS_ERROR', N'Nao foi possivel carregar as permissoes do seu perfil, entao a sessao ficou sem acesso as secoes. Entre novamente; se o problema continuar, avise um administrador.'),
+        (N'ES', N'MSG_SIN_PERMISO', N'No tenés permiso para realizar esta acción.'), (N'EN', N'MSG_SIN_PERMISO', N'You do not have permission to perform this action.'), (N'PT', N'MSG_SIN_PERMISO', N'Você não tem permissão para realizar esta ação.'),
+        (N'ES', N'MAIN_PERMISOS_ERROR', N'No se pudieron cargar los permisos de tu perfil, así que la sesión quedó sin acceso a las secciones. Volvé a iniciar sesión; si el problema sigue, avisale a un administrador.'), (N'EN', N'MAIN_PERMISOS_ERROR', N'Your profile permissions could not be loaded, so this session has no access to the sections. Sign in again; if the problem persists, contact an administrator.'), (N'PT', N'MAIN_PERMISOS_ERROR', N'Não foi possível carregar as permissões do seu perfil, então a sessão ficou sem acesso às seções. Entre novamente; se o problema continuar, avise um administrador.'),
         -- Reserva cancelada (estado terminal)
-        (N'ES', N'MSG_RES_VENCIDA', N'La operacion vencio: renovala antes de confirmarla.'), (N'EN', N'MSG_RES_VENCIDA', N'The quote expired: renew it before confirming.'), (N'PT', N'MSG_RES_VENCIDA', N'A operacao venceu: renove antes de confirmar.'),
+        (N'ES', N'MSG_RES_VENCIDA', N'La operación venció: renovala antes de cambiar su estado.'), (N'EN', N'MSG_RES_VENCIDA', N'The operation expired: renew it before changing its status.'), (N'PT', N'MSG_RES_VENCIDA', N'A operação venceu: renove-a antes de mudar seu estado.'),
         (N'ES', N'COL_VENCE', N'Vence'), (N'EN', N'COL_VENCE', N'Expires'), (N'PT', N'COL_VENCE', N'Vence'),
         (N'ES', N'BTN_RENOVAR', N'Renovar'), (N'EN', N'BTN_RENOVAR', N'Renew'), (N'PT', N'BTN_RENOVAR', N'Renovar'),
-        (N'ES', N'MSG_RES_RENOVADA', N'Vigencia renovada.'), (N'EN', N'MSG_RES_RENOVADA', N'Validity renewed.'), (N'PT', N'MSG_RES_RENOVADA', N'Vigencia renovada.'),
-        (N'ES', N'MSG_RES_CANCELAR', N'Cancelar la reserva #{0}?'), (N'EN', N'MSG_RES_CANCELAR', N'Cancel reservation #{0}?'), (N'PT', N'MSG_RES_CANCELAR', N'Cancelar a reserva #{0}?'),
+        (N'ES', N'MSG_RES_RENOVADA', N'Vigencia renovada.'), (N'EN', N'MSG_RES_RENOVADA', N'Validity renewed.'), (N'PT', N'MSG_RES_RENOVADA', N'Vigência renovada.'),
+        (N'ES', N'MSG_RES_SIN_PLAZO', N'La operación no tiene un plazo de vigencia que renovar.'), (N'EN', N'MSG_RES_SIN_PLAZO', N'The operation has no validity period to renew.'), (N'PT', N'MSG_RES_SIN_PLAZO', N'A operação não possui prazo de validade para renovar.'),
+        (N'ES', N'MSG_RES_CANCELAR', N'¿Cancelar la reserva #{0}?'), (N'EN', N'MSG_RES_CANCELAR', N'Cancel reservation #{0}?'), (N'PT', N'MSG_RES_CANCELAR', N'Cancelar a reserva #{0}?'),
         (N'ES', N'MSG_RES_CANCELADA', N'Reserva cancelada. Retenido {0:N2}, reintegro {1:N2}.'), (N'EN', N'MSG_RES_CANCELADA', N'Reservation cancelled. Retained {0:N2}, refund {1:N2}.'), (N'PT', N'MSG_RES_CANCELADA', N'Reserva cancelada. Retido {0:N2}, reembolso {1:N2}.'),
-        (N'ES', N'MSG_RES_NO_MODIFICABLE', N'La reserva esta cancelada: no admite modificaciones.'), (N'EN', N'MSG_RES_NO_MODIFICABLE', N'The reservation is cancelled: it cannot be modified.'), (N'PT', N'MSG_RES_NO_MODIFICABLE', N'A reserva esta cancelada: nao admite modificacoes.'),
+        (N'ES', N'MSG_RES_NO_MODIFICABLE', N'La reserva está cancelada: no admite modificaciones.'), (N'EN', N'MSG_RES_NO_MODIFICABLE', N'The reservation is cancelled: it cannot be modified.'), (N'PT', N'MSG_RES_NO_MODIFICABLE', N'A reserva está cancelada: não admite modificações.'),
         -- Anulacion de pagos
-        (N'ES', N'MSG_PAGO_ANULAR_CONF', N'Anular el pago de {0}? La operacion no se puede deshacer.'), (N'EN', N'MSG_PAGO_ANULAR_CONF', N'Void the payment of {0}? This action cannot be undone.'), (N'PT', N'MSG_PAGO_ANULAR_CONF', N'Anular o pagamento de {0}? A operacao nao pode ser desfeita.'),
+        (N'ES', N'MSG_PAGO_ANULAR_CONF', N'¿Anular el pago de {0}? La operación no se puede deshacer.'), (N'EN', N'MSG_PAGO_ANULAR_CONF', N'Void the payment of {0}? This action cannot be undone.'), (N'PT', N'MSG_PAGO_ANULAR_CONF', N'Anular o pagamento de {0}? A operação não pode ser desfeita.'),
         -- Configuracion de conexion (pre-login)
-        (N'ES', N'CONN_TITULO', N'Configuracion de conexion'), (N'EN', N'CONN_TITULO', N'Connection settings'), (N'PT', N'CONN_TITULO', N'Configuracao de conexao'),
-        (N'ES', N'CONN_AYUDA', N'No se pudo conectar a la base de datos. Indica donde esta la instancia de SQL Server y el nombre de la base. La configuracion se guarda cifrada en tu perfil de Windows.'), (N'EN', N'CONN_AYUDA', N'Could not connect to the database. Enter the SQL Server instance and the database name. The setting is stored encrypted in your Windows profile.'), (N'PT', N'CONN_AYUDA', N'Nao foi possivel conectar ao banco de dados. Informe a instancia do SQL Server e o nome do banco. A configuracao e salva criptografada no seu perfil do Windows.'),
-        (N'ES', N'CONN_SERVIDOR', N'Instancia de SQL Server'), (N'EN', N'CONN_SERVIDOR', N'SQL Server instance'), (N'PT', N'CONN_SERVIDOR', N'Instancia do SQL Server'),
+        (N'ES', N'CONN_TITULO', N'Configuración de conexión'), (N'EN', N'CONN_TITULO', N'Connection settings'), (N'PT', N'CONN_TITULO', N'Configuração de conexão'),
+        (N'ES', N'CONN_AYUDA', N'No se pudo conectar a la base de datos. Indica dónde está la instancia de SQL Server y el nombre de la base. La configuración se guarda cifrada en tu perfil de Windows.'), (N'EN', N'CONN_AYUDA', N'Could not connect to the database. Enter the SQL Server instance and the database name. The setting is stored encrypted in your Windows profile.'), (N'PT', N'CONN_AYUDA', N'Não foi possível conectar ao banco de dados. Informe a instância do SQL Server e o nome do banco. A configuração é salva criptografada no seu perfil do Windows.'),
+        (N'ES', N'CONN_SERVIDOR', N'Instancia de SQL Server'), (N'EN', N'CONN_SERVIDOR', N'SQL Server instance'), (N'PT', N'CONN_SERVIDOR', N'Instância do SQL Server'),
         (N'ES', N'CONN_BASE', N'Base de datos'), (N'EN', N'CONN_BASE', N'Database'), (N'PT', N'CONN_BASE', N'Banco de dados'),
         (N'ES', N'CONN_PROBAR', N'Probar'), (N'EN', N'CONN_PROBAR', N'Test'), (N'PT', N'CONN_PROBAR', N'Testar'),
         (N'ES', N'CONN_GUARDAR', N'Guardar'), (N'EN', N'CONN_GUARDAR', N'Save'), (N'PT', N'CONN_GUARDAR', N'Salvar'),
         (N'ES', N'CONN_SALIR', N'Salir'), (N'EN', N'CONN_SALIR', N'Exit'), (N'PT', N'CONN_SALIR', N'Sair'),
-        (N'ES', N'CONN_PROBANDO', N'Probando conexion...'), (N'EN', N'CONN_PROBANDO', N'Testing connection...'), (N'PT', N'CONN_PROBANDO', N'Testando conexao...'),
-        (N'ES', N'CONN_OK', N'Conexion correcta.'), (N'EN', N'CONN_OK', N'Connection successful.'), (N'PT', N'CONN_OK', N'Conexao correta.')
+        (N'ES', N'CONN_PROBANDO', N'Probando conexión...'), (N'EN', N'CONN_PROBANDO', N'Testing connection...'), (N'PT', N'CONN_PROBANDO', N'Testando conexão...'),
+        (N'ES', N'CONN_OK', N'Conexión correcta.'), (N'EN', N'CONN_OK', N'Connection successful.'), (N'PT', N'CONN_OK', N'Conexão correta.'),
+        (N'ES', N'CONN_ESQUEMA_INCOMPLETO', N'La base ''{0}'' existe pero su esquema está incompleto o es de una versión anterior (faltan: {1}). Completalo con db/schema.sql (agrega solo lo que falta) antes de usarla.'), (N'EN', N'CONN_ESQUEMA_INCOMPLETO', N'Database ''{0}'' exists but its schema is incomplete or from a previous version (missing: {1}). Complete it with db/schema.sql (adds only what is missing) before using it.'), (N'PT', N'CONN_ESQUEMA_INCOMPLETO', N'O banco ''{0}'' existe mas seu esquema está incompleto ou é de uma versão anterior (faltam: {1}). Complete-o com db/schema.sql (adiciona apenas o que falta) antes de usá-lo.'),
+        -- Clave AES de los contactos (CryptoService): ilegible o de otra maquina
+        (N'ES', N'CRYPTO_CLAVE_INVALIDA', N'La clave de cifrado {0} no se puede leer: está dañada o fue creada en otra máquina. Restaure el archivo original o elimínelo para generar una clave nueva (los contactos ya cifrados quedarán ilegibles).'), (N'EN', N'CRYPTO_CLAVE_INVALIDA', N'The encryption key {0} cannot be read: it is damaged or was created on another machine. Restore the original file or delete it to generate a new key (already encrypted contacts will become unreadable).'), (N'PT', N'CRYPTO_CLAVE_INVALIDA', N'A chave de criptografia {0} não pode ser lida: está danificada ou foi criada em outra máquina. Restaure o arquivo original ou exclua-o para gerar uma nova chave (os contatos já criptografados ficarão ilegíveis).')
     ) AS v(Codigo, Clave, Texto)
 )
 INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
@@ -1085,6 +1168,65 @@ WHERE p.Nombre = N'Administrador'
                   WHERE pp.PerfilId = p.Id AND pp.PermisoId = pe.Id);
 GO
 
+-- ===========================================================================
+-- Perfiles operativos (roles de G04) sobre el Composite de dos niveles:
+--   Vendedor   : opera la venta (disponibilidad, clientes, reservas, cobros).
+--   Supervisor : incluye a Vendedor y suma auditoria y anulacion de pagos.
+--   Gerencial  : incluye a Supervisor y suma las correcciones administrativas.
+-- Idempotente y guardado por nombre: el perfil, cada permiso directo y cada
+-- inclusion se agregan solo si faltan; lo que un administrador haya cambiado
+-- desde Gestion de Perfiles se conserva. Administrador no se toca (arriba).
+-- Va aca porque todos los permisos hoja ya existen en este punto.
+-- ===========================================================================
+;WITH Perf(Nombre, Descripcion) AS (
+    SELECT * FROM (VALUES
+        (N'Vendedor',   N'Atiende la venta: disponibilidad, clientes, cotizaciones, reservas y cobros'),
+        (N'Supervisor', N'Incluye al perfil Vendedor y suma la consulta de auditoría y la anulación de pagos'),
+        (N'Gerencial',  N'Incluye al perfil Supervisor y suma las correcciones administrativas (línea base, restaurar versiones)')
+    ) AS v(Nombre, Descripcion)
+)
+MERGE dbo.Perfiles AS p
+USING Perf AS s ON p.Nombre = s.Nombre
+WHEN NOT MATCHED THEN INSERT (Nombre, Descripcion) VALUES (s.Nombre, s.Descripcion)
+WHEN MATCHED AND p.Descripcion IS NULL THEN UPDATE SET Descripcion = s.Descripcion;
+
+;WITH Asig(Perfil, Clave) AS (
+    SELECT * FROM (VALUES
+        (N'Vendedor',   N'DISPONIBILIDAD_CONSULTAR'),
+        (N'Vendedor',   N'CLIENTES_GESTION'),
+        (N'Vendedor',   N'RESERVA_CREAR'),
+        (N'Vendedor',   N'RESERVA_EDITAR'),
+        (N'Vendedor',   N'RESERVA_HISTORIAL'),
+        (N'Vendedor',   N'PAGOS_REGISTRAR'),
+        (N'Supervisor', N'BITACORA_VER'),
+        (N'Supervisor', N'AUDIT_LOGIN_VER'),
+        (N'Supervisor', N'PAGOS_ANULAR'),
+        (N'Gerencial',  N'INTEGRIDAD_RECALC'),
+        (N'Gerencial',  N'RESERVA_RESTAURAR')
+    ) AS v(Perfil, Clave)
+)
+INSERT INTO dbo.PerfilPermiso (PerfilId, PermisoId)
+SELECT p.Id, pe.Id
+FROM Asig a
+JOIN dbo.Perfiles p  ON p.Nombre = a.Perfil
+JOIN dbo.Permisos pe ON pe.Clave = a.Clave
+WHERE NOT EXISTS (SELECT 1 FROM dbo.PerfilPermiso pp
+                  WHERE pp.PerfilId = p.Id AND pp.PermisoId = pe.Id);
+
+-- Composite: Supervisor contiene a Vendedor; Gerencial contiene a Supervisor
+-- (los ciclos los valida BLL_Perfil; estas dos filas no forman ninguno).
+;WITH Inc(Padre, Hijo) AS (
+    SELECT * FROM (VALUES (N'Supervisor', N'Vendedor'), (N'Gerencial', N'Supervisor')) AS v(Padre, Hijo)
+)
+INSERT INTO dbo.PerfilIncluido (PerfilPadreId, PerfilHijoId)
+SELECT pa.Id, hi.Id
+FROM Inc i
+JOIN dbo.Perfiles pa ON pa.Nombre = i.Padre
+JOIN dbo.Perfiles hi ON hi.Nombre = i.Hijo
+WHERE NOT EXISTS (SELECT 1 FROM dbo.PerfilIncluido x
+                  WHERE x.PerfilPadreId = pa.Id AND x.PerfilHijoId = hi.Id);
+GO
+
 ;WITH Txt(Codigo, Clave, Texto) AS (
     SELECT * FROM (VALUES
         -- Consulta de disponibilidad (Proceso 1, paso 1)
@@ -1093,19 +1235,19 @@ GO
         (N'ES', N'DISP_LBL_CAPACIDAD', N'Invitados estimados'), (N'EN', N'DISP_LBL_CAPACIDAD', N'Estimated guests'), (N'PT', N'DISP_LBL_CAPACIDAD', N'Convidados estimados'),
         (N'ES', N'BTN_CONSULTAR', N'Consultar'), (N'EN', N'BTN_CONSULTAR', N'Check'), (N'PT', N'BTN_CONSULTAR', N'Consultar'),
         (N'ES', N'COL_CAPACIDAD', N'Capacidad'), (N'EN', N'COL_CAPACIDAD', N'Capacity'), (N'PT', N'COL_CAPACIDAD', N'Capacidade'),
-        (N'ES', N'DISP_COL_PROPUESTA', N'Proxima fecha libre'), (N'EN', N'DISP_COL_PROPUESTA', N'Next free date'), (N'PT', N'DISP_COL_PROPUESTA', N'Proxima data livre'),
-        (N'ES', N'DISP_EST_DISPONIBLE', N'Disponible'), (N'EN', N'DISP_EST_DISPONIBLE', N'Available'), (N'PT', N'DISP_EST_DISPONIBLE', N'Disponivel'),
+        (N'ES', N'DISP_COL_PROPUESTA', N'Próxima fecha libre'), (N'EN', N'DISP_COL_PROPUESTA', N'Next free date'), (N'PT', N'DISP_COL_PROPUESTA', N'Próxima data livre'),
+        (N'ES', N'DISP_EST_DISPONIBLE', N'Disponible'), (N'EN', N'DISP_EST_DISPONIBLE', N'Available'), (N'PT', N'DISP_EST_DISPONIBLE', N'Disponível'),
         (N'ES', N'DISP_EST_OCUPADO', N'Ocupado'), (N'EN', N'DISP_EST_OCUPADO', N'Booked'), (N'PT', N'DISP_EST_OCUPADO', N'Ocupado'),
         (N'ES', N'DISP_EST_CAPACIDAD', N'Capacidad insuficiente'), (N'EN', N'DISP_EST_CAPACIDAD', N'Insufficient capacity'), (N'PT', N'DISP_EST_CAPACIDAD', N'Capacidade insuficiente'),
         (N'ES', N'DISP_USAR', N'Usar en la reserva'), (N'EN', N'DISP_USAR', N'Use in reservation'), (N'PT', N'DISP_USAR', N'Usar na reserva'),
-        (N'ES', N'DISP_RESUMEN_OK', N'{0} salon(es) disponible(s) para la fecha consultada.'), (N'EN', N'DISP_RESUMEN_OK', N'{0} venue(s) available for the requested date.'), (N'PT', N'DISP_RESUMEN_OK', N'{0} salao(oes) disponivel(is) para a data consultada.'),
-        (N'ES', N'DISP_RESUMEN_ALTERNATIVAS', N'Ningun salon disponible para esa fecha: se proponen fechas alternativas.'), (N'EN', N'DISP_RESUMEN_ALTERNATIVAS', N'No venue available for that date: alternative dates are suggested.'), (N'PT', N'DISP_RESUMEN_ALTERNATIVAS', N'Nenhum salao disponivel para essa data: datas alternativas sao propostas.'),
-        (N'ES', N'DISP_SELECCIONE', N'Seleccione un salon de la grilla.'), (N'EN', N'DISP_SELECCIONE', N'Select a venue from the grid.'), (N'PT', N'DISP_SELECCIONE', N'Selecione um salao da grade.'),
-        (N'ES', N'DISP_SIN_PROPUESTA', N'El salon no tiene fechas libres en el horizonte consultado.'), (N'EN', N'DISP_SIN_PROPUESTA', N'The venue has no free dates within the searched range.'), (N'PT', N'DISP_SIN_PROPUESTA', N'O salao nao tem datas livres no periodo consultado.'),
+        (N'ES', N'DISP_RESUMEN_OK', N'{0} salón(es) disponible(s) para la fecha consultada.'), (N'EN', N'DISP_RESUMEN_OK', N'{0} venue(s) available for the requested date.'), (N'PT', N'DISP_RESUMEN_OK', N'{0} salão(ões) disponível(is) para a data consultada.'),
+        (N'ES', N'DISP_RESUMEN_ALTERNATIVAS', N'Ningún salón disponible para esa fecha: se proponen fechas alternativas.'), (N'EN', N'DISP_RESUMEN_ALTERNATIVAS', N'No venue available for that date: alternative dates are suggested.'), (N'PT', N'DISP_RESUMEN_ALTERNATIVAS', N'Nenhum salão disponível para essa data: datas alternativas são propostas.'),
+        (N'ES', N'DISP_SELECCIONE', N'Seleccione un salón de la grilla.'), (N'EN', N'DISP_SELECCIONE', N'Select a venue from the grid.'), (N'PT', N'DISP_SELECCIONE', N'Selecione um salão da grade.'),
+        (N'ES', N'DISP_SIN_PROPUESTA', N'El salón no tiene fechas libres en el horizonte consultado.'), (N'EN', N'DISP_SIN_PROPUESTA', N'The venue has no free dates within the searched range.'), (N'PT', N'DISP_SIN_PROPUESTA', N'O salão não tem datas livres no período consultado.'),
         -- Presupuesto para cotizaciones (Proceso 1, paso 6)
-        (N'ES', N'CMP_TITULO_PRESUPUESTO', N'Presupuesto'), (N'EN', N'CMP_TITULO_PRESUPUESTO', N'Quote'), (N'PT', N'CMP_TITULO_PRESUPUESTO', N'Orcamento'),
-        (N'ES', N'CMP_DOC_NRO_PRESUPUESTO', N'Presupuesto N'), (N'EN', N'CMP_DOC_NRO_PRESUPUESTO', N'Quote No'), (N'PT', N'CMP_DOC_NRO_PRESUPUESTO', N'Orcamento N'),
-        (N'ES', N'CMP_PRESUPUESTO_NOTA', N'Presupuesto sin compromiso de reserva. Sujeto a disponibilidad del salon al momento de confirmar.'), (N'EN', N'CMP_PRESUPUESTO_NOTA', N'Quote with no booking commitment. Subject to venue availability at confirmation time.'), (N'PT', N'CMP_PRESUPUESTO_NOTA', N'Orcamento sem compromisso de reserva. Sujeito a disponibilidade do salao no momento da confirmacao.')
+        (N'ES', N'CMP_TITULO_PRESUPUESTO', N'Presupuesto'), (N'EN', N'CMP_TITULO_PRESUPUESTO', N'Quote'), (N'PT', N'CMP_TITULO_PRESUPUESTO', N'Orçamento'),
+        (N'ES', N'CMP_DOC_NRO_PRESUPUESTO', N'Presupuesto N'), (N'EN', N'CMP_DOC_NRO_PRESUPUESTO', N'Quote No'), (N'PT', N'CMP_DOC_NRO_PRESUPUESTO', N'Orçamento N'),
+        (N'ES', N'CMP_PRESUPUESTO_NOTA', N'Presupuesto sin compromiso de reserva. Sujeto a disponibilidad del salón al momento de confirmar.'), (N'EN', N'CMP_PRESUPUESTO_NOTA', N'Quote with no booking commitment. Subject to venue availability at confirmation time.'), (N'PT', N'CMP_PRESUPUESTO_NOTA', N'Orçamento sem compromisso de reserva. Sujeito à disponibilidade do salão no momento da confirmação.')
     ) AS v(Codigo, Clave, Texto)
 )
 INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
@@ -1129,13 +1271,13 @@ GO
         (N'ES', N'COL_INVITADOS', N'Invitados'), (N'EN', N'COL_INVITADOS', N'Guests'), (N'PT', N'COL_INVITADOS', N'Convidados'),
         (N'ES', N'RES_LBL_INVITADOS', N'Invitados estimados'), (N'EN', N'RES_LBL_INVITADOS', N'Estimated guests'), (N'PT', N'RES_LBL_INVITADOS', N'Convidados estimados'),
         -- RN-05: transiciones de estado admitidas
-        (N'ES', N'MSG_RES_TRANSICION', N'No se admite pasar de {0} a {1}.'), (N'EN', N'MSG_RES_TRANSICION', N'Moving from {0} to {1} is not allowed.'), (N'PT', N'MSG_RES_TRANSICION', N'Nao e admitido passar de {0} para {1}.'),
+        (N'ES', N'MSG_RES_TRANSICION', N'No se admite pasar de {0} a {1}.'), (N'EN', N'MSG_RES_TRANSICION', N'Moving from {0} to {1} is not allowed.'), (N'PT', N'MSG_RES_TRANSICION', N'Não é admitido passar de {0} para {1}.'),
         -- RN-04: el total no puede quedar por debajo de lo ya cobrado
-        (N'ES', N'MSG_RES_MONTO_PAGADO', N'El total de la reserva no puede quedar por debajo de lo ya cobrado.'), (N'EN', N'MSG_RES_MONTO_PAGADO', N'The reservation total cannot fall below the amount already collected.'), (N'PT', N'MSG_RES_MONTO_PAGADO', N'O total da reserva nao pode ficar abaixo do valor ja cobrado.'),
+        (N'ES', N'MSG_RES_MONTO_PAGADO', N'El total de la reserva no puede quedar por debajo de lo ya cobrado.'), (N'EN', N'MSG_RES_MONTO_PAGADO', N'The reservation total cannot fall below the amount already collected.'), (N'PT', N'MSG_RES_MONTO_PAGADO', N'O total da reserva não pode ficar abaixo do valor já cobrado.'),
         -- RN-06: el salon tiene que alojar a los invitados al confirmar
-        (N'ES', N'MSG_RES_CAPACIDAD', N'El salon no alcanza para la cantidad de invitados indicada.'), (N'EN', N'MSG_RES_CAPACIDAD', N'The venue cannot hold the number of guests entered.'), (N'PT', N'MSG_RES_CAPACIDAD', N'O salao nao comporta a quantidade de convidados informada.'),
-        (N'ES', N'MSG_RES_INVITADOS', N'La cantidad de invitados no puede ser negativa.'), (N'EN', N'MSG_RES_INVITADOS', N'The number of guests cannot be negative.'), (N'PT', N'MSG_RES_INVITADOS', N'A quantidade de convidados nao pode ser negativa.'),
-        (N'ES', N'MSG_RES_TRANSICION_GEN', N'El cambio de estado solicitado no esta admitido.'), (N'EN', N'MSG_RES_TRANSICION_GEN', N'The requested status change is not allowed.'), (N'PT', N'MSG_RES_TRANSICION_GEN', N'A mudanca de estado solicitada nao e admitida.'),
+        (N'ES', N'MSG_RES_CAPACIDAD', N'El salón no alcanza para la cantidad de invitados indicada.'), (N'EN', N'MSG_RES_CAPACIDAD', N'The venue cannot hold the number of guests entered.'), (N'PT', N'MSG_RES_CAPACIDAD', N'O salão não comporta a quantidade de convidados informada.'),
+        (N'ES', N'MSG_RES_INVITADOS', N'Indica la cantidad de invitados estimada: hace falta para confirmar y no puede ser negativa.'), (N'EN', N'MSG_RES_INVITADOS', N'Enter the estimated number of guests: it is required to confirm and cannot be negative.'), (N'PT', N'MSG_RES_INVITADOS', N'Informe a quantidade estimada de convidados: é necessária para confirmar e não pode ser negativa.'),
+        (N'ES', N'MSG_RES_TRANSICION_GEN', N'El cambio de estado solicitado no está admitido.'), (N'EN', N'MSG_RES_TRANSICION_GEN', N'The requested status change is not allowed.'), (N'PT', N'MSG_RES_TRANSICION_GEN', N'A mudança de estado solicitada não é admitida.'),
         -- Alta de cliente: confirmacion en pantalla (CUN002, paso 5)
         (N'ES', N'MSG_CLI_CREADO', N'Cliente registrado.'), (N'EN', N'MSG_CLI_CREADO', N'Customer registered.'), (N'PT', N'MSG_CLI_CREADO', N'Cliente registrado.')
     ) AS v(Codigo, Clave, Texto)
@@ -1152,18 +1294,18 @@ GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida 
 GO
 
 -- El rechazo por invitados cubre dos causas: el dato falta al confirmar (RN-06)
--- o es negativo. El texto sembrado originalmente solo nombraba la segunda; como
--- la clave ya existe en bases reales, se corrige por UPDATE (idempotente).
+-- o es negativo. El texto sembrado originalmente solo nombraba la segunda; en
+-- una base existente se corrige por UPDATE guardado por el texto anterior.
 UPDATE t SET Texto = CASE i.Codigo
         WHEN N'EN' THEN N'Enter the estimated number of guests: it is required to confirm and cannot be negative.'
-        WHEN N'PT' THEN N'Informe a quantidade estimada de convidados: e necessaria para confirmar e nao pode ser negativa.'
+        WHEN N'PT' THEN N'Informe a quantidade estimada de convidados: é necessária para confirmar e não pode ser negativa.'
         ELSE N'Indica la cantidad de invitados estimada: hace falta para confirmar y no puede ser negativa.' END
 FROM dbo.Traducciones t
 JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
 WHERE t.Clave = N'MSG_RES_INVITADOS'
-  AND i.Codigo IN (N'ES', N'EN', N'PT');   -- solo los tres idiomas del sistema:
-                                           -- un idioma agregado por el usuario
-                                           -- conserva su traduccion propia.
+  AND ((i.Codigo = N'ES' AND t.Texto = N'La cantidad de invitados no puede ser negativa.')
+    OR (i.Codigo = N'EN' AND t.Texto = N'The number of guests cannot be negative.')
+    OR (i.Codigo = N'PT' AND t.Texto IN (N'A quantidade de convidados nao pode ser negativa.', N'Informe a quantidade estimada de convidados: e necessaria para confirmar e nao pode ser negativa.')));
 GO
 
 -- ===========================================================================
@@ -1173,11 +1315,9 @@ GO
 ;WITH Txt(Codigo, Clave, Texto) AS (
     SELECT * FROM (VALUES
         -- RN-07: la reserva queda firme cuando se registro el adelanto
-        (N'ES', N'MSG_RES_SIN_ADELANTO', N'Para confirmar la reserva hay que registrar el adelanto: guardala y cobra el pago desde Pagos.'), (N'EN', N'MSG_RES_SIN_ADELANTO', N'To confirm the reservation the deposit must be recorded: save it and take the payment from Payments.'), (N'PT', N'MSG_RES_SIN_ADELANTO', N'Para confirmar a reserva e preciso registrar o adiantamento: salve-a e cobre o pagamento em Pagamentos.'),
+        (N'ES', N'MSG_RES_SIN_ADELANTO', N'Para confirmar la reserva hay que registrar el adelanto: guardala y cobra el pago desde Pagos.'), (N'EN', N'MSG_RES_SIN_ADELANTO', N'To confirm the reservation the deposit must be recorded: save it and take the payment from Payments.'), (N'PT', N'MSG_RES_SIN_ADELANTO', N'Para confirmar a reserva é preciso registrar o adiantamento: salve-a e cobre o pagamento em Pagamentos.'),
         -- Anulacion de pago rechazada (pago inexistente o de otra reserva)
-        (N'ES', N'MSG_PAGO_NO_ANULABLE', N'El pago ya no existe o no pertenece a esta reserva.'), (N'EN', N'MSG_PAGO_NO_ANULABLE', N'The payment no longer exists or does not belong to this reservation.'), (N'PT', N'MSG_PAGO_NO_ANULABLE', N'O pagamento nao existe mais ou nao pertence a esta reserva.'),
-        -- La reserva se guardo pero sus servicios no pudieron registrarse
-        (N'ES', N'MSG_RES_SERVICIOS_ERROR', N'La reserva se guardo, pero sus servicios no pudieron registrarse. Revise el detalle.'), (N'EN', N'MSG_RES_SERVICIOS_ERROR', N'The reservation was saved, but its services could not be recorded. Please review the detail.'), (N'PT', N'MSG_RES_SERVICIOS_ERROR', N'A reserva foi salva, mas seus servicos nao puderam ser registrados. Revise o detalhe.')
+        (N'ES', N'MSG_PAGO_NO_ANULABLE', N'El pago ya no existe o no pertenece a esta reserva.'), (N'EN', N'MSG_PAGO_NO_ANULABLE', N'The payment no longer exists or does not belong to this reservation.'), (N'PT', N'MSG_PAGO_NO_ANULABLE', N'O pagamento não existe mais ou não pertence a esta reserva.')
     ) AS v(Codigo, Clave, Texto)
 )
 INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
@@ -1200,13 +1340,13 @@ GO
 ;WITH Txt(Codigo, Clave, Texto) AS (
     SELECT * FROM (VALUES
         -- Comprobante y envio por correo sobre una reserva todavia no guardada
-        (N'ES', N'MSG_RES_GUARDAR_PRIMERO', N'Guarde la reserva antes de emitir su documentacion.'), (N'EN', N'MSG_RES_GUARDAR_PRIMERO', N'Save the reservation before issuing its paperwork.'), (N'PT', N'MSG_RES_GUARDAR_PRIMERO', N'Salve a reserva antes de emitir sua documentacao.'),
+        (N'ES', N'MSG_RES_GUARDAR_PRIMERO', N'Guarde la reserva antes de emitir su documentación.'), (N'EN', N'MSG_RES_GUARDAR_PRIMERO', N'Save the reservation before issuing its paperwork.'), (N'PT', N'MSG_RES_GUARDAR_PRIMERO', N'Salve a reserva antes de emitir sua documentação.'),
         -- Error generico de una operacion que no es un guardado de reserva
-        (N'ES', N'MSG_OP_ERROR', N'No se pudo completar la operacion.'), (N'EN', N'MSG_OP_ERROR', N'The operation could not be completed.'), (N'PT', N'MSG_OP_ERROR', N'Nao foi possivel concluir a operacao.'),
+        (N'ES', N'MSG_OP_ERROR', N'No se pudo completar la operación.'), (N'EN', N'MSG_OP_ERROR', N'The operation could not be completed.'), (N'PT', N'MSG_OP_ERROR', N'Não foi possível concluir a operação.'),
         -- Seleccion de una reserva para una accion que no es el historial
         (N'ES', N'MSG_RES_SELECCIONE_GEN', N'Seleccione una reserva existente.'), (N'EN', N'MSG_RES_SELECCIONE_GEN', N'Select an existing reservation.'), (N'PT', N'MSG_RES_SELECCIONE_GEN', N'Selecione uma reserva existente.'),
         -- RN-02: lo que se retiene y se reintegra SI se confirma la cancelacion
-        (N'ES', N'MSG_RES_CANCELAR_DETALLE', N'Si se cancela hoy se retienen {0:N2} y se reintegran {1:N2}.'), (N'EN', N'MSG_RES_CANCELAR_DETALLE', N'Cancelling today retains {0:N2} and refunds {1:N2}.'), (N'PT', N'MSG_RES_CANCELAR_DETALLE', N'Cancelando hoje sao retidos {0:N2} e reembolsados {1:N2}.'),
+        (N'ES', N'MSG_RES_CANCELAR_DETALLE', N'Si se cancela hoy se retienen {0:N2} y se reintegran {1:N2}.'), (N'EN', N'MSG_RES_CANCELAR_DETALLE', N'Cancelling today retains {0:N2} and refunds {1:N2}.'), (N'PT', N'MSG_RES_CANCELAR_DETALLE', N'Cancelando hoje são retidos {0:N2} e reembolsados {1:N2}.'),
         -- Alta en las secciones cuyo sustantivo es masculino (Cliente, Servicio)
         (N'ES', N'BTN_NUEVO', N'Nuevo'), (N'EN', N'BTN_NUEVO', N'New'), (N'PT', N'BTN_NUEVO', N'Novo')
     ) AS v(Codigo, Clave, Texto)
@@ -1223,13 +1363,282 @@ GO
 
 -- El cliente de la reserva se elige de una lista desplegable, no se escribe: el
 -- texto original ("Ingrese el nombre del cliente") no corresponde a ese control.
--- Como la clave ya existe en bases reales, se corrige por UPDATE (idempotente).
+-- En una base existente se corrige por UPDATE guardado por el texto anterior.
 UPDATE t SET Texto = CASE i.Codigo
         WHEN N'EN' THEN N'Select a valid client.'
-        WHEN N'PT' THEN N'Selecione um cliente valido.'
-        ELSE N'Seleccione un cliente valido.' END
+        WHEN N'PT' THEN N'Selecione um cliente válido.'
+        ELSE N'Seleccione un cliente válido.' END
 FROM dbo.Traducciones t
 JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
 WHERE t.Clave = N'MSG_RES_CLIENTE'
-  AND i.Codigo IN (N'ES', N'EN', N'PT');   -- solo los tres idiomas del sistema.
+  AND ((i.Codigo = N'ES' AND t.Texto IN (N'Ingrese el nombre del cliente.', N'Seleccione un cliente valido.'))
+    OR (i.Codigo = N'EN' AND t.Texto = N'Enter the client name.')
+    OR (i.Codigo = N'PT' AND t.Texto IN (N'Informe o nome do cliente.', N'Selecione um cliente valido.')));
+GO
+
+-- ===========================================================================
+-- Ortografia de los textos ES/PT (tildes, enie, cedilla) y reformulacion de
+-- MSG_RES_VENCIDA (RN-01 rechaza cualquier cambio de estado de una operacion
+-- vencida, no solo la confirmacion). Las semillas de arriba ya llevan el texto
+-- final; una base sembrada por una version anterior conserva los textos sin
+-- acentos y se corrige aca, solo si el texto vigente es exactamente el que
+-- sembro aquella version (una traduccion editada por el usuario se conserva).
+-- ===========================================================================
+;WITH Fix(Codigo, Clave, Anterior, Nuevo) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'MENU_BITACORA', N'Bitacora', N'Bitácora'),
+        (N'ES', N'MENU_SALIR', N'Cerrar sesion', N'Cerrar sesión'),
+        (N'ES', N'LOGIN_PASS', N'Contrasena', N'Contraseña'),
+        (N'ES', N'LOGIN_CREATE', N'No tenes cuenta? Crear', N'¿No tenés cuenta? Crear'),
+        (N'ES', N'MAIN_SESSION', N'Sesion iniciada por:', N'Sesión iniciada por:'),
+        (N'ES', N'MAIN_SUBTITLE', N'Usa el menu de la izquierda para gestionar el sistema.', N'Usa el menú de la izquierda para gestionar el sistema.'),
+        (N'ES', N'MAIN_SIN_ROL', N'Tu cuenta todavia no tiene un perfil asignado. Contactate con un administrador para que te asigne uno.', N'Tu cuenta todavía no tiene un perfil asignado. Contactate con un administrador para que te asigne uno.'),
+        (N'ES', N'COL_SALON', N'Salon', N'Salón'),
+        (N'ES', N'COL_MODULO', N'Modulo', N'Módulo'),
+        (N'ES', N'COL_ACCION', N'Accion', N'Acción'),
+        (N'ES', N'COL_MAQUINA', N'Maquina', N'Máquina'),
+        (N'ES', N'RES_TITULO', N'Gestion de Reservas', N'Gestión de Reservas'),
+        (N'ES', N'BIT_TITULO', N'Bitacora del Sistema', N'Bitácora del Sistema'),
+        (N'ES', N'PERF_TITULO', N'Gestion de Perfiles', N'Gestión de Perfiles'),
+        (N'ES', N'IDI_TITULO', N'Gestion de Idiomas', N'Gestión de Idiomas'),
+        (N'ES', N'IDI_CODIGO', N'Codigo (ej. PT)', N'Código (ej. PT)'),
+        (N'ES', N'MSG_IDI_COD_INV', N'Codigo invalido (1 a 5 caracteres).', N'Código inválido (1 a 5 caracteres).'),
+        (N'ES', N'MSG_IDI_DUP', N'Ya existe un idioma con ese codigo.', N'Ya existe un idioma con ese código.'),
+        (N'ES', N'AUD_TITULO', N'Registro de Auditoria', N'Registro de Auditoría'),
+        (N'ES', N'ALERT_HINT', N'La verificacion de digitos verificadores encontro datos alterados por fuera del sistema. Avise al administrador antes de operar.', N'La verificación de dígitos verificadores encontró datos alterados por fuera del sistema. Avise al administrador antes de operar.'),
+        (N'ES', N'CC_PASS', N'Contrasena', N'Contraseña'),
+        (N'ES', N'CC_PASS2', N'Repetir contrasena', N'Repetir contraseña'),
+        (N'ES', N'MSG_MONTO_INVALIDO', N'El monto no es un numero valido.', N'El monto no es un número válido.'),
+        (N'ES', N'MSG_RES_SALON', N'Seleccione un salon valido.', N'Seleccione un salón válido.'),
+        (N'ES', N'LOGIN_TAGLINE', N'Gestion de eventos y reservas', N'Gestión de eventos y reservas'),
+        (N'ES', N'LOGIN_COMPLETAR', N'Completar usuario y contrasena.', N'Completar usuario y contraseña.'),
+        (N'ES', N'LOGIN_ERR_CONEXION', N'Error de conexion:', N'Error de conexión:'),
+        (N'ES', N'CC_MSG_NO_COINCIDEN', N'Las contrasenas no coinciden.', N'Las contraseñas no coinciden.'),
+        (N'ES', N'CC_MSG_PASS_CORTA', N'La contrasena debe tener al menos 4 caracteres.', N'La contraseña debe tener al menos 4 caracteres.'),
+        (N'ES', N'CC_MSG_OK', N'Usuario creado. Ya podes iniciar sesion.', N'Usuario creado. Ya podés iniciar sesión.'),
+        (N'ES', N'CC_MSG_USER_INVALIDO', N'Usuario invalido (3-50, letras/numeros/._-).', N'Usuario inválido (3-50, letras/números/._-).'),
+        (N'ES', N'CC_MSG_PASS_INVALIDA', N'Contrasena invalida.', N'Contraseña inválida.'),
+        (N'ES', N'PERF_DESC', N'Descripcion', N'Descripción'),
+        (N'ES', N'LOGIN_INACTIVA', N'La cuenta esta inactiva. Contactate con un administrador.', N'La cuenta está inactiva. Contactate con un administrador.'),
+        (N'ES', N'COL_TELEFONO', N'Telefono', N'Teléfono'),
+        (N'ES', N'MSG_CLI_EMAIL', N'El email no es valido.', N'El email no es válido.'),
+        (N'ES', N'MSG_RES_SALON_OCUPADO', N'El salon ya esta reservado para esa fecha.', N'El salón ya está reservado para esa fecha.'),
+        (N'ES', N'SRV_TITULO', N'Gestion de Servicios', N'Gestión de Servicios'),
+        (N'ES', N'CLI_TITULO', N'Gestion de Clientes', N'Gestión de Clientes'),
+        (N'ES', N'COL_DESCRIPCION', N'Descripcion', N'Descripción'),
+        (N'ES', N'COL_METODO', N'Metodo', N'Método'),
+        (N'ES', N'COL_OBSERVACION', N'Observacion', N'Observación'),
+        (N'ES', N'MSG_PAGO_MONTO', N'Ingrese un monto valido.', N'Ingrese un monto válido.'),
+        (N'ES', N'MSG_PAGO_METODO', N'Seleccione un metodo de pago.', N'Seleccione un método de pago.'),
+        (N'ES', N'MSG_PAGO_RESERVA', N'Reserva invalida.', N'Reserva inválida.'),
+        (N'ES', N'CMP_TAGLINE', N'GESTION DE EVENTOS', N'GESTIÓN DE EVENTOS'),
+        (N'ES', N'MSG_EMAIL_ADJUNTAR', N'Se abrio tu correo con el mensaje listo. Adjunta el comprobante (abrimos su carpeta) y envialo.', N'Se abrió tu correo con el mensaje listo. Adjunta el comprobante (abrimos su carpeta) y envialo.'),
+        (N'ES', N'EST_COTIZACION', N'Cotizacion', N'Cotización'),
+        (N'ES', N'CRIT_INFO', N'Informacion', N'Información'),
+        (N'ES', N'ACC_LOGOUT', N'Cierre de sesion', N'Cierre de sesión'),
+        (N'ES', N'AUD_TAB_BITACORA', N'Bitacora general', N'Bitácora general'),
+        (N'ES', N'AUD_TAB_LOGIN', N'Auditoria de login', N'Auditoría de login'),
+        (N'ES', N'AUD_RECALC_BTN', N'Recalcular linea base', N'Recalcular línea base'),
+        (N'ES', N'AUD_RECALC_CONFIRMA', N'Recalcular los digitos verificadores de todas las reservas? Usar despues de corregir datos alterados: la linea base nueva pasa a ser la referencia de integridad.', N'¿Recalcular los dígitos verificadores de todas las reservas? Usar después de corregir datos alterados: la línea base nueva pasa a ser la referencia de integridad.'),
+        (N'ES', N'AUD_RECALC_OK', N'Linea base recalculada ({0} reservas). Verificacion posterior: {1} inconsistencia(s).', N'Línea base recalculada ({0} reservas). Verificación posterior: {1} inconsistencia(s).'),
+        (N'ES', N'MSG_PERF_CICLO', N'No se puede incluir ese perfil: generaria una referencia circular.', N'No se puede incluir ese perfil: generaría una referencia circular.'),
+        (N'ES', N'VER_VACIO', N'Sin versiones guardadas. Se crea una automaticamente al modificar la reserva.', N'Sin versiones guardadas. Se crea una automáticamente al modificar la reserva.'),
+        (N'ES', N'VER_CONFIRMA', N'Restaurar la reserva al estado de la version seleccionada? El estado actual se guardara como una nueva version.', N'¿Restaurar la reserva al estado de la versión seleccionada? El estado actual se guardará como una nueva versión.'),
+        (N'ES', N'MSG_VER_OK', N'Version restaurada.', N'Versión restaurada.'),
+        (N'ES', N'MSG_SIN_PERMISO', N'No tenes permiso para realizar esta accion.', N'No tenés permiso para realizar esta acción.'),
+        (N'ES', N'MAIN_PERMISOS_ERROR', N'No se pudieron cargar los permisos de tu perfil, asi que la sesion quedo sin acceso a las secciones. Volve a iniciar sesion; si el problema sigue, avisale a un administrador.', N'No se pudieron cargar los permisos de tu perfil, así que la sesión quedó sin acceso a las secciones. Volvé a iniciar sesión; si el problema sigue, avisale a un administrador.'),
+        (N'ES', N'MSG_RES_VENCIDA', N'La operacion vencio: renovala antes de confirmarla.', N'La operación venció: renovala antes de cambiar su estado.'),
+        (N'ES', N'MSG_RES_CANCELAR', N'Cancelar la reserva #{0}?', N'¿Cancelar la reserva #{0}?'),
+        (N'ES', N'MSG_RES_NO_MODIFICABLE', N'La reserva esta cancelada: no admite modificaciones.', N'La reserva está cancelada: no admite modificaciones.'),
+        (N'ES', N'MSG_PAGO_ANULAR_CONF', N'Anular el pago de {0}? La operacion no se puede deshacer.', N'¿Anular el pago de {0}? La operación no se puede deshacer.'),
+        (N'ES', N'CONN_TITULO', N'Configuracion de conexion', N'Configuración de conexión'),
+        (N'ES', N'CONN_AYUDA', N'No se pudo conectar a la base de datos. Indica donde esta la instancia de SQL Server y el nombre de la base. La configuracion se guarda cifrada en tu perfil de Windows.', N'No se pudo conectar a la base de datos. Indica dónde está la instancia de SQL Server y el nombre de la base. La configuración se guarda cifrada en tu perfil de Windows.'),
+        (N'ES', N'CONN_PROBANDO', N'Probando conexion...', N'Probando conexión...'),
+        (N'ES', N'CONN_OK', N'Conexion correcta.', N'Conexión correcta.'),
+        (N'ES', N'DISP_COL_PROPUESTA', N'Proxima fecha libre', N'Próxima fecha libre'),
+        (N'ES', N'DISP_RESUMEN_OK', N'{0} salon(es) disponible(s) para la fecha consultada.', N'{0} salón(es) disponible(s) para la fecha consultada.'),
+        (N'ES', N'DISP_RESUMEN_ALTERNATIVAS', N'Ningun salon disponible para esa fecha: se proponen fechas alternativas.', N'Ningún salón disponible para esa fecha: se proponen fechas alternativas.'),
+        (N'ES', N'DISP_SELECCIONE', N'Seleccione un salon de la grilla.', N'Seleccione un salón de la grilla.'),
+        (N'ES', N'DISP_SIN_PROPUESTA', N'El salon no tiene fechas libres en el horizonte consultado.', N'El salón no tiene fechas libres en el horizonte consultado.'),
+        (N'ES', N'CMP_PRESUPUESTO_NOTA', N'Presupuesto sin compromiso de reserva. Sujeto a disponibilidad del salon al momento de confirmar.', N'Presupuesto sin compromiso de reserva. Sujeto a disponibilidad del salón al momento de confirmar.'),
+        (N'ES', N'MSG_RES_CAPACIDAD', N'El salon no alcanza para la cantidad de invitados indicada.', N'El salón no alcanza para la cantidad de invitados indicada.'),
+        (N'ES', N'MSG_RES_TRANSICION_GEN', N'El cambio de estado solicitado no esta admitido.', N'El cambio de estado solicitado no está admitido.'),
+        (N'ES', N'MSG_RES_GUARDAR_PRIMERO', N'Guarde la reserva antes de emitir su documentacion.', N'Guarde la reserva antes de emitir su documentación.'),
+        (N'ES', N'MSG_OP_ERROR', N'No se pudo completar la operacion.', N'No se pudo completar la operación.'),
+        (N'EN', N'MSG_RES_VENCIDA', N'The quote expired: renew it before confirming.', N'The operation expired: renew it before changing its status.'),
+        (N'PT', N'MENU_INICIO', N'Inicio', N'Início'),
+        (N'PT', N'LOGIN_USER', N'Usuario', N'Usuário'),
+        (N'PT', N'LOGIN_CREATE', N'Nao tem conta? Criar', N'Não tem conta? Criar'),
+        (N'PT', N'MAIN_SESSION', N'Sessao iniciada por:', N'Sessão iniciada por:'),
+        (N'PT', N'MAIN_SUBTITLE', N'Use o menu a esquerda para gerenciar o sistema.', N'Use o menu à esquerda para gerenciar o sistema.'),
+        (N'PT', N'MAIN_SIN_ROL', N'Sua conta ainda nao tem um perfil atribuido. Entre em contato com um administrador para receber um.', N'Sua conta ainda não tem um perfil atribuído. Entre em contato com um administrador para receber um.'),
+        (N'PT', N'COL_SALON', N'Salao', N'Salão'),
+        (N'PT', N'COL_USUARIO', N'Usuario', N'Usuário'),
+        (N'PT', N'COL_MODULO', N'Modulo', N'Módulo'),
+        (N'PT', N'COL_ACCION', N'Acao', N'Ação'),
+        (N'PT', N'COL_MAQUINA', N'Maquina', N'Máquina'),
+        (N'PT', N'RES_TITULO', N'Gestao de Reservas', N'Gestão de Reservas'),
+        (N'PT', N'RES_HISTORIAL', N'Historico', N'Histórico'),
+        (N'PT', N'BIT_HASTA', N'Ate', N'Até'),
+        (N'PT', N'PERF_TITULO', N'Gestao de Perfis', N'Gestão de Perfis'),
+        (N'PT', N'PERF_GUARDAR', N'Salvar permissoes', N'Salvar permissões'),
+        (N'PT', N'MSG_PERF_OK', N'Permissoes salvas.', N'Permissões salvas.'),
+        (N'PT', N'IDI_TITULO', N'Gestao de Idiomas', N'Gestão de Idiomas'),
+        (N'PT', N'IDI_CODIGO', N'Codigo (ex. PT)', N'Código (ex. PT)'),
+        (N'PT', N'IDI_GUARDAR', N'Salvar traducoes', N'Salvar traduções'),
+        (N'PT', N'MSG_IDI_GUARDADO', N'Traducoes salvas.', N'Traduções salvas.'),
+        (N'PT', N'MSG_IDI_COD_INV', N'Codigo invalido (1 a 5 caracteres).', N'Código inválido (1 a 5 caracteres).'),
+        (N'PT', N'MSG_IDI_DUP', N'Ja existe um idioma com esse codigo.', N'Já existe um idioma com esse código.'),
+        (N'PT', N'MSG_IDI_ERROR', N'Nao foi possivel criar o idioma.', N'Não foi possível criar o idioma.'),
+        (N'PT', N'HIST_TITULO', N'Historico da reserva', N'Histórico da reserva'),
+        (N'PT', N'ALERT_HINT', N'A verificacao de digitos verificadores encontrou dados alterados fora do sistema. Avise o administrador antes de operar.', N'A verificação de dígitos verificadores encontrou dados alterados fora do sistema. Avise o administrador antes de operar.'),
+        (N'PT', N'CC_USER', N'Usuario', N'Usuário'),
+        (N'PT', N'MSG_MONTO_INVALIDO', N'O valor nao e um numero valido.', N'O valor não é um número válido.'),
+        (N'PT', N'MSG_RES_SALON', N'Selecione um salao valido.', N'Selecione um salão válido.'),
+        (N'PT', N'MSG_RES_FECHA', N'A data do evento nao pode ser anterior a hoje.', N'A data do evento não pode ser anterior a hoje.'),
+        (N'PT', N'MSG_RES_MONTO', N'O valor nao pode ser negativo.', N'O valor não pode ser negativo.'),
+        (N'PT', N'MSG_RES_NOTFOUND', N'A reserva nao existe mais.', N'A reserva não existe mais.'),
+        (N'PT', N'MSG_RES_ERROR', N'Nao foi possivel salvar a reserva.', N'Não foi possível salvar a reserva.'),
+        (N'PT', N'MSG_RES_SELECCIONE', N'Selecione uma reserva existente para ver seu historico.', N'Selecione uma reserva existente para ver seu histórico.'),
+        (N'PT', N'LOGIN_TAGLINE', N'Gestao de eventos e reservas', N'Gestão de eventos e reservas'),
+        (N'PT', N'LOGIN_COMPLETAR', N'Preencha usuario e senha.', N'Preencha usuário e senha.'),
+        (N'PT', N'LOGIN_ERR_CONEXION', N'Erro de conexao:', N'Erro de conexão:'),
+        (N'PT', N'CC_MSG_NO_COINCIDEN', N'As senhas nao coincidem.', N'As senhas não coincidem.'),
+        (N'PT', N'CC_MSG_OK', N'Conta criada. Voce ja pode entrar.', N'Conta criada. Você já pode entrar.'),
+        (N'PT', N'CC_MSG_USER_INVALIDO', N'Usuario invalido (3-50, letras/numeros/._-).', N'Usuário inválido (3-50, letras/números/._-).'),
+        (N'PT', N'CC_MSG_USER_EXISTE', N'Esse usuario ja existe.', N'Esse usuário já existe.'),
+        (N'PT', N'CC_MSG_PASS_INVALIDA', N'Senha invalida.', N'Senha inválida.'),
+        (N'PT', N'HIST_VACIO', N'Sem alteracoes registradas.', N'Sem alterações registradas.'),
+        (N'PT', N'PERF_DESC', N'Descricao', N'Descrição'),
+        (N'PT', N'PERF_ASIGNAR_TITULO', N'Atribuir perfil a usuarios', N'Atribuir perfil a usuários'),
+        (N'PT', N'PERF_GUARDAR_ASIG', N'Salvar atribuicoes', N'Salvar atribuições'),
+        (N'PT', N'MSG_PERF_ASIG_OK', N'Atribuicoes salvas.', N'Atribuições salvas.'),
+        (N'PT', N'MSG_PERF_DUP', N'Ja existe um perfil com esse nome.', N'Já existe um perfil com esse nome.'),
+        (N'PT', N'LOGIN_INACTIVA', N'A conta esta inativa. Entre em contato com um administrador.', N'A conta está inativa. Entre em contato com um administrador.'),
+        (N'PT', N'MSG_PERF_DESBLOQ', N'Usuario desbloqueado.', N'Usuário desbloqueado.'),
+        (N'PT', N'CLI_TITULO', N'Gestao de Clientes', N'Gestão de Clientes'),
+        (N'PT', N'MSG_CLI_DNI_DUP', N'Ja existe um cliente com esse documento.', N'Já existe um cliente com esse documento.'),
+        (N'PT', N'MSG_CLI_EMAIL', N'O email nao e valido.', N'O email não é válido.'),
+        (N'PT', N'MSG_RES_SALON_OCUPADO', N'O salao ja esta reservado para essa data.', N'O salão já está reservado para essa data.'),
+        (N'PT', N'MENU_SERVICIOS', N'Servicos', N'Serviços'),
+        (N'PT', N'SRV_TITULO', N'Gestao de Servicos', N'Gestão de Serviços'),
+        (N'PT', N'SRV_NUEVO', N'Novo servico', N'Novo serviço'),
+        (N'PT', N'SRV_FORM_EDITAR', N'Editar servico', N'Editar serviço'),
+        (N'PT', N'SRV_COUNT', N'servicos', N'serviços'),
+        (N'PT', N'COL_DESCRIPCION', N'Descricao', N'Descrição'),
+        (N'PT', N'COL_PRECIO', N'Preco', N'Preço'),
+        (N'PT', N'MSG_SRV_NOMBRE', N'Informe o nome do servico.', N'Informe o nome do serviço.'),
+        (N'PT', N'MSG_SRV_PRECIO', N'O preco nao pode ser negativo.', N'O preço não pode ser negativo.'),
+        (N'PT', N'MSG_SRV_DUP', N'Ja existe um servico com esse nome.', N'Já existe um serviço com esse nome.'),
+        (N'PT', N'MSG_SRV_OK', N'Servico salvo.', N'Serviço salvo.'),
+        (N'PT', N'RES_SERVICIOS', N'Servicos da reserva', N'Serviços da reserva'),
+        (N'PT', N'COL_SERVICIO', N'Servico', N'Serviço'),
+        (N'PT', N'COL_METODO', N'Metodo', N'Método'),
+        (N'PT', N'COL_OBSERVACION', N'Observacao', N'Observação'),
+        (N'PT', N'MSG_PAGO_MONTO', N'Informe um valor valido.', N'Informe um valor válido.'),
+        (N'PT', N'MSG_PAGO_METODO', N'Selecione um metodo de pagamento.', N'Selecione um método de pagamento.'),
+        (N'PT', N'MSG_PAGO_RESERVA', N'Reserva invalida.', N'Reserva inválida.'),
+        (N'PT', N'CMP_TAGLINE', N'GESTAO DE EVENTOS', N'GESTÃO DE EVENTOS'),
+        (N'PT', N'CMP_DETALLE_SERVICIOS', N'Detalhe de servicos', N'Detalhe de serviços'),
+        (N'PT', N'CMP_SIN_SERVICIOS', N'Sem servicos contratados.', N'Sem serviços contratados.'),
+        (N'PT', N'EMAIL_SALUDO', N'Ola {0},', N'Olá {0},'),
+        (N'PT', N'EMAIL_CIERRE', N'O comprovante esta anexado. Saudacoes, EvenTech.', N'O comprovante está anexado. Saudações, EvenTech.'),
+        (N'PT', N'MSG_EMAIL_SIN_CORREO', N'O cliente nao tem email cadastrado.', N'O cliente não tem email cadastrado.'),
+        (N'PT', N'EST_COTIZACION', N'Orcamento', N'Orçamento'),
+        (N'PT', N'CRIT_INFO', N'Informacao', N'Informação'),
+        (N'PT', N'ACC_LOGOUT', N'Encerramento de sessao', N'Encerramento de sessão'),
+        (N'PT', N'AUD_RECALC_CONFIRMA', N'Recalcular os digitos verificadores de todas as reservas? Usar apos corrigir dados alterados: a nova linha de base passa a ser a referencia de integridade.', N'Recalcular os dígitos verificadores de todas as reservas? Usar após corrigir dados alterados: a nova linha de base passa a ser a referência de integridade.'),
+        (N'PT', N'AUD_RECALC_OK', N'Linha de base recalculada ({0} reservas). Verificacao posterior: {1} inconsistencia(s).', N'Linha de base recalculada ({0} reservas). Verificação posterior: {1} inconsistência(s).'),
+        (N'PT', N'PERF_INCLUIDOS', N'Perfis incluidos', N'Perfis incluídos'),
+        (N'PT', N'MSG_PERF_CICLO', N'Nao e possivel incluir esse perfil: geraria uma referencia circular.', N'Não é possível incluir esse perfil: geraria uma referência circular.'),
+        (N'PT', N'RES_VERSIONES', N'Versoes', N'Versões'),
+        (N'PT', N'VER_TITULO', N'Versoes da reserva', N'Versões da reserva'),
+        (N'PT', N'VER_VACIO', N'Sem versoes salvas. Uma e criada automaticamente ao modificar a reserva.', N'Sem versões salvas. Uma é criada automaticamente ao modificar a reserva.'),
+        (N'PT', N'VER_CONFIRMA', N'Restaurar a reserva ao estado da versao selecionada? O estado atual sera salvo como uma nova versao.', N'Restaurar a reserva ao estado da versão selecionada? O estado atual será salvo como uma nova versão.'),
+        (N'PT', N'MSG_VER_OK', N'Versao restaurada.', N'Versão restaurada.'),
+        (N'PT', N'MSG_SIN_PERMISO', N'Voce nao tem permissao para realizar esta acao.', N'Você não tem permissão para realizar esta ação.'),
+        (N'PT', N'MAIN_PERMISOS_ERROR', N'Nao foi possivel carregar as permissoes do seu perfil, entao a sessao ficou sem acesso as secoes. Entre novamente; se o problema continuar, avise um administrador.', N'Não foi possível carregar as permissões do seu perfil, então a sessão ficou sem acesso às seções. Entre novamente; se o problema continuar, avise um administrador.'),
+        (N'PT', N'MSG_RES_VENCIDA', N'A operacao venceu: renove antes de confirmar.', N'A operação venceu: renove-a antes de mudar seu estado.'),
+        (N'PT', N'MSG_RES_RENOVADA', N'Vigencia renovada.', N'Vigência renovada.'),
+        (N'PT', N'MSG_RES_NO_MODIFICABLE', N'A reserva esta cancelada: nao admite modificacoes.', N'A reserva está cancelada: não admite modificações.'),
+        (N'PT', N'MSG_PAGO_ANULAR_CONF', N'Anular o pagamento de {0}? A operacao nao pode ser desfeita.', N'Anular o pagamento de {0}? A operação não pode ser desfeita.'),
+        (N'PT', N'CONN_TITULO', N'Configuracao de conexao', N'Configuração de conexão'),
+        (N'PT', N'CONN_AYUDA', N'Nao foi possivel conectar ao banco de dados. Informe a instancia do SQL Server e o nome do banco. A configuracao e salva criptografada no seu perfil do Windows.', N'Não foi possível conectar ao banco de dados. Informe a instância do SQL Server e o nome do banco. A configuração é salva criptografada no seu perfil do Windows.'),
+        (N'PT', N'CONN_SERVIDOR', N'Instancia do SQL Server', N'Instância do SQL Server'),
+        (N'PT', N'CONN_PROBANDO', N'Testando conexao...', N'Testando conexão...'),
+        (N'PT', N'CONN_OK', N'Conexao correta.', N'Conexão correta.'),
+        (N'PT', N'DISP_COL_PROPUESTA', N'Proxima data livre', N'Próxima data livre'),
+        (N'PT', N'DISP_EST_DISPONIBLE', N'Disponivel', N'Disponível'),
+        (N'PT', N'DISP_RESUMEN_OK', N'{0} salao(oes) disponivel(is) para a data consultada.', N'{0} salão(ões) disponível(is) para a data consultada.'),
+        (N'PT', N'DISP_RESUMEN_ALTERNATIVAS', N'Nenhum salao disponivel para essa data: datas alternativas sao propostas.', N'Nenhum salão disponível para essa data: datas alternativas são propostas.'),
+        (N'PT', N'DISP_SELECCIONE', N'Selecione um salao da grade.', N'Selecione um salão da grade.'),
+        (N'PT', N'DISP_SIN_PROPUESTA', N'O salao nao tem datas livres no periodo consultado.', N'O salão não tem datas livres no período consultado.'),
+        (N'PT', N'CMP_TITULO_PRESUPUESTO', N'Orcamento', N'Orçamento'),
+        (N'PT', N'CMP_DOC_NRO_PRESUPUESTO', N'Orcamento N', N'Orçamento N'),
+        (N'PT', N'CMP_PRESUPUESTO_NOTA', N'Orcamento sem compromisso de reserva. Sujeito a disponibilidade do salao no momento da confirmacao.', N'Orçamento sem compromisso de reserva. Sujeito à disponibilidade do salão no momento da confirmação.'),
+        (N'PT', N'MSG_RES_TRANSICION', N'Nao e admitido passar de {0} para {1}.', N'Não é admitido passar de {0} para {1}.'),
+        (N'PT', N'MSG_RES_MONTO_PAGADO', N'O total da reserva nao pode ficar abaixo do valor ja cobrado.', N'O total da reserva não pode ficar abaixo do valor já cobrado.'),
+        (N'PT', N'MSG_RES_CAPACIDAD', N'O salao nao comporta a quantidade de convidados informada.', N'O salão não comporta a quantidade de convidados informada.'),
+        (N'PT', N'MSG_RES_TRANSICION_GEN', N'A mudanca de estado solicitada nao e admitida.', N'A mudança de estado solicitada não é admitida.'),
+        (N'PT', N'MSG_RES_SIN_ADELANTO', N'Para confirmar a reserva e preciso registrar o adiantamento: salve-a e cobre o pagamento em Pagamentos.', N'Para confirmar a reserva é preciso registrar o adiantamento: salve-a e cobre o pagamento em Pagamentos.'),
+        (N'PT', N'MSG_PAGO_NO_ANULABLE', N'O pagamento nao existe mais ou nao pertence a esta reserva.', N'O pagamento não existe mais ou não pertence a esta reserva.'),
+        (N'PT', N'MSG_RES_GUARDAR_PRIMERO', N'Salve a reserva antes de emitir sua documentacao.', N'Salve a reserva antes de emitir sua documentação.'),
+        (N'PT', N'MSG_OP_ERROR', N'Nao foi possivel concluir a operacao.', N'Não foi possível concluir a operação.'),
+        (N'PT', N'MSG_RES_CANCELAR_DETALLE', N'Cancelando hoje sao retidos {0:N2} e reembolsados {1:N2}.', N'Cancelando hoje são retidos {0:N2} e reembolsados {1:N2}.')
+    ) AS v(Codigo, Clave, Anterior, Nuevo)
+)
+UPDATE t SET Texto = f.Nuevo
+FROM dbo.Traducciones t
+JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
+JOIN Fix f ON f.Codigo = i.Codigo AND f.Clave = t.Clave
+WHERE t.Texto = f.Anterior;
+
+UPDATE dbo.Idiomas SET Nombre = N'Español'   WHERE Codigo = N'ES' AND Nombre = N'Espanol';
+UPDATE dbo.Idiomas SET Nombre = N'Português' WHERE Codigo = N'PT' AND Nombre = N'Portugues';
+GO
+
+-- Claves que ninguna pantalla consume: se retiraron de las semillas y se
+-- quitan de las bases existentes (en todos los idiomas) para que el editor de
+-- traducciones no ofrezca textos que nunca se muestran.
+DELETE FROM dbo.Traducciones
+ WHERE Clave IN (N'MAIN_USER', N'BTN_REFRESCAR', N'MSG_PERF_CREADO', N'MSG_CLI_SELECCIONE',
+                 N'MSG_RES_SERVICIOS_ERROR', N'LOGIN_ERR_USUARIO', N'LOGIN_ERR_PASS');
+GO
+
+-- ===========================================================================
+-- Integridad del modelo de datos. Idempotente; va al final porque todas las
+-- tablas ya existen en este punto.
+-- ===========================================================================
+
+-- Dominio de Estado en Reservas y en su foto Memento (tabla de estados de
+-- G02). Se agrega solo si no hay filas fuera del dominio: el script no debe
+-- romper una base real, y va despues de la regularizacion de VenceEl.
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_Reservas_Estado' AND parent_object_id = OBJECT_ID('dbo.Reservas'))
+   AND NOT EXISTS (SELECT 1 FROM dbo.Reservas WHERE Estado NOT IN ('COTIZACION', 'PENDIENTE', 'CONFIRMADA', 'CANCELADA'))
+    ALTER TABLE dbo.Reservas WITH CHECK ADD CONSTRAINT CK_Reservas_Estado
+        CHECK (Estado IN ('COTIZACION', 'PENDIENTE', 'CONFIRMADA', 'CANCELADA'));
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_ReservaMemento_Estado' AND parent_object_id = OBJECT_ID('dbo.ReservaMemento'))
+   AND NOT EXISTS (SELECT 1 FROM dbo.ReservaMemento WHERE Estado NOT IN ('COTIZACION', 'PENDIENTE', 'CONFIRMADA', 'CANCELADA'))
+    ALTER TABLE dbo.ReservaMemento WITH CHECK ADD CONSTRAINT CK_ReservaMemento_Estado
+        CHECK (Estado IN ('COTIZACION', 'PENDIENTE', 'CONFIRMADA', 'CANCELADA'));
+GO
+
+-- Indices de apoyo para las claves foraneas que no eran columna inicial de
+-- ningun indice (consultas por cliente, servicio, metodo de pago y perfil).
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Reservas_ClienteId' AND object_id = OBJECT_ID('dbo.Reservas'))
+    CREATE INDEX IX_Reservas_ClienteId ON dbo.Reservas(ClienteId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Pagos_MetodoPagoId' AND object_id = OBJECT_ID('dbo.Pagos'))
+    CREATE INDEX IX_Pagos_MetodoPagoId ON dbo.Pagos(MetodoPagoId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ReservaServicio_ServicioId' AND object_id = OBJECT_ID('dbo.ReservaServicio'))
+    CREATE INDEX IX_ReservaServicio_ServicioId ON dbo.ReservaServicio(ServicioId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ReservaMementoServicio_ServicioId' AND object_id = OBJECT_ID('dbo.ReservaMementoServicio'))
+    CREATE INDEX IX_ReservaMementoServicio_ServicioId ON dbo.ReservaMementoServicio(ServicioId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Users_PerfilId' AND object_id = OBJECT_ID('dbo.Users'))
+    CREATE INDEX IX_Users_PerfilId ON dbo.Users(PerfilId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Permisos_PermisoPadreId' AND object_id = OBJECT_ID('dbo.Permisos'))
+    CREATE INDEX IX_Permisos_PermisoPadreId ON dbo.Permisos(PermisoPadreId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_PerfilPermiso_PermisoId' AND object_id = OBJECT_ID('dbo.PerfilPermiso'))
+    CREATE INDEX IX_PerfilPermiso_PermisoId ON dbo.PerfilPermiso(PermisoId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_PerfilIncluido_PerfilHijoId' AND object_id = OBJECT_ID('dbo.PerfilIncluido'))
+    CREATE INDEX IX_PerfilIncluido_PerfilHijoId ON dbo.PerfilIncluido(PerfilHijoId);
 GO

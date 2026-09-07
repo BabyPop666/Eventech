@@ -21,9 +21,12 @@ namespace EvenTech.BLL
                 };
                 DAL_LoginAudit_704ILR.Insert_704ILR(entry_704ILR);
             }
-            catch
+            catch (Exception ex_704ILR)
             {
-                // No queremos que un fallo de auditoria rompa el flujo de login.
+                // Un fallo de auditoria no rompe el flujo de login, pero tampoco se
+                // pierde: queda asentado en bitacora (que es best-effort: si tambien
+                // falla, descarta en silencio y el ingreso sigue).
+                BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Login", "Auditoria de acceso");
             }
         }
 

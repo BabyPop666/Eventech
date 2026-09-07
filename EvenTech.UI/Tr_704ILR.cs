@@ -11,6 +11,18 @@ namespace EvenTech.UI
     {
         public static string T_704ILR(string clave_704ILR) => GestorDeIdioma_704ILR.GetInstance_704ILR.Traducir_704ILR(clave_704ILR);
 
+        // Traduccion con marcadores {n}. Si la clave falta se usa el texto por
+        // defecto; si el texto guardado esta mal formado (llave sin cerrar, indice
+        // que no existe) string.Format lanza, y en vez de tumbar la pantalla se cae
+        // al texto por defecto, que es una constante del codigo y siempre formatea.
+        public static string F_704ILR(string clave_704ILR, string defecto_704ILR, params object[] args_704ILR)
+        {
+            string plantilla_704ILR = T_704ILR(clave_704ILR);
+            if (plantilla_704ILR == clave_704ILR) plantilla_704ILR = defecto_704ILR;
+            try { return string.Format(plantilla_704ILR, args_704ILR); }
+            catch (System.FormatException) { return string.Format(defecto_704ILR, args_704ILR); }
+        }
+
         // Traduccion de valores de enumeraciones mostrados al usuario (grillas/combos).
         // La clave se arma por convencion PREFIJO_VALOR para no acoplar el enum a la UI.
         public static string Estado_704ILR(EvenTech.BE.EstadoReserva_704ILR e_704ILR) => T_704ILR("EST_" + e_704ILR.ToString());

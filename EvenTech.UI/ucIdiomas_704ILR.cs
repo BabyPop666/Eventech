@@ -308,6 +308,16 @@ namespace EvenTech.UI
                     string texto_704ILR = row_704ILR.Cells["colTexto"].Value?.ToString() ?? string.Empty;
                     if (!string.IsNullOrEmpty(clave_704ILR)) textos_704ILR[clave_704ILR] = texto_704ILR;
                 }
+                // Un texto con llaves sin cerrar o con un {n} que la clave no admite
+                // rompe la pantalla que lo formatea: se rechaza aca, con la clave a
+                // la vista, antes de guardar nada.
+                string claveInvalida_704ILR = BLL_Idioma_704ILR.PrimeraPlantillaInvalida_704ILR(textos_704ILR);
+                if (claveInvalida_704ILR != null)
+                {
+                    Mensaje_704ILR(Tr_704ILR.F_704ILR("IDI_PLANTILLA_INVALIDA",
+                        "El texto de '{0}' tiene llaves sin cerrar o marcadores que la clave no admite.", claveInvalida_704ILR), true);
+                    return;
+                }
                 BLL_Idioma_704ILR.GuardarTraducciones_704ILR(idiomaId_704ILR, textos_704ILR);
                 RefrescarSelectorPrincipal_704ILR();
                 // Si edite el idioma activo, refrescar esta misma vista. No sirve

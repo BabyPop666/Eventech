@@ -28,7 +28,11 @@ namespace EvenTech.DAL
         }
 
         // Busqueda combinada: cada filtro es opcional y se concatena con AND solo
-        // si viene informado (patron WHERE 1=1 + parametros opcionales).
+        // si viene informado (patron WHERE 1=1 + parametros opcionales). Los
+        // parametros llevan tipo y longitud explicitos como en el resto de la DAL:
+        // sin ellos el driver infiere NVARCHAR(largo del valor) y cada largo
+        // distinto genera un plan distinto. Los patrones LIKE reservan dos
+        // posiciones mas que la columna para los comodines.
         public static List<BE_BitacoraEntry_704ILR> Buscar_704ILR(BitacoraFiltros_704ILR f_704ILR)
         {
             var sb_704ILR = new StringBuilder(
@@ -38,32 +42,32 @@ namespace EvenTech.DAL
             if (!string.IsNullOrWhiteSpace(f_704ILR.Usuario_704ILR))
             {
                 sb_704ILR.Append("AND Usuario LIKE @usuario ");
-                ps_704ILR.Add(new SqlParameter("@usuario", "%" + f_704ILR.Usuario_704ILR.Trim() + "%"));
+                ps_704ILR.Add(new SqlParameter("@usuario", SqlDbType.NVarChar, 52) { Value = "%" + f_704ILR.Usuario_704ILR.Trim() + "%" });
             }
             if (f_704ILR.FechaInicio_704ILR.HasValue)
             {
                 sb_704ILR.Append("AND Fecha >= @desde ");
-                ps_704ILR.Add(new SqlParameter("@desde", f_704ILR.FechaInicio_704ILR.Value.Date));
+                ps_704ILR.Add(new SqlParameter("@desde", SqlDbType.DateTime) { Value = f_704ILR.FechaInicio_704ILR.Value.Date });
             }
             if (f_704ILR.FechaFin_704ILR.HasValue)
             {
                 sb_704ILR.Append("AND Fecha < @hasta ");
-                ps_704ILR.Add(new SqlParameter("@hasta", f_704ILR.FechaFin_704ILR.Value.Date.AddDays(1)));
+                ps_704ILR.Add(new SqlParameter("@hasta", SqlDbType.DateTime) { Value = f_704ILR.FechaFin_704ILR.Value.Date.AddDays(1) });
             }
             if (!string.IsNullOrWhiteSpace(f_704ILR.Modulo_704ILR))
             {
                 sb_704ILR.Append("AND Modulo = @modulo ");
-                ps_704ILR.Add(new SqlParameter("@modulo", f_704ILR.Modulo_704ILR.Trim()));
+                ps_704ILR.Add(new SqlParameter("@modulo", SqlDbType.NVarChar, 50) { Value = f_704ILR.Modulo_704ILR.Trim() });
             }
             if (!string.IsNullOrWhiteSpace(f_704ILR.Accion_704ILR))
             {
                 sb_704ILR.Append("AND Accion LIKE @accion ");
-                ps_704ILR.Add(new SqlParameter("@accion", "%" + f_704ILR.Accion_704ILR.Trim() + "%"));
+                ps_704ILR.Add(new SqlParameter("@accion", SqlDbType.NVarChar, 102) { Value = "%" + f_704ILR.Accion_704ILR.Trim() + "%" });
             }
             if (f_704ILR.Criticidad_704ILR.HasValue)
             {
                 sb_704ILR.Append("AND Criticidad = @criticidad ");
-                ps_704ILR.Add(new SqlParameter("@criticidad", (byte)f_704ILR.Criticidad_704ILR.Value));
+                ps_704ILR.Add(new SqlParameter("@criticidad", SqlDbType.TinyInt) { Value = (byte)f_704ILR.Criticidad_704ILR.Value });
             }
             sb_704ILR.Append("ORDER BY Id DESC");
 

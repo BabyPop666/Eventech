@@ -55,6 +55,14 @@ namespace EvenTech.Services
             try
             {
                 byte[] paquete_704ILR = Convert.FromBase64String(almacenado_704ILR.Substring(Prefijo_704ILR.Length));
+
+                // Un paquete AES-CBC real es IV + al menos un bloque, multiplo de 16.
+                // Cualquier otra forma (un "ENC:" tipeado a mano, un dato truncado) no
+                // es descifrable: se devuelve tal cual, igual que un dato de otra
+                // maquina, para que una fila rota no voltee el listado completo.
+                if (paquete_704ILR.Length < IvBytes_704ILR * 2 || paquete_704ILR.Length % IvBytes_704ILR != 0)
+                    return almacenado_704ILR;
+
                 using (var aes_704ILR = Aes.Create())
                 {
                     aes_704ILR.Key = GetKey_704ILR();
@@ -79,6 +87,18 @@ namespace EvenTech.Services
             {
                 return almacenado_704ILR;
             }
+            catch (ArgumentException)
+            {
+                // Red de seguridad para un paquete con forma inesperada.
+                return almacenado_704ILR;
+            }
+            catch (InvalidOperationException)
+            {
+                // La clave local no se puede leer (ver CargarOCrearClave): la lectura
+                // tolera el fallo y muestra el dato como quedo almacenado; el guardado
+                // es el que lo informa.
+                return almacenado_704ILR;
+            }
         }
 
         public static bool EstaProtegido_704ILR(string valor_704ILR) =>
@@ -101,7 +121,23 @@ namespace EvenTech.Services
             string ruta_704ILR = Path.Combine(dir_704ILR, "crypto.key");
 
             if (File.Exists(ruta_704ILR))
-                return ProtectedData.Unprotect(File.ReadAllBytes(ruta_704ILR), null, DataProtectionScope.LocalMachine);
+            {
+                try
+                {
+                    return ProtectedData.Unprotect(File.ReadAllBytes(ruta_704ILR), null, DataProtectionScope.LocalMachine);
+                }
+                catch (Exception ex_704ILR) when (ex_704ILR is CryptographicException || ex_704ILR is IOException || ex_704ILR is UnauthorizedAccessException)
+                {
+                    // Archivo truncado, copiado de otra PC o ProgramData restaurado: DPAPI
+                    // no lo abre. Se informa con la ruta y que hacer, en vez de dejar que
+                    // el alta de un cliente muera con una excepcion cruda del framework.
+                    throw new InvalidOperationException(
+                        Texto_704ILR("CRYPTO_CLAVE_INVALIDA",
+                            "La clave de cifrado {0} no se puede leer: esta danada o fue creada en otra maquina. " +
+                            "Restaure el archivo original o eliminelo para generar una clave nueva " +
+                            "(los contactos ya cifrados quedaran ilegibles).", ruta_704ILR), ex_704ILR);
+                }
+            }
 
             byte[] clave_704ILR = RandomNumberGenerator.GetBytes(32); // 256 bits
             try
@@ -119,6 +155,16 @@ namespace EvenTech.Services
                     "No se pudo crear la clave de cifrado en " + ruta_704ILR + ": " + ex_704ILR.Message, ex_704ILR);
             }
             return clave_704ILR;
+        }
+
+        // Mensaje traducido con respaldo: si la clave no esta cargada (o el texto
+        // editado esta mal formado) se usa el texto por defecto del codigo.
+        private static string Texto_704ILR(string clave_704ILR, string defecto_704ILR, params object[] args_704ILR)
+        {
+            string plantilla_704ILR = GestorDeIdioma_704ILR.GetInstance_704ILR.Traducir_704ILR(clave_704ILR);
+            if (plantilla_704ILR == clave_704ILR) plantilla_704ILR = defecto_704ILR;
+            try { return string.Format(plantilla_704ILR, args_704ILR); }
+            catch (FormatException) { return string.Format(defecto_704ILR, args_704ILR); }
         }
     }
 }

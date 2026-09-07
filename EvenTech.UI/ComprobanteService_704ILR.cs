@@ -4,6 +4,7 @@ using System.Net;
 using System.Text;
 using EvenTech.BE;
 using EvenTech.BLL;
+using EvenTech.Services;
 
 namespace EvenTech.UI
 {
@@ -54,8 +55,13 @@ namespace EvenTech.UI
                 ? T_704ILR("CMP_DOC_NRO_PRESUPUESTO", "Presupuesto N")
                 : T_704ILR("CMP_DOC_NRO", "Comprobante N");
 
+            // El atributo lang sigue al idioma activo (Observer de idiomas): los
+            // textos del documento salen traducidos, y declararlo siempre "es" era
+            // incoherente para el navegador y los lectores de pantalla.
+            string lang_704ILR = (GestorDeIdioma_704ILR.GetInstance_704ILR.IdiomaActual_704ILR ?? "es").ToLowerInvariant();
+
             var sb_704ILR = new StringBuilder();
-            sb_704ILR.Append("<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"utf-8\">");
+            sb_704ILR.Append("<!DOCTYPE html><html lang=\"").Append(E_704ILR(lang_704ILR)).Append("\"><head><meta charset=\"utf-8\">");
             sb_704ILR.Append("<title>").Append(E_704ILR(docTitulo_704ILR))
               .Append(" #").Append(reservaId_704ILR).Append("</title>");
             sb_704ILR.Append("<style>")
