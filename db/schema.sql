@@ -759,7 +759,7 @@ GO
         (N'ES', N'PERF_HINT',      N'Tilde los permisos del perfil. Marcar un grupo incluye a sus hijos; en "Perfiles incluidos" podés contener otros perfiles y heredar sus permisos.'), (N'EN', N'PERF_HINT', N'Check the profile permissions. Checking a group includes its children; under "Included profiles" you can nest other profiles and inherit their permissions.'), (N'PT', N'PERF_HINT', N'Marque as permissões do perfil. Marcar um grupo inclui seus filhos; em "Perfis incluídos" você pode conter outros perfis e herdar suas permissões.'),
         (N'ES', N'PERF_GUARDAR',   N'Guardar permisos'),          (N'EN', N'PERF_GUARDAR',   N'Save permissions'),         (N'PT', N'PERF_GUARDAR', N'Salvar permissões'),
         (N'ES', N'MSG_PERF_SELECCIONE', N'Seleccione un perfil.'),(N'EN', N'MSG_PERF_SELECCIONE', N'Select a profile.'),  (N'PT', N'MSG_PERF_SELECCIONE', N'Selecione um perfil.'),
-        (N'ES', N'MSG_PERF_OK',    N'Permisos guardados.'),       (N'EN', N'MSG_PERF_OK',    N'Permissions saved.'),       (N'PT', N'MSG_PERF_OK', N'Permissões salvas.'),
+        (N'ES', N'MSG_PERF_OK',    N'Permisos guardados. Los cambios rigen desde el próximo inicio de sesión.'),       (N'EN', N'MSG_PERF_OK',    N'Permissions saved. Changes apply from the next sign-in.'),       (N'PT', N'MSG_PERF_OK', N'Permissões salvas. As alterações valem a partir do próximo início de sessão.'),
         -- Idiomas
         (N'ES', N'IDI_TITULO', N'Gestión de Idiomas'),        (N'EN', N'IDI_TITULO',     N'Languages Management'),     (N'PT', N'IDI_TITULO', N'Gestão de Idiomas'),
         (N'ES', N'IDI_NUEVO',      N'Nuevo idioma'),              (N'EN', N'IDI_NUEVO',      N'New language'),             (N'PT', N'IDI_NUEVO',      N'Novo idioma'),
@@ -830,7 +830,7 @@ GO
         (N'ES', N'PERF_ASIGNAR_TITULO', N'Asignar perfil a usuarios'), (N'EN', N'PERF_ASIGNAR_TITULO', N'Assign profile to users'),  (N'PT', N'PERF_ASIGNAR_TITULO', N'Atribuir perfil a usuários'),
         (N'ES', N'PERF_GUARDAR_ASIG', N'Guardar asignaciones'),        (N'EN', N'PERF_GUARDAR_ASIG', N'Save assignments'),           (N'PT', N'PERF_GUARDAR_ASIG', N'Salvar atribuições'),
         (N'ES', N'PERF_SIN', N'(sin perfil)'),                         (N'EN', N'PERF_SIN', N'(no profile)'),                        (N'PT', N'PERF_SIN', N'(sem perfil)'),
-        (N'ES', N'MSG_PERF_ASIG_OK', N'Asignaciones guardadas.'),      (N'EN', N'MSG_PERF_ASIG_OK', N'Assignments saved.'),          (N'PT', N'MSG_PERF_ASIG_OK', N'Atribuições salvas.'),
+        (N'ES', N'MSG_PERF_ASIG_OK', N'Asignaciones guardadas. Los cambios rigen desde el próximo inicio de sesión.'),      (N'EN', N'MSG_PERF_ASIG_OK', N'Assignments saved. Changes apply from the next sign-in.'),          (N'PT', N'MSG_PERF_ASIG_OK', N'Atribuições salvas. As alterações valem a partir do próximo início de sessão.'),
         (N'ES', N'MSG_PERF_ASIG_SIN_CAMBIOS', N'No hay cambios de perfil para guardar.'), (N'EN', N'MSG_PERF_ASIG_SIN_CAMBIOS', N'There are no profile changes to save.'), (N'PT', N'MSG_PERF_ASIG_SIN_CAMBIOS', N'Não há alterações de perfil para salvar.'),
         (N'ES', N'MSG_PERF_NOM_INV', N'Ingrese el nombre del perfil.'),(N'EN', N'MSG_PERF_NOM_INV', N'Enter the profile name.'),     (N'PT', N'MSG_PERF_NOM_INV', N'Informe o nome do perfil.'),
         (N'ES', N'MSG_PERF_DUP', N'Ya existe un perfil con ese nombre.'), (N'EN', N'MSG_PERF_DUP', N'A profile with that name already exists.'), (N'PT', N'MSG_PERF_DUP', N'Já existe um perfil com esse nome.'),
@@ -1172,7 +1172,8 @@ GO
 -- Perfiles operativos (roles de G04) sobre el Composite de dos niveles:
 --   Vendedor   : opera la venta (disponibilidad, clientes, reservas, cobros).
 --   Supervisor : incluye a Vendedor y suma auditoria y anulacion de pagos.
---   Gerencial  : incluye a Supervisor y suma las correcciones administrativas.
+--   Gerencial  : incluye a Supervisor y suma el recalculo de la linea base.
+--   Restaurar versiones queda reservado al Administrador (RN-05 de la Carpeta).
 -- Idempotente y guardado por nombre: el perfil, cada permiso directo y cada
 -- inclusion se agregan solo si faltan; lo que un administrador haya cambiado
 -- desde Gestion de Perfiles se conserva. Administrador no se toca (arriba).
@@ -1182,7 +1183,7 @@ GO
     SELECT * FROM (VALUES
         (N'Vendedor',   N'Atiende la venta: disponibilidad, clientes, cotizaciones, reservas y cobros'),
         (N'Supervisor', N'Incluye al perfil Vendedor y suma la consulta de auditoría y la anulación de pagos'),
-        (N'Gerencial',  N'Incluye al perfil Supervisor y suma las correcciones administrativas (línea base, restaurar versiones)')
+        (N'Gerencial',  N'Incluye al perfil Supervisor y suma la corrección administrativa de la línea base de integridad')
     ) AS v(Nombre, Descripcion)
 )
 MERGE dbo.Perfiles AS p
@@ -1201,8 +1202,7 @@ WHEN MATCHED AND p.Descripcion IS NULL THEN UPDATE SET Descripcion = s.Descripci
         (N'Supervisor', N'BITACORA_VER'),
         (N'Supervisor', N'AUDIT_LOGIN_VER'),
         (N'Supervisor', N'PAGOS_ANULAR'),
-        (N'Gerencial',  N'INTEGRIDAD_RECALC'),
-        (N'Gerencial',  N'RESERVA_RESTAURAR')
+        (N'Gerencial',  N'INTEGRIDAD_RECALC')
     ) AS v(Perfil, Clave)
 )
 INSERT INTO dbo.PerfilPermiso (PerfilId, PermisoId)
@@ -1641,4 +1641,23 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_PerfilPermiso_PermisoI
     CREATE INDEX IX_PerfilPermiso_PermisoId ON dbo.PerfilPermiso(PermisoId);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_PerfilIncluido_PerfilHijoId' AND object_id = OBJECT_ID('dbo.PerfilIncluido'))
     CREATE INDEX IX_PerfilIncluido_PerfilHijoId ON dbo.PerfilIncluido(PerfilHijoId);
+GO
+
+-- Los permisos efectivos se resuelven al iniciar la sesion: el mensaje de
+-- guardado avisa que un cambio rige desde el proximo ingreso (vigencia de la
+-- autorizacion, G05 Seguridad). Guardado por el texto anterior de fabrica.
+UPDATE t SET Texto = CASE t.Clave
+        WHEN N'MSG_PERF_OK' THEN CASE i.Codigo
+            WHEN N'EN' THEN N'Permissions saved. Changes apply from the next sign-in.'
+            WHEN N'PT' THEN N'Permissões salvas. As alterações valem a partir do próximo início de sessão.'
+            ELSE N'Permisos guardados. Los cambios rigen desde el próximo inicio de sesión.' END
+        ELSE CASE i.Codigo
+            WHEN N'EN' THEN N'Assignments saved. Changes apply from the next sign-in.'
+            WHEN N'PT' THEN N'Atribuições salvas. As alterações valem a partir do próximo início de sessão.'
+            ELSE N'Asignaciones guardadas. Los cambios rigen desde el próximo inicio de sesión.' END END
+FROM dbo.Traducciones t
+JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
+WHERE t.Clave IN (N'MSG_PERF_OK', N'MSG_PERF_ASIG_OK')
+  AND t.Texto IN (N'Permisos guardados.', N'Permissions saved.', N'Permissões salvas.', N'Permissoes salvas.',
+                  N'Asignaciones guardadas.', N'Assignments saved.', N'Atribuições salvas.', N'Atribuicoes salvas.');
 GO
