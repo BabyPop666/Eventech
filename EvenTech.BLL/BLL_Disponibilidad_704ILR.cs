@@ -65,12 +65,23 @@ namespace EvenTech.BLL
             // tal cual, despues lo ocupado con capacidad (tiene propuesta) y al
             // final lo chico; dentro de cada grupo, capacidad mas cercana a la
             // pedida primero.
-            return resultado_704ILR
+            List<BE_DisponibilidadSalon_704ILR> ordenado_704ILR = resultado_704ILR
                 .OrderByDescending(d_704ILR => d_704ILR.Disponible_704ILR)
                 .ThenByDescending(d_704ILR => d_704ILR.CapacidadSuficiente_704ILR)
                 .ThenBy(d_704ILR => Math.Abs(d_704ILR.Capacidad_704ILR - capacidadRequerida_704ILR))
                 .ThenBy(d_704ILR => d_704ILR.SalonNombre_704ILR)
                 .ToList();
+
+            // La consulta es parte del proceso de venta y queda en la bitacora
+            // (CUN001, postcondicion). Se asienta aca, en la capa de negocio, como
+            // el resto de las operaciones del proceso: asi vale para cualquier
+            // llamador y no solo para el dialogo.
+            int disponibles_704ILR = ordenado_704ILR.Count(d_704ILR => d_704ILR.Disponible_704ILR);
+            BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Disponibilidad consultada", CriticidadBitacora_704ILR.Info,
+                "Fecha " + fecha_704ILR.ToString("yyyy-MM-dd") + " | Invitados " + capacidadRequerida_704ILR +
+                " | Disponibles: " + disponibles_704ILR + "/" + ordenado_704ILR.Count);
+
+            return ordenado_704ILR;
         }
     }
 }

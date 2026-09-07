@@ -56,6 +56,25 @@ namespace EvenTech.UI
                 "EvenTech", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
+        // Permisos que habilitan cada seccion del menu. Es la UNICA fuente para las
+        // dos capas del control de acceso (AplicarPermisos y Navegar): antes eran
+        // dos literales repetidos y podian desincronizarse.
+        // Una seccion se abre con CUALQUIER hoja cuya accion viva adentro: consultar
+        // disponibilidad, cobrar/anular pagos y restaurar versiones se hacen desde
+        // Reservas, y el recalculo de la linea base desde Auditoria. Sin esas hojas
+        // en la compuerta, un perfil que solo las tuviera no llegaba a ninguna
+        // pantalla. Entrar no concede nada: cada accion exige su propio permiso al
+        // ejecutarse (segunda capa) y la ficha deshabilita lo que no corresponde.
+        private static readonly string[] PermisosReservas_704ILR =
+        {
+            "RESERVA_CREAR", "RESERVA_EDITAR", "RESERVA_HISTORIAL",
+            "DISPONIBILIDAD_CONSULTAR", "PAGOS_REGISTRAR", "PAGOS_ANULAR", "RESERVA_RESTAURAR"
+        };
+        private static readonly string[] PermisosClientes_704ILR  = { "CLIENTES_GESTION" };
+        private static readonly string[] PermisosServicios_704ILR = { "SERVICIOS_GESTION" };
+        private static readonly string[] PermisosPerfiles_704ILR  = { "PERFILES_GESTION" };
+        private static readonly string[] PermisosAuditoria_704ILR = { "BITACORA_VER", "AUDIT_LOGIN_VER", "INTEGRIDAD_RECALC" };
+
         // Control de acceso (T04), primera capa: muestra/oculta cada seccion segun
         // los permisos efectivos del perfil. Toda seccion exige su permiso; la
         // unica sin restriccion es Inicio (portada de la sesion). La segunda capa
@@ -63,24 +82,24 @@ namespace EvenTech.UI
         private void AplicarPermisos_704ILR()
         {
             if (!SessionManager_704ILR.IsSessionActive_704ILR) return;
-            _itReservas_704ILR.Visible  = Permisos_704ILR.TieneAlguno_704ILR("RESERVA_CREAR", "RESERVA_EDITAR", "RESERVA_HISTORIAL");
-            _itClientes_704ILR.Visible  = Permisos_704ILR.Tiene_704ILR("CLIENTES_GESTION");
-            _itServicios_704ILR.Visible = Permisos_704ILR.Tiene_704ILR("SERVICIOS_GESTION");
-            _itPerfiles_704ILR.Visible  = Permisos_704ILR.Tiene_704ILR("PERFILES_GESTION");
-            _itAuditoria_704ILR.Visible = Permisos_704ILR.TieneAlguno_704ILR("BITACORA_VER", "AUDIT_LOGIN_VER");
+            _itReservas_704ILR.Visible  = Permisos_704ILR.TieneAlguno_704ILR(PermisosReservas_704ILR);
+            _itClientes_704ILR.Visible  = Permisos_704ILR.TieneAlguno_704ILR(PermisosClientes_704ILR);
+            _itServicios_704ILR.Visible = Permisos_704ILR.TieneAlguno_704ILR(PermisosServicios_704ILR);
+            _itPerfiles_704ILR.Visible  = Permisos_704ILR.TieneAlguno_704ILR(PermisosPerfiles_704ILR);
+            _itAuditoria_704ILR.Visible = Permisos_704ILR.TieneAlguno_704ILR(PermisosAuditoria_704ILR);
             // La gestion de idiomas (ABM de traducciones) cuelga del globo del pie.
             if (_lang_704ILR != null) _lang_704ILR.PermitirGestion_704ILR = Permisos_704ILR.Tiene_704ILR("IDIOMAS_GESTION");
         }
 
-        // Permisos que habilitan cada seccion del menu (fuente unica para la
-        // primera y la segunda capa: evita que se desincronicen).
+        // Permisos que habilitan cada seccion del menu (misma lista que usa la
+        // primera capa: ver los campos de arriba).
         private string[] PermisosDe_704ILR(SideMenuItem_704ILR item_704ILR)
         {
-            if (item_704ILR == _itReservas_704ILR)  return new[] { "RESERVA_CREAR", "RESERVA_EDITAR", "RESERVA_HISTORIAL" };
-            if (item_704ILR == _itClientes_704ILR)  return new[] { "CLIENTES_GESTION" };
-            if (item_704ILR == _itServicios_704ILR) return new[] { "SERVICIOS_GESTION" };
-            if (item_704ILR == _itPerfiles_704ILR)  return new[] { "PERFILES_GESTION" };
-            if (item_704ILR == _itAuditoria_704ILR) return new[] { "BITACORA_VER", "AUDIT_LOGIN_VER" };
+            if (item_704ILR == _itReservas_704ILR)  return PermisosReservas_704ILR;
+            if (item_704ILR == _itClientes_704ILR)  return PermisosClientes_704ILR;
+            if (item_704ILR == _itServicios_704ILR) return PermisosServicios_704ILR;
+            if (item_704ILR == _itPerfiles_704ILR)  return PermisosPerfiles_704ILR;
+            if (item_704ILR == _itAuditoria_704ILR) return PermisosAuditoria_704ILR;
             return null;   // Inicio: sin restriccion
         }
 
@@ -88,10 +107,14 @@ namespace EvenTech.UI
         {
             Text = "EvenTech";
             // Tamano por defecto acorde a la resolucion minima declarada en G05
-            // (1366x768): con 1040x680 el area de trabajo quedaba en 760x550 y la
-            // seccion de reservas no entraba (encabezados cortados y campos de la
-            // ficha fuera de vista). La ventana ademas se puede maximizar y
-            // redimensionar, asi que en pantallas mas grandes aprovecha el espacio.
+            // (1366x768). El area de contenido resultante mide 1075 x 585 (ancho
+            // menos el menu lateral de 232 y los margenes de 24+24; alto menos la
+            // barra superior de 56, el pie de 46 y los margenes de 16+12): la seccion
+            // de reservas se diseno para entrar COMPLETA ahi (grilla sin columnas
+            // truncadas y ficha con sus siete campos y sus botones a la vista, sin
+            // barra de desplazamiento), verificado midiendo el layout resultante.
+            // La ventana ademas se puede maximizar y redimensionar, asi que en
+            // pantallas mas grandes aprovecha el espacio.
             ClientSize = new Size(1355, 715);
             BackColor = Theme_704ILR.BgContent_704ILR;
             MinimumSize = new Size(1100, 680);
@@ -106,11 +129,12 @@ namespace EvenTech.UI
             // cualquier seccion (G05). Si el recurso no estuviera disponible se cae al
             // rotulo de texto, de modo que la pantalla nunca queda sin identidad.
             Control lblLogo_704ILR;
-            if (Theme_704ILR.Logo_704ILR != null)
+            Image logoMenu_704ILR = LogoSinLema_704ILR(Theme_704ILR.Logo_704ILR);
+            if (logoMenu_704ILR != null)
             {
                 lblLogo_704ILR = new PictureBox
                 {
-                    Image = Theme_704ILR.Logo_704ILR,
+                    Image = logoMenu_704ILR,
                     SizeMode = PictureBoxSizeMode.Zoom,
                     Dock = DockStyle.Top,
                     Height = 62,
@@ -334,6 +358,27 @@ namespace EvenTech.UI
 
             host_704ILR.Controls.Add(card_704ILR);
             return host_704ILR;
+        }
+
+        // Variante del isologotipo para el menu lateral: isotipo + nombre, SIN la
+        // bajada "GESTION DE EVENTOS". El recurso completo mide 720 px de alto y la
+        // bajada ocupa 27 px de ellos: dibujado a los 62 px que tiene el panel del
+        // menu quedaba en 2 px, una franja gris ilegible. Se recorta la franja
+        // superior (icono + nombre) y el resto del alto lo aprovechan esos dos, que
+        // se ven casi al doble de tamano. Las proporciones son las del lienzo del
+        // recurso (icono desde el 20% del alto, nombre hasta el 70%).
+        private static Image LogoSinLema_704ILR(Image logo_704ILR)
+        {
+            if (logo_704ILR == null) return null;
+            try
+            {
+                int arriba_704ILR = (int)(logo_704ILR.Height * 0.18);
+                int abajo_704ILR = (int)(logo_704ILR.Height * 0.72);
+                var recorte_704ILR = new Rectangle(0, arriba_704ILR, logo_704ILR.Width, abajo_704ILR - arriba_704ILR);
+                using (var bmp_704ILR = new Bitmap(logo_704ILR))
+                    return bmp_704ILR.Clone(recorte_704ILR, bmp_704ILR.PixelFormat);
+            }
+            catch { return logo_704ILR; }   // ante cualquier falla, el logo completo
         }
 
         // Refresca el selector de idioma (lo usa ucIdiomas tras crear/editar idiomas).

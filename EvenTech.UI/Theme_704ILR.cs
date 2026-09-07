@@ -13,7 +13,6 @@ namespace EvenTech.UI
         public static readonly Color BgTitleBar_704ILR    = Color.FromArgb(36, 43, 73);    // barra titulo / topbar / header de grilla
         public static readonly Color BgInput_704ILR       = Color.FromArgb(80, 96, 130);   // inputs sobre fondo oscuro (login)
         public static readonly Color BgSidebar_704ILR     = Color.FromArgb(34, 33, 31);    // menu lateral
-        public static readonly Color BgMenu_704ILR        = Color.FromArgb(34, 33, 31);    // (alias retrocompat de BgSidebar)
         public static readonly Color SidebarHover_704ILR  = Color.FromArgb(50, 49, 47);
         public static readonly Color SidebarActive_704ILR = Color.FromArgb(45, 44, 42);
 
@@ -39,7 +38,6 @@ namespace EvenTech.UI
         public static readonly Color Success_704ILR = Color.FromArgb(33, 136, 56);
         public static readonly Color Error_704ILR   = Color.FromArgb(190, 49, 68);
         public static readonly Color Warning_704ILR = Color.FromArgb(181, 132, 26);
-        public static readonly Color Info_704ILR    = Color.FromArgb(48, 63, 105);
 
         // ===================== Botones neutros (secundarios) =====================
         public static readonly Color Neutral_704ILR      = Color.FromArgb(108, 117, 125);
@@ -63,7 +61,6 @@ namespace EvenTech.UI
         public static readonly Font FontTitle_704ILR    = new Font(Family_704ILR, 13F, FontStyle.Bold);
         public static readonly Font FontBody_704ILR     = new Font(Family_704ILR, 11F, FontStyle.Regular);
         public static readonly Font FontBodyBold_704ILR = new Font(Family_704ILR, 11F, FontStyle.Bold);
-        public static readonly Font FontLabel_704ILR    = new Font(Family_704ILR, 11F, FontStyle.Regular); // (retrocompat)
         public static readonly Font FontInput_704ILR    = new Font(Family_704ILR, 11F, FontStyle.Regular);
         public static readonly Font FontButton_704ILR   = new Font(Family_704ILR, 10.5F, FontStyle.Bold);
         public static readonly Font FontSmall_704ILR    = new Font(Family_704ILR, 9.5F, FontStyle.Regular);
@@ -78,7 +75,6 @@ namespace EvenTech.UI
         public const int SpaceMd_704ILR  = 12;
         public const int SpaceLg_704ILR  = 16;
         public const int SpaceXl_704ILR  = 24;
-        public const int SpaceXxl_704ILR = 32;
 
         // ===================== Radios de esquina =====================
         public const int RadiusSm_704ILR = 6;
@@ -122,10 +118,34 @@ namespace EvenTech.UI
                 return _logo_704ILR;
             }
         }
+
+        // Variante compacta del isologotipo (isotipo + EVENTECH, sin el lema) para
+        // los lugares donde se dibuja chico: a 60-100 px de alto el lema queda como
+        // una franja ilegible. Se recorta del mismo recurso, sin un segundo archivo.
+        // El recorte responde al trazado del generador del logo (1300x720: icono y
+        // logotipo hasta la fila 500, lema debajo); con otro tamano de imagen se
+        // devuelve null y el llamador usa el logo completo.
+        private static System.Drawing.Image _logoCompacto_704ILR;
+        private static bool _logoCompactoBuscado_704ILR;
+
+        public static System.Drawing.Image LogoCompacto_704ILR
+        {
+            get
+            {
+                if (_logoCompactoBuscado_704ILR) return _logoCompacto_704ILR;
+                _logoCompactoBuscado_704ILR = true;
+                try
+                {
+                    if (Logo_704ILR is Bitmap completo_704ILR && completo_704ILR.Width == 1300 && completo_704ILR.Height == 720)
+                        _logoCompacto_704ILR = completo_704ILR.Clone(new Rectangle(375, 146, 551, 355), completo_704ILR.PixelFormat);
+                }
+                catch { _logoCompacto_704ILR = null; }
+                return _logoCompacto_704ILR;
+            }
+        }
         public static readonly string IcoSearch_704ILR   = Glyph_704ILR(0xE721);
         public static readonly string IcoAdd_704ILR      = Glyph_704ILR(0xE710);
         public static readonly string IcoSave_704ILR     = Glyph_704ILR(0xE74E);
-        public static readonly string IcoRefresh_704ILR  = Glyph_704ILR(0xE72C);
         public static readonly string IcoClear_704ILR    = Glyph_704ILR(0xE894); // Clear
         public static readonly string IcoWarning_704ILR  = Glyph_704ILR(0xE7BA);
         public static readonly string IcoLogout_704ILR   = Glyph_704ILR(0xF3B1); // SignOut

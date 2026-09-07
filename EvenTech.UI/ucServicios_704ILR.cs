@@ -243,7 +243,7 @@ namespace EvenTech.UI
             _lblError_704ILR.Visible = false;
             _lblOk_704ILR.Visible = false;
 
-            if (!decimal.TryParse(_txtPrecio_704ILR.Text, out decimal precio_704ILR))
+            if (!ParsearPrecio_704ILR(_txtPrecio_704ILR.Text, out decimal precio_704ILR))
             {
                 _lblError_704ILR.Text = Tr_704ILR.T_704ILR("MSG_MONTO_INVALIDO");
                 _lblError_704ILR.Visible = true;
@@ -271,6 +271,25 @@ namespace EvenTech.UI
                 _lblError_704ILR.Text = MensajeError_704ILR(r_704ILR);
                 _lblError_704ILR.Visible = true;
             }
+        }
+
+        // Lee el precio tipeado con la cultura de la maquina y, si esa cultura usa coma
+        // decimal (es-AR), acepta tambien el punto como decimal. Se hace SIN admitir
+        // separador de miles: con el, "1500.50" en es-AR se leia como 150050 (el punto
+        // era separador de miles) y el catalogo guardaba un precio cien veces mayor
+        // sin ningun aviso, que despues viajaba al monto de las reservas. Un texto que
+        // no se pueda interpretar sin ambiguedad se rechaza con mensaje.
+        private static bool ParsearPrecio_704ILR(string texto_704ILR, out decimal precio_704ILR)
+        {
+            const System.Globalization.NumberStyles estilo_704ILR =
+                System.Globalization.NumberStyles.AllowLeadingWhite | System.Globalization.NumberStyles.AllowTrailingWhite |
+                System.Globalization.NumberStyles.AllowLeadingSign | System.Globalization.NumberStyles.AllowDecimalPoint;
+            var cultura_704ILR = System.Globalization.CultureInfo.CurrentCulture;
+            string t_704ILR = (texto_704ILR ?? "").Trim();
+            if (decimal.TryParse(t_704ILR, estilo_704ILR, cultura_704ILR, out precio_704ILR)) return true;
+            if (cultura_704ILR.NumberFormat.NumberDecimalSeparator != "." && t_704ILR.IndexOf(',') < 0)
+                return decimal.TryParse(t_704ILR, estilo_704ILR, System.Globalization.CultureInfo.InvariantCulture, out precio_704ILR);
+            return false;
         }
 
         private static string MensajeError_704ILR(ServicioResult_704ILR r_704ILR)

@@ -34,7 +34,16 @@ namespace EvenTech.UI
                         alerta_704ILR.ShowDialog();
                 }
             }
-            catch { /* si la verificacion no puede correr, no bloquear el arranque */ }
+            catch (Exception ex_704ILR)
+            {
+                // Si la verificacion no puede correr (tabla o columna ausente, dato
+                // fuera de dominio) no se bloquea el arranque, pero "no verificado"
+                // no es "verificado": se asienta en bitacora y se informa la causa.
+                EvenTech.BLL.BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Integridad", "Verificacion al arranque");
+                MessageBox.Show(
+                    Tr_704ILR.F_704ILR("ALERT_NO_VERIFICADA", "La verificacion de integridad no pudo ejecutarse: {0}", ex_704ILR.Message),
+                    "EvenTech", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
 
             // El loop principal vive en frmLogin: al validar credenciales abre
             // frmMain modal y al volver del logout queda esperando otro login.

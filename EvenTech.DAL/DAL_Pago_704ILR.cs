@@ -19,16 +19,7 @@ namespace EvenTech.DAL
                 cmd_704ILR.Parameters.Add("@r", SqlDbType.Int).Value = reservaId_704ILR;
                 using (var r_704ILR = cmd_704ILR.ExecuteReader())
                     while (r_704ILR.Read())
-                        list_704ILR.Add(new BE_Pago_704ILR
-                        {
-                            Id_704ILR = r_704ILR.GetInt32(0),
-                            ReservaId_704ILR = r_704ILR.GetInt32(1),
-                            MetodoPagoId_704ILR = r_704ILR.GetInt32(2),
-                            MetodoNombre_704ILR = r_704ILR.GetString(3),
-                            Monto_704ILR = r_704ILR.GetDecimal(4),
-                            Fecha_704ILR = r_704ILR.GetDateTime(5),
-                            Observacion_704ILR = r_704ILR.IsDBNull(6) ? null : r_704ILR.GetString(6)
-                        });
+                        list_704ILR.Add(Map_704ILR(r_704ILR));
             }
             return list_704ILR;
         }
@@ -38,25 +29,24 @@ namespace EvenTech.DAL
         public static BE_Pago_704ILR GetById_704ILR(int id_704ILR)
         {
             using (var cn_704ILR = new DAL_DB_Connection_704ILR())
+                return GetById_704ILR(id_704ILR, cn_704ILR.OpenConnection_704ILR(), null);
+        }
+
+        // Sobrecarga transaccional: lee sobre la conexion y la transaccion que le
+        // pasan, para que la validacion y el borrado del pago vean el mismo estado.
+        // La usa BLL_Pago cuando orquesta el movimiento completo.
+        public static BE_Pago_704ILR GetById_704ILR(int id_704ILR,
+            SqlConnection conn_704ILR, SqlTransaction tx_704ILR)
+        {
             using (var cmd_704ILR = new SqlCommand(
                 "SELECT p.Id, p.ReservaId, p.MetodoPagoId, m.Nombre, p.Monto, p.Fecha, p.Observacion " +
                 "FROM dbo.Pagos p INNER JOIN dbo.MetodosPago m ON m.Id = p.MetodoPagoId " +
-                "WHERE p.Id = @id", cn_704ILR.OpenConnection_704ILR()))
+                "WHERE p.Id = @id", conn_704ILR, tx_704ILR))
             {
                 cmd_704ILR.Parameters.Add("@id", SqlDbType.Int).Value = id_704ILR;
                 using (var r_704ILR = cmd_704ILR.ExecuteReader())
                 {
-                    if (!r_704ILR.Read()) return null;
-                    return new BE_Pago_704ILR
-                    {
-                        Id_704ILR = r_704ILR.GetInt32(0),
-                        ReservaId_704ILR = r_704ILR.GetInt32(1),
-                        MetodoPagoId_704ILR = r_704ILR.GetInt32(2),
-                        MetodoNombre_704ILR = r_704ILR.GetString(3),
-                        Monto_704ILR = r_704ILR.GetDecimal(4),
-                        Fecha_704ILR = r_704ILR.GetDateTime(5),
-                        Observacion_704ILR = r_704ILR.IsDBNull(6) ? null : r_704ILR.GetString(6)
-                    };
+                    return r_704ILR.Read() ? Map_704ILR(r_704ILR) : null;
                 }
             }
         }
@@ -64,7 +54,16 @@ namespace EvenTech.DAL
         public static decimal TotalPagado_704ILR(int reservaId_704ILR)
         {
             using (var cn_704ILR = new DAL_DB_Connection_704ILR())
-            using (var cmd_704ILR = new SqlCommand("SELECT ISNULL(SUM(Monto), 0) FROM dbo.Pagos WHERE ReservaId = @r", cn_704ILR.OpenConnection_704ILR()))
+                return TotalPagado_704ILR(reservaId_704ILR, cn_704ILR.OpenConnection_704ILR(), null);
+        }
+
+        // Sobrecarga transaccional (ver GetById_704ILR): el total se relee dentro de
+        // la misma transaccion que despues inserta o borra, con la cabecera de la
+        // reserva ya bloqueada, asi el tope RN-04 se valida contra lo que hay de verdad.
+        public static decimal TotalPagado_704ILR(int reservaId_704ILR,
+            SqlConnection conn_704ILR, SqlTransaction tx_704ILR)
+        {
+            using (var cmd_704ILR = new SqlCommand("SELECT ISNULL(SUM(Monto), 0) FROM dbo.Pagos WHERE ReservaId = @r", conn_704ILR, tx_704ILR))
             {
                 cmd_704ILR.Parameters.Add("@r", SqlDbType.Int).Value = reservaId_704ILR;
                 return (decimal)cmd_704ILR.ExecuteScalar();
@@ -74,9 +73,16 @@ namespace EvenTech.DAL
         public static int Insert_704ILR(BE_Pago_704ILR p_704ILR)
         {
             using (var cn_704ILR = new DAL_DB_Connection_704ILR())
+                return Insert_704ILR(p_704ILR, cn_704ILR.OpenConnection_704ILR(), null);
+        }
+
+        // Sobrecarga transaccional (ver GetById_704ILR).
+        public static int Insert_704ILR(BE_Pago_704ILR p_704ILR,
+            SqlConnection conn_704ILR, SqlTransaction tx_704ILR)
+        {
             using (var cmd_704ILR = new SqlCommand(
                 "INSERT INTO dbo.Pagos (ReservaId, MetodoPagoId, Monto, Fecha, Observacion) " +
-                "OUTPUT INSERTED.Id VALUES (@r, @m, @mo, GETDATE(), @o)", cn_704ILR.OpenConnection_704ILR()))
+                "OUTPUT INSERTED.Id VALUES (@r, @m, @mo, GETDATE(), @o)", conn_704ILR, tx_704ILR))
             {
                 cmd_704ILR.Parameters.Add("@r", SqlDbType.Int).Value = p_704ILR.ReservaId_704ILR;
                 cmd_704ILR.Parameters.Add("@m", SqlDbType.Int).Value = p_704ILR.MetodoPagoId_704ILR;
@@ -89,11 +95,29 @@ namespace EvenTech.DAL
         public static void Delete_704ILR(int id_704ILR)
         {
             using (var cn_704ILR = new DAL_DB_Connection_704ILR())
-            using (var cmd_704ILR = new SqlCommand("DELETE FROM dbo.Pagos WHERE Id = @id", cn_704ILR.OpenConnection_704ILR()))
+                Delete_704ILR(id_704ILR, cn_704ILR.OpenConnection_704ILR(), null);
+        }
+
+        // Sobrecarga transaccional (ver GetById_704ILR).
+        public static void Delete_704ILR(int id_704ILR,
+            SqlConnection conn_704ILR, SqlTransaction tx_704ILR)
+        {
+            using (var cmd_704ILR = new SqlCommand("DELETE FROM dbo.Pagos WHERE Id = @id", conn_704ILR, tx_704ILR))
             {
                 cmd_704ILR.Parameters.Add("@id", SqlDbType.Int).Value = id_704ILR;
                 cmd_704ILR.ExecuteNonQuery();
             }
         }
+
+        private static BE_Pago_704ILR Map_704ILR(SqlDataReader r_704ILR) => new BE_Pago_704ILR
+        {
+            Id_704ILR = r_704ILR.GetInt32(0),
+            ReservaId_704ILR = r_704ILR.GetInt32(1),
+            MetodoPagoId_704ILR = r_704ILR.GetInt32(2),
+            MetodoNombre_704ILR = r_704ILR.GetString(3),
+            Monto_704ILR = r_704ILR.GetDecimal(4),
+            Fecha_704ILR = r_704ILR.GetDateTime(5),
+            Observacion_704ILR = r_704ILR.IsDBNull(6) ? null : r_704ILR.GetString(6)
+        };
     }
 }

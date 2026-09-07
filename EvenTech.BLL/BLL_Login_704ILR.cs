@@ -10,8 +10,7 @@ namespace EvenTech.BLL
     public enum LoginResult_704ILR
     {
         Success_704ILR,
-        UserNotFound_704ILR,
-        IncorrectPassword_704ILR,
+        IncorrectPassword_704ILR,  // credenciales invalidas: usuario inexistente o contrasena incorrecta
         UserBlocked_704ILR,        // cuenta bloqueada por intentos fallidos (RF01.3)
         AccountInactive_704ILR     // cuenta dada de baja / inactiva (RF01.4)
     }
@@ -32,6 +31,15 @@ namespace EvenTech.BLL
     {
         public const int MaxIntentos_704ILR = 3;
 
+        // Intentos sobre nombres que no existen, por nombre. La pantalla no debe
+        // revelar si un usuario existe: un nombre inexistente recibe la misma
+        // respuesta (y el mismo conteo de intentos) que una contrasena incorrecta.
+        // No hay fila donde persistirlos, asi que se cuentan en memoria durante la
+        // ejecucion; la distincion real queda solo en LoginAuditLog.
+        private static readonly object _lockDesconocidos_704ILR = new object();
+        private static readonly Dictionary<string, int> _intentosDesconocidos_704ILR =
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
         public static LoginResponse_704ILR Authenticate_704ILR(string username_704ILR, string hashedPassword_704ILR)
         {
             var resp_704ILR = new LoginResponse_704ILR { MaxAttempts_704ILR = MaxIntentos_704ILR };
@@ -39,8 +47,19 @@ namespace EvenTech.BLL
             BE_User_704ILR user_704ILR = DAL_User_704ILR.GetByUsername_704ILR(username_704ILR);
             if (user_704ILR == null)
             {
-                BLL_LoginAudit_704ILR.Register_704ILR(username_704ILR, LoginAuditAction_704ILR.LOGIN_FAIL, "Usuario inexistente");
-                resp_704ILR.Result_704ILR = LoginResult_704ILR.UserNotFound_704ILR;
+                int intentos_704ILR;
+                lock (_lockDesconocidos_704ILR)
+                {
+                    _intentosDesconocidos_704ILR.TryGetValue(username_704ILR ?? "", out intentos_704ILR);
+                    intentos_704ILR = Math.Min(intentos_704ILR + 1, MaxIntentos_704ILR);
+                    _intentosDesconocidos_704ILR[username_704ILR ?? ""] = intentos_704ILR;
+                }
+                BLL_LoginAudit_704ILR.Register_704ILR(username_704ILR, LoginAuditAction_704ILR.LOGIN_FAIL,
+                    $"Usuario inexistente (intento {intentos_704ILR}/{MaxIntentos_704ILR})");
+                resp_704ILR.FailedAttempts_704ILR = intentos_704ILR;
+                resp_704ILR.Result_704ILR = intentos_704ILR >= MaxIntentos_704ILR
+                    ? LoginResult_704ILR.UserBlocked_704ILR
+                    : LoginResult_704ILR.IncorrectPassword_704ILR;
                 return resp_704ILR;
             }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
+using System.Text;
 using Microsoft.Data.SqlClient;
 using EvenTech.Services;
 
@@ -21,19 +22,11 @@ namespace EvenTech.DAL
             _connection_704ILR = new SqlConnection(ConnectionString_704ILR);
         }
 
-        public SqlConnection Connection_704ILR => _connection_704ILR;
-
         public SqlConnection OpenConnection_704ILR()
         {
             if (_connection_704ILR.State == ConnectionState.Closed)
                 _connection_704ILR.Open();
             return _connection_704ILR;
-        }
-
-        public void CloseConnection_704ILR()
-        {
-            if (_connection_704ILR.State == ConnectionState.Open)
-                _connection_704ILR.Close();
         }
 
         public void Dispose()
@@ -48,10 +41,30 @@ namespace EvenTech.DAL
 
         // ================== Diagnostico de conectividad ==================
 
+        // Contrato minimo del esquema que la app necesita para arrancar: las 20
+        // tablas de db/schema.sql y las columnas que ese script agrega por
+        // migracion (una base de una revision anterior tiene Users pero no estas).
+        // Nombres de tabla/columna sin sufijo: son datos de la base, no
+        // identificadores del codigo.
+        private static readonly string[] TablasRequeridas_704ILR =
+        {
+            "Users", "LoginAuditLog", "Perfiles", "Permisos", "PerfilPermiso", "PerfilIncluido",
+            "Clientes", "Salones", "Reservas", "Servicios", "ReservaServicio", "Pagos", "MetodosPago",
+            "Bitacora", "HistorialCambios", "ReservaMemento", "ReservaMementoServicio",
+            "Idiomas", "Traducciones", "DVVertical"
+        };
+        private static readonly string[] ColumnasRequeridas_704ILR =
+        {
+            "Users.PerfilId", "Users.Activo", "Users.Blocked", "Users.FailedAttempts",
+            "Reservas.VenceEl", "Reservas.CantidadInvitados", "Reservas.Dvh"
+        };
+
         // Verifica que se pueda abrir la conexion Y que la base exista. Abrir con
         // Initial Catalog inexistente ya falla, pero se consulta sys.databases
         // igual para poder distinguir "no llego al servidor" de "el servidor esta
         // pero le falta la base", que son dos problemas con soluciones distintas.
+        // Con la base abierta se distingue ademas "sin esquema" (no existe Users)
+        // de "esquema incompleto o anterior" (falta alguna tabla o columna).
         public static bool Probar_704ILR(string connectionString_704ILR, out string mensaje_704ILR)
         {
             mensaje_704ILR = null;
@@ -109,24 +122,31 @@ namespace EvenTech.DAL
                 return false;
             }
 
-            // La base existe: se confirma que se pueda abrir Y que tenga el esquema.
-            // Sin esta ultima verificacion se podria guardar una conexion a una base
-            // vacia: el arranque pasaria y la app fallaria en cada pantalla, sin
-            // volver a ofrecer la configuracion.
+            // La base existe: se confirma que se pueda abrir Y que tenga el esquema
+            // completo. Sin esta ultima verificacion se podria guardar una conexion a
+            // una base vacia o de una revision anterior: el arranque pasaria y la app
+            // fallaria en el login o en cada pantalla, sin volver a ofrecer la
+            // configuracion.
             try
             {
                 var conBase_704ILR = new SqlConnectionStringBuilder(connectionString_704ILR) { ConnectTimeout = 5 };
                 using (var cn_704ILR = new SqlConnection(conBase_704ILR.ConnectionString))
                 {
                     cn_704ILR.Open();
-                    using (var cmd_704ILR = new SqlCommand("SELECT OBJECT_ID('dbo.Users','U')", cn_704ILR))
+                    List<string> faltantes_704ILR = ObjetosFaltantes_704ILR(cn_704ILR);
+                    if (faltantes_704ILR.Contains("Users"))
                     {
-                        if (cmd_704ILR.ExecuteScalar() == DBNull.Value)
-                        {
-                            mensaje_704ILR = $"La base '{baseDatos_704ILR}' existe pero no tiene el esquema de la aplicacion. " +
-                                      "Ejecuta db/schema.sql sobre esa base o elegi otra.";
-                            return false;
-                        }
+                        mensaje_704ILR = $"La base '{baseDatos_704ILR}' existe pero no tiene el esquema de la aplicacion. " +
+                                  "Ejecuta db/schema.sql sobre esa base o elegi otra.";
+                        return false;
+                    }
+                    if (faltantes_704ILR.Count > 0)
+                    {
+                        mensaje_704ILR = Texto_704ILR("CONN_ESQUEMA_INCOMPLETO",
+                            "La base '{0}' existe pero su esquema esta incompleto o es de una version anterior (faltan: {1}). " +
+                            "Completalo con db/schema.sql (agrega solo lo que falta) antes de usarla.",
+                            baseDatos_704ILR, string.Join(", ", faltantes_704ILR));
+                        return false;
                     }
                 }
                 return true;
@@ -136,6 +156,51 @@ namespace EvenTech.DAL
                 mensaje_704ILR = $"La base '{baseDatos_704ILR}' existe pero no se pudo abrir: " + ex_704ILR.Message;
                 return false;
             }
+        }
+
+        // Tablas y columnas del contrato que la base abierta NO tiene, en una sola
+        // consulta: sys.tables para las tablas y COL_LENGTH para las columnas. Las
+        // listas VALUES se arman desde los arreglos constantes de arriba (nombres
+        // fijos del codigo, no entrada del usuario).
+        private static List<string> ObjetosFaltantes_704ILR(SqlConnection cn_704ILR)
+        {
+            var tablas_704ILR = new StringBuilder();
+            foreach (string t_704ILR in TablasRequeridas_704ILR)
+                tablas_704ILR.Append(tablas_704ILR.Length == 0 ? "" : ",").Append("('").Append(t_704ILR).Append("')");
+
+            var columnas_704ILR = new StringBuilder();
+            foreach (string c_704ILR in ColumnasRequeridas_704ILR)
+            {
+                string[] partes_704ILR = c_704ILR.Split('.');
+                columnas_704ILR.Append(columnas_704ILR.Length == 0 ? "" : ",")
+                    .Append("('").Append(partes_704ILR[0]).Append("','").Append(partes_704ILR[1]).Append("')");
+            }
+
+            string sql_704ILR =
+                "SELECT v.n FROM (VALUES " + tablas_704ILR + ") v(n) " +
+                "WHERE NOT EXISTS (SELECT 1 FROM sys.tables s WHERE s.name = v.n AND SCHEMA_NAME(s.schema_id) = 'dbo') " +
+                "UNION ALL " +
+                "SELECT v.t + '.' + v.c FROM (VALUES " + columnas_704ILR + ") v(t, c) " +
+                "WHERE OBJECT_ID('dbo.' + v.t, 'U') IS NOT NULL AND COL_LENGTH('dbo.' + v.t, v.c) IS NULL";
+
+            var faltantes_704ILR = new List<string>();
+            using (var cmd_704ILR = new SqlCommand(sql_704ILR, cn_704ILR))
+            using (var r_704ILR = cmd_704ILR.ExecuteReader())
+            {
+                while (r_704ILR.Read()) faltantes_704ILR.Add(r_704ILR.GetString(0));
+            }
+            return faltantes_704ILR;
+        }
+
+        // Mensaje traducido con respaldo: al arrancar las traducciones todavia no
+        // estan cargadas (o el texto editado puede estar mal formado), y en ese caso
+        // se usa el texto por defecto del codigo.
+        private static string Texto_704ILR(string clave_704ILR, string defecto_704ILR, params object[] args_704ILR)
+        {
+            string plantilla_704ILR = GestorDeIdioma_704ILR.GetInstance_704ILR.Traducir_704ILR(clave_704ILR);
+            if (plantilla_704ILR == clave_704ILR) plantilla_704ILR = defecto_704ILR;
+            try { return string.Format(plantilla_704ILR, args_704ILR); }
+            catch (FormatException) { return string.Format(defecto_704ILR, args_704ILR); }
         }
 
         // Prueba la cadena vigente (la que usa realmente la app).

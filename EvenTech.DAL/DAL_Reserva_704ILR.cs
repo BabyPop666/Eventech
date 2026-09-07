@@ -50,6 +50,28 @@ namespace EvenTech.DAL
             }
         }
 
+        // Sobrecarga transaccional: lee la cabecera sobre la conexion y la transaccion
+        // que le pasan, tomando un bloqueo de actualizacion sobre la fila (UPDLOCK,
+        // HOLDLOCK). Quien la use serializa a cualquier otra operacion que lea la
+        // misma reserva por esta via hasta que su transaccion termine: asi lo que se
+        // valida (estado, monto, total cobrado) es lo mismo que se escribe.
+        public static BE_Reserva_704ILR GetById_704ILR(int id_704ILR,
+            SqlConnection conn_704ILR, SqlTransaction tx_704ILR)
+        {
+            using (var cmd_704ILR = new SqlCommand(SelectBaseBloqueado_704ILR + "WHERE r.Id = @id", conn_704ILR, tx_704ILR))
+            {
+                cmd_704ILR.Parameters.Add("@id", SqlDbType.Int).Value = id_704ILR;
+                using (var r_704ILR = cmd_704ILR.ExecuteReader())
+                {
+                    return r_704ILR.Read() ? Map_704ILR(r_704ILR) : null;
+                }
+            }
+        }
+
+        // El mismo SELECT base, con el hint de bloqueo sobre la tabla de reservas.
+        private static readonly string SelectBaseBloqueado_704ILR =
+            SelectBase_704ILR.Replace("FROM dbo.Reservas r ", "FROM dbo.Reservas r WITH (UPDLOCK, HOLDLOCK) ");
+
         // Anti-solapamiento: hay otra reserva CONFIRMADA para ese salon y fecha
         // (excluyendo la propia reserva en edicion)? Las cotizaciones y reservas
         // pendientes no comprometen el salon: solo una reserva firme lo bloquea.

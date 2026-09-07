@@ -28,6 +28,9 @@ namespace EvenTech.UI
 
         private int _editId_704ILR; // 0 = alta, >0 = edicion
 
+        // Ancho de la tarjeta de la ficha (ver BuildBody).
+        private const int AnchoFicha_704ILR = 252;
+
         public ucReservas_704ILR()
         {
             BackColor = Theme_704ILR.BgContent_704ILR;
@@ -91,6 +94,9 @@ namespace EvenTech.UI
             _btnNuevo_704ILR.Anchor = AnchorStyles.Left;
             _btnNuevo_704ILR.Margin = new Padding(0, 0, Theme_704ILR.SpaceMd_704ILR, 0);
             _btnNuevo_704ILR.Click += (s_704ILR, e_704ILR) => LimpiarForm_704ILR();
+            // Primera capa dentro de la seccion: la accion se ofrece solo a quien la
+            // tiene (la ficha hace lo mismo con cada boton, ver AplicarPermisosFicha).
+            _btnNuevo_704ILR.Enabled = Permisos_704ILR.Tiene_704ILR("RESERVA_CREAR");
 
             // Consulta de disponibilidad (Proceso 1, paso 1): se hace antes de
             // armar la reserva, por eso vive en el header y no en la ficha.
@@ -139,10 +145,12 @@ namespace EvenTech.UI
                 BackColor = Theme_704ILR.BgContent_704ILR,
                 Margin = new Padding(0)
             };
-            // 66/34: la grilla tiene ocho columnas y necesita el ancho; a la ficha le
-            // alcanza con algo mas de un tercio (su minimo son 300 px).
-            body_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 72));
-            body_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
+            // La ficha tiene ancho FIJO (252 px: le alcanza con sus campos en dos
+            // columnas) y la grilla se queda con todo el resto: tiene ocho columnas y
+            // es la que necesita cada pixel para no truncar nombres ni fechas en la
+            // ventana por defecto; en una ventana mas grande es la que crece.
+            body_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            body_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, AnchoFicha_704ILR));
             body_704ILR.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             body_704ILR.Controls.Add(BuildGridCard_704ILR(), 0, 0);
@@ -164,15 +172,25 @@ namespace EvenTech.UI
             _grid_704ILR = new DataGridView { Dock = DockStyle.Fill };
             UiGrid_704ILR.Style_704ILR(_grid_704ILR);
 
-            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cId",      HeaderText = "Id",      DataPropertyName = "Id_704ILR",            FillWeight = 6 });
-            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cCliente", HeaderText = "Cliente", DataPropertyName = "ClienteNombre_704ILR", FillWeight = 15 });
-            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cSalon",   HeaderText = "Salon",   DataPropertyName = "SalonNombre_704ILR",   FillWeight = 14 });
-            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cFecha",   HeaderText = "Fecha",   DataPropertyName = "FechaEvento_704ILR",   FillWeight = 12, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd" } });
-            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cEstado",  HeaderText = "Estado",  DataPropertyName = "Estado_704ILR",        FillWeight = 13 });
+            // Cliente y Salon llevan ancho minimo: son las dos columnas de texto libre
+            // y con el reparto proporcional a secas quedaban truncadas ("Federico
+            // Agui...", "Salon Princi...") en la ventana por defecto. Fecha, Monto y
+            // Vence tambien: su contenido tiene largo fijo y conocido, y un importe o
+            // una fecha cortados con puntos suspensivos no sirven. Estado e Invitados
+            // se reparten lo que sobra.
+            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cId",      HeaderText = "Id",      DataPropertyName = "Id_704ILR",            FillWeight = 6,  MinimumWidth = 48 });
+            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cCliente", HeaderText = "Cliente", DataPropertyName = "ClienteNombre_704ILR", FillWeight = 16, MinimumWidth = 125 });
+            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cSalon",   HeaderText = "Salon",   DataPropertyName = "SalonNombre_704ILR",   FillWeight = 14, MinimumWidth = 110 });
+            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cFecha",   HeaderText = "Fecha",   DataPropertyName = "FechaEvento_704ILR",   FillWeight = 11, MinimumWidth = 88, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd" } });
+            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cEstado",  HeaderText = "Estado",  DataPropertyName = "Estado_704ILR",        FillWeight = 12 });
             _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cInvitados", HeaderText = "Invitados", DataPropertyName = "CantidadInvitados_704ILR", FillWeight = 13, DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleRight } });
-            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cMonto",   HeaderText = "Monto",   DataPropertyName = "Monto_704ILR",         FillWeight = 15, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
-            // RN-01: vigencia de la cotizacion / reserva pendiente.
-            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cVence",   HeaderText = "Vence",   DataPropertyName = "VenceEl_704ILR",       FillWeight = 12, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd" } });
+            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cMonto",   HeaderText = "Monto",   DataPropertyName = "Monto_704ILR",         FillWeight = 12, MinimumWidth = 94, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+            // RN-01: vigencia de la cotizacion / reserva pendiente. Se muestra CON la
+            // hora: el plazo se cuenta desde el momento exacto de la emision (15 dias
+            // o 72 horas sobre DateTime.Now) y la regla rechaza la operacion pasada esa
+            // hora, asi que solo con la fecha el vendedor no podia prever el rechazo el
+            // ultimo dia.
+            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cVence",   HeaderText = "Vence",   DataPropertyName = "VenceEl_704ILR",       FillWeight = 16, MinimumWidth = 124, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" } });
             _grid_704ILR.SelectionChanged += Grid_SelectionChanged_704ILR;
             _grid_704ILR.CellFormatting += Grid_CellFormatting_704ILR;
 
@@ -186,7 +204,6 @@ namespace EvenTech.UI
             var card_704ILR = new CardPanel_704ILR
             {
                 Dock = DockStyle.Fill,
-                MinimumSize = new Size(300, 0),
                 Margin = new Padding(0),
                 Padding = new Padding(Theme_704ILR.SpaceLg_704ILR)
             };
@@ -207,23 +224,29 @@ namespace EvenTech.UI
             _lblFormTitle_704ILR = Ui_704ILR.Title_704ILR("Nueva reserva");
             _lblFormTitle_704ILR.Margin = new Padding(0, 0, 0, Theme_704ILR.SpaceMd_704ILR);
 
-            // Pila vertical de campos etiquetados (caption arriba, input abajo).
-            // TableLayoutPanel: cada campo Dock=Fill -> ocupa todo el ancho de la
-            // ficha y se ajusta solo al redimensionar (sin calculos manuales).
+            // Campos etiquetados (caption arriba, input abajo) en una grilla de DOS
+            // columnas: Cliente, Salon y Servicios ocupan el ancho completo y los
+            // cuatro campos cortos van de a pares (Fecha | Invitados, Estado | Monto).
+            // Con los siete campos apilados en una sola columna la ficha media mas
+            // que el area de contenido de la ventana por defecto (1366x768) y
+            // Servicios y Monto quedaban bajo la barra de desplazamiento: la pantalla
+            // principal del proceso se entregaba recortada. Cada campo Dock=Fill se
+            // ajusta solo al redimensionar (sin calculos manuales).
             var fields_704ILR = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 8,
+                ColumnCount = 2,
+                RowCount = 6,
                 AutoScroll = true,
                 BackColor = Color.Transparent,
                 Margin = new Padding(0)
             };
-            fields_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            // Las ocho filas van AutoSize: con una fila en Percent el panel se estiraba
+            fields_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            fields_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            // Las filas van AutoSize: con una fila en Percent el panel se estiraba
             // para ocupar el alto disponible y AutoScroll no llegaba a activarse nunca,
             // de modo que en una ventana chica los ultimos campos quedaban inalcanzables.
-            for (int i_704ILR = 0; i_704ILR < 8; i_704ILR++) fields_704ILR.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            for (int i_704ILR = 0; i_704ILR < 6; i_704ILR++) fields_704ILR.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             // Cliente: combo para elegir uno existente + boton de alta rapida.
             _cboCliente_704ILR = Ui_704ILR.Combo_704ILR();
@@ -248,10 +271,14 @@ namespace EvenTech.UI
             var fldSalon_704ILR = Ui_704ILR.Field_704ILR("Salon", _cboSalon_704ILR);
             ((Label)fldSalon_704ILR.GetControlFromPosition(0, 0)).Tag = "T:COL_SALON";
 
+            // Fecha e Invitados van de a par en la ficha (ver mas abajo), asi que
+            // llevan los rotulos cortos de la grilla ("Fecha", "Invitados"): los
+            // largos ("Fecha del evento", "Invitados estimados") no entran en media
+            // ficha y se partian en dos lineas.
             _dtFecha_704ILR = Ui_704ILR.DatePicker_704ILR();
             _dtFecha_704ILR.MinDate = DateTime.Today;
             var fldFecha_704ILR = Ui_704ILR.Field_704ILR("Fecha", _dtFecha_704ILR);
-            ((Label)fldFecha_704ILR.GetControlFromPosition(0, 0)).Tag = "T:RES_LBL_FECHA";
+            ((Label)fldFecha_704ILR.GetControlFromPosition(0, 0)).Tag = "T:COL_FECHA";
 
             // Invitados estimados: el mismo dato con el que se consulta la
             // disponibilidad, ahora persistido en la reserva (PN1 / RN-06).
@@ -261,7 +288,7 @@ namespace EvenTech.UI
                 Font = Theme_704ILR.FontInput_704ILR, TextAlign = HorizontalAlignment.Right
             };
             var fldInvitados_704ILR = Ui_704ILR.Field_704ILR("Invitados", _numInvitados_704ILR);
-            ((Label)fldInvitados_704ILR.GetControlFromPosition(0, 0)).Tag = "T:RES_LBL_INVITADOS";
+            ((Label)fldInvitados_704ILR.GetControlFromPosition(0, 0)).Tag = "T:COL_INVITADOS";
 
             _cboEstado_704ILR = Ui_704ILR.Combo_704ILR();
             _cboEstado_704ILR.Items.AddRange(new object[] { EstadoReserva_704ILR.COTIZACION, EstadoReserva_704ILR.PENDIENTE, EstadoReserva_704ILR.CONFIRMADA, EstadoReserva_704ILR.CANCELADA });
@@ -282,12 +309,24 @@ namespace EvenTech.UI
             var fldMonto_704ILR = Ui_704ILR.Field_704ILR("Monto", _txtMonto_704ILR);
             ((Label)fldMonto_704ILR.GetControlFromPosition(0, 0)).Tag = "T:COL_MONTO";
 
-            int row_704ILR = 0;
-            foreach (var fld_704ILR in new[] { fldCliente_704ILR, fldSalon_704ILR, fldFecha_704ILR, fldInvitados_704ILR, fldEstado_704ILR, fldServicios_704ILR, fldMonto_704ILR })
+            // Ubicacion de cada campo: (columna, fila, cuantas columnas abarca).
+            var ubic_704ILR = new (TableLayoutPanel fld_704ILR, int col_704ILR, int fila_704ILR, int span_704ILR)[]
             {
-                fld_704ILR.Dock = DockStyle.Fill;
-                fld_704ILR.Margin = new Padding(0, 0, 0, Theme_704ILR.SpaceMd_704ILR);
-                fields_704ILR.Controls.Add(fld_704ILR, 0, row_704ILR++);
+                (fldCliente_704ILR,   0, 0, 2),
+                (fldSalon_704ILR,     0, 1, 2),
+                (fldFecha_704ILR,     0, 2, 1), (fldInvitados_704ILR, 1, 2, 1),
+                (fldEstado_704ILR,    0, 3, 1), (fldMonto_704ILR,     1, 3, 1),
+                (fldServicios_704ILR, 0, 4, 2)
+            };
+            foreach (var u_704ILR in ubic_704ILR)
+            {
+                u_704ILR.fld_704ILR.Dock = DockStyle.Fill;
+                // Entre los dos campos de un par queda una canaleta de 2 x SpaceXs.
+                int izq_704ILR = u_704ILR.col_704ILR == 1 ? Theme_704ILR.SpaceXs_704ILR : 0;
+                int der_704ILR = u_704ILR.span_704ILR == 1 && u_704ILR.col_704ILR == 0 ? Theme_704ILR.SpaceXs_704ILR : 0;
+                u_704ILR.fld_704ILR.Margin = new Padding(izq_704ILR, 0, der_704ILR, Theme_704ILR.SpaceSm_704ILR);
+                fields_704ILR.Controls.Add(u_704ILR.fld_704ILR, u_704ILR.col_704ILR, u_704ILR.fila_704ILR);
+                if (u_704ILR.span_704ILR > 1) fields_704ILR.SetColumnSpan(u_704ILR.fld_704ILR, u_704ILR.span_704ILR);
             }
 
             // Botones de accion apilados al pie de la ficha.
@@ -334,41 +373,41 @@ namespace EvenTech.UI
             secondary_704ILR.Controls.Add(_btnHistorial_704ILR, 0, 0);
             secondary_704ILR.Controls.Add(_btnPagos_704ILR, 1, 0);
 
-            // Fila documental: comprobante + email lado a lado.
-            var docRow_704ILR = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.Transparent, Margin = new Padding(0, Theme_704ILR.SpaceSm_704ILR, 0, 0) };
-            // "Comprobante" es la etiqueta mas larga de la ficha: se le da mas ancho
-            // que a "Email" para que el rotulo entre completo.
-            docRow_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62));
-            docRow_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
-            docRow_704ILR.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
+            // Fila del comprobante: es la etiqueta mas larga de la ficha y va sola,
+            // a todo el ancho, para que el rotulo entre completo.
             _btnComprobante_704ILR = Ui_704ILR.Secondary_704ILR("Comprobante", Theme_704ILR.IcoDocumento_704ILR);
             _btnComprobante_704ILR.Tag = "T:RES_COMPROBANTE_BTN";
             _btnComprobante_704ILR.Dock = DockStyle.Fill;
-            _btnComprobante_704ILR.Margin = new Padding(0, 0, Theme_704ILR.SpaceXs_704ILR, 0);
+            _btnComprobante_704ILR.Margin = new Padding(0, Theme_704ILR.SpaceSm_704ILR, 0, 0);
             _btnComprobante_704ILR.Click += (s_704ILR, e_704ILR) => GenerarComprobante_704ILR();
+
+            // Ultima fila: email + versiones lado a lado.
+            var docRow_704ILR = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.Transparent, Margin = new Padding(0, Theme_704ILR.SpaceSm_704ILR, 0, 0) };
+            docRow_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            docRow_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            docRow_704ILR.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             _btnEmail_704ILR = Ui_704ILR.Secondary_704ILR("Email", Theme_704ILR.IcoEmail_704ILR);
             _btnEmail_704ILR.Tag = "T:RES_EMAIL_BTN";
             _btnEmail_704ILR.Dock = DockStyle.Fill;
-            _btnEmail_704ILR.Margin = new Padding(Theme_704ILR.SpaceXs_704ILR, 0, 0, 0);
+            _btnEmail_704ILR.Margin = new Padding(0, 0, Theme_704ILR.SpaceXs_704ILR, 0);
             _btnEmail_704ILR.Click += (s_704ILR, e_704ILR) => EnviarEmail_704ILR();
 
-            docRow_704ILR.Controls.Add(_btnComprobante_704ILR, 0, 0);
-            docRow_704ILR.Controls.Add(_btnEmail_704ILR, 1, 0);
-
-            // Fila de versiones (patron Memento): abre el dialogo para restaurar
-            // la reserva a un estado anterior.
+            // Versiones (patron Memento): abre el dialogo para restaurar la reserva
+            // a un estado anterior.
             _btnVersiones_704ILR = Ui_704ILR.Secondary_704ILR("Versiones", Theme_704ILR.IcoDocumento_704ILR);
             _btnVersiones_704ILR.Tag = "T:RES_VERSIONES";
             _btnVersiones_704ILR.Dock = DockStyle.Fill;
-            _btnVersiones_704ILR.Margin = new Padding(0, Theme_704ILR.SpaceSm_704ILR, 0, 0);
+            _btnVersiones_704ILR.Margin = new Padding(Theme_704ILR.SpaceXs_704ILR, 0, 0, 0);
             _btnVersiones_704ILR.Click += (s_704ILR, e_704ILR) => VerVersiones_704ILR();
+
+            docRow_704ILR.Controls.Add(_btnEmail_704ILR, 0, 0);
+            docRow_704ILR.Controls.Add(_btnVersiones_704ILR, 1, 0);
 
             actions_704ILR.Controls.Add(_btnGuardar_704ILR, 0, 0);
             actions_704ILR.Controls.Add(secondary_704ILR, 0, 1);
-            actions_704ILR.Controls.Add(docRow_704ILR, 0, 2);
-            actions_704ILR.Controls.Add(_btnVersiones_704ILR, 0, 3);
+            actions_704ILR.Controls.Add(_btnComprobante_704ILR, 0, 2);
+            actions_704ILR.Controls.Add(docRow_704ILR, 0, 3);
 
             layout_704ILR.Controls.Add(_lblFormTitle_704ILR, 0, 0);
             layout_704ILR.Controls.Add(fields_704ILR, 0, 1);
@@ -537,14 +576,35 @@ namespace EvenTech.UI
         private void AplicarModificabilidad_704ILR(BE_Reserva_704ILR r_704ILR)
         {
             bool editable_704ILR = BLL_Reserva_704ILR.PuedeModificar_704ILR(r_704ILR);
-            _btnGuardar_704ILR.Enabled = editable_704ILR;
-            _btnPagos_704ILR.Enabled = editable_704ILR;
-            _btnComprobante_704ILR.Enabled = editable_704ILR;
-            _btnEmail_704ILR.Enabled = editable_704ILR;
+            AplicarPermisosFicha_704ILR(editable_704ILR);
             if (!editable_704ILR)
                 ShowError_704ILR(T_704ILR("MSG_RES_NO_MODIFICABLE", "La reserva esta cancelada: no admite modificaciones."));
             else
                 _lblError_704ILR.Visible = false;
+        }
+
+        // Primera capa del control de acceso DENTRO de la ficha: cada boton se
+        // habilita solo si el perfil tiene el permiso que su accion va a exigir.
+        // La seccion se abre con cualquiera de las hojas de reservas (consultar
+        // disponibilidad, cobrar, restaurar...), asi que un perfil de solo cobros
+        // veia Guardar, Servicios o Comprobante habilitados y cada clic terminaba en
+        // "sin permiso" y en un asiento de advertencia en la bitacora por navegar
+        // normalmente. La segunda capa (Exigir al ejecutar) se mantiene intacta.
+        // 'editable' es la condicion de la reserva (una cancelada no admite cambios):
+        // se combina con el permiso, nunca lo reemplaza.
+        private void AplicarPermisosFicha_704ILR(bool editable_704ILR)
+        {
+            // Alta y edicion exigen permisos distintos; Servicios sigue al mismo
+            // criterio porque cambia el monto de la operacion (CUN003, precondicion).
+            bool gestion_704ILR = Permisos_704ILR.Tiene_704ILR(_editId_704ILR == 0 ? "RESERVA_CREAR" : "RESERVA_EDITAR");
+            bool documenta_704ILR = Permisos_704ILR.TieneAlguno_704ILR("RESERVA_CREAR", "RESERVA_EDITAR");
+            _btnGuardar_704ILR.Enabled     = editable_704ILR && gestion_704ILR;
+            _btnServicios_704ILR.Enabled   = editable_704ILR && gestion_704ILR;
+            _btnPagos_704ILR.Enabled       = editable_704ILR && Permisos_704ILR.TieneAlguno_704ILR("PAGOS_REGISTRAR", "PAGOS_ANULAR");
+            _btnComprobante_704ILR.Enabled = editable_704ILR && documenta_704ILR;
+            _btnEmail_704ILR.Enabled       = editable_704ILR && documenta_704ILR;
+            _btnHistorial_704ILR.Enabled   = Permisos_704ILR.Tiene_704ILR("RESERVA_HISTORIAL");
+            _btnVersiones_704ILR.Enabled   = Permisos_704ILR.TieneAlguno_704ILR("RESERVA_HISTORIAL", "RESERVA_RESTAURAR");
         }
 
         private void LimpiarForm_704ILR()
@@ -567,10 +627,7 @@ namespace EvenTech.UI
             _cboEstado_704ILR.SelectedItem = EstadoReserva_704ILR.COTIZACION;
             _serviciosReserva_704ILR = new List<BE_ReservaServicio_704ILR>();
             ActualizarMonto_704ILR();
-            _btnGuardar_704ILR.Enabled = true;
-            _btnPagos_704ILR.Enabled = true;
-            _btnComprobante_704ILR.Enabled = true;
-            _btnEmail_704ILR.Enabled = true;
+            AplicarPermisosFicha_704ILR(editable_704ILR: true);
             _lblError_704ILR.Visible = false;
         }
 
@@ -608,6 +665,13 @@ namespace EvenTech.UI
 
         private void EditarServicios_704ILR()
         {
+            // Segunda capa: los servicios contratados componen el monto de la
+            // operacion, asi que cargarlos es parte del alta o de la edicion y exige
+            // el mismo permiso que Guardar (CUN003, precondicion). Sin esto, un perfil
+            // de solo consulta podia abrir el dialogo y recalcular el monto.
+            if (!Permisos_704ILR.Exigir_704ILR(_editId_704ILR == 0 ? "RESERVA_CREAR" : "RESERVA_EDITAR", FindForm(),
+                    "cargar los servicios de la reserva" + ReferenciaEnEdicion_704ILR()))
+                return;
             try
             {
                 using (var dlg_704ILR = new frmReservaServicios_704ILR(_serviciosReserva_704ILR, BLL_Servicio_704ILR.GetActivos_704ILR()))
@@ -651,6 +715,12 @@ namespace EvenTech.UI
         // registran contra su Id y su Monto = total ya persistido).
         private void EditarPagos_704ILR()
         {
+            // Segunda capa: el dialogo vuelve a exigir cada accion (registrar o
+            // anular) por separado; aca se corta a quien no tiene ninguna de las dos.
+            if (!Permisos_704ILR.ExigirAlguno_704ILR(FindForm(),
+                    "abrir los pagos de la reserva" + ReferenciaEnEdicion_704ILR(),
+                    "PAGOS_REGISTRAR", "PAGOS_ANULAR"))
+                return;
             if (_editId_704ILR == 0)
             {
                 ShowError_704ILR(Tr_704ILR.T_704ILR("MSG_PAGO_GUARDAR_RESERVA"));
@@ -969,12 +1039,16 @@ namespace EvenTech.UI
                 ShowError_704ILR(T_704ILR("MSG_RES_SELECCIONE_GEN", "Seleccione una reserva existente."));
                 return;
             }
-            // ABRIR el dialogo es consultar, y por eso pide el permiso de consulta del
-            // historial. RESTAURAR es otra cosa —una correccion ADMINISTRATIVA que no
-            // respeta la tabla de transiciones (RN-05) y puede deshacer una
-            // confirmacion— y lleva permiso propio, exigido dentro del dialogo, que
-            // ademas deshabilita el boton cuando falta.
-            if (!Permisos_704ILR.Exigir_704ILR("RESERVA_HISTORIAL", FindForm(), "ver las versiones de la reserva #" + _editId_704ILR)) return;
+            // ABRIR el dialogo es consultar, y por eso alcanza con el permiso de
+            // consulta del historial. Tambien lo abre quien puede RESTAURAR: elegir
+            // que version reponer supone verlas, y sin esta entrada ese permiso no
+            // llevaba a ninguna pantalla. RESTAURAR es otra cosa —una correccion
+            // ADMINISTRATIVA que no respeta la tabla de transiciones (RN-05) y puede
+            // deshacer una confirmacion— y lleva permiso propio, exigido dentro del
+            // dialogo, que ademas deshabilita el boton cuando falta.
+            if (!Permisos_704ILR.ExigirAlguno_704ILR(FindForm(), "ver las versiones de la reserva #" + _editId_704ILR,
+                    "RESERVA_HISTORIAL", "RESERVA_RESTAURAR"))
+                return;
             using (var frm_704ILR = new frmVersionesReserva_704ILR(_editId_704ILR))
             {
                 if (frm_704ILR.ShowDialog(FindForm()) != DialogResult.OK) return;
@@ -989,6 +1063,11 @@ namespace EvenTech.UI
         // muestre la operacion sobre la que se acaba de trabajar. Sin esto, recargar
         // la grilla la reposiciona en la primera fila y la ficha termina mostrando
         // una reserva distinta de la que se acaba de guardar.
+        // Ademas de seleccionar, garantiza que la ficha quede en modo EDICION sobre
+        // esa reserva: si la fila ya era la actual (o la grilla no dispara el evento
+        // de seleccion al reasignar los datos), CargarEnForm no corria y tras un alta
+        // la ficha seguia en modo alta con _editId = 0, de modo que un segundo
+        // Guardar volvia a crear la misma reserva.
         private void SeleccionarReserva_704ILR(int id_704ILR)
         {
             if (id_704ILR <= 0) return;
@@ -996,7 +1075,10 @@ namespace EvenTech.UI
             {
                 if (row_704ILR.DataBoundItem is BE_Reserva_704ILR r_704ILR && r_704ILR.Id_704ILR == id_704ILR)
                 {
+                    bool yaActual_704ILR = _grid_704ILR.CurrentRow == row_704ILR;
                     _grid_704ILR.CurrentCell = row_704ILR.Cells[0];
+                    row_704ILR.Selected = true;
+                    if (yaActual_704ILR || _editId_704ILR != id_704ILR) CargarEnForm_704ILR(r_704ILR);
                     return;
                 }
             }

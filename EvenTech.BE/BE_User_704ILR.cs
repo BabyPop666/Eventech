@@ -9,7 +9,8 @@ namespace EvenTech.BE
         public string PasswordHash_704ILR { get; set; }
         public DateTime CreatedAt_704ILR { get; set; }
 
-        // Perfil asignado (T04). NULL = sin perfil (acceso total / superusuario).
+        // Perfil asignado (T04). NULL = sin perfil asignado -> sin acceso: la sesion
+        // arranca sin permisos y el menu queda restringido (denegar por defecto, RNF-09).
         public int? PerfilId_704ILR { get; set; }
 
         // Estado de cuenta y control de intentos fallidos (RF01.3 / RF01.4).
