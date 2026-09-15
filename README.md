@@ -36,7 +36,8 @@ herramienta, `db\schema.sql` tambien se puede abrir y ejecutar desde SSMS sobre 
 base ya creada.
 
 Hardware sugerido: procesador Intel Core i5 o equivalente, 8 GB de RAM,
-500 MB de disco y una resolucion de 1366x768 o superior.
+500 MB de disco y una resolucion efectiva de 1366x768 o superior (la de la
+pantalla dividida por la escala configurada en Windows).
 
 ## Puesta en marcha
 

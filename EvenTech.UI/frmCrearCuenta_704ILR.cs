@@ -16,6 +16,9 @@ namespace EvenTech.UI
         private Label _lblUser_704ILR, _lblPass_704ILR, _lblPass2_704ILR, _lblTitle_704ILR, _lblStatus_704ILR;
         private AppButton_704ILR _btnCrear_704ILR;
 
+        // Ultimo mensaje de estado, guardado como la forma de armarlo (se re-traduce).
+        private Func<string> _mensajeEstado_704ILR;
+
         public frmCrearCuenta_704ILR()
         {
             BuildUi_704ILR();
@@ -27,7 +30,9 @@ namespace EvenTech.UI
 
         private void BuildUi_704ILR()
         {
-            Text = "EvenTech - " + Tr_704ILR.T_704ILR("CC_TITULO");
+            // Con texto por defecto, como las leyendas: si la carga de idiomas sigue fallando, el
+            // titulo de la ventana no muestra la clave cruda.
+            Text = "EvenTech - " + T_704ILR("CC_TITULO", "Crear cuenta");
             ClientSize = new Size(420, 660); // misma altura que el login para cubrirlo por completo
             BackColor = Theme_704ILR.BgLogin_704ILR;
             KeyPreview = true;
@@ -71,11 +76,15 @@ namespace EvenTech.UI
                 BackColor = Color.Transparent
             };
             tbl_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            int[] heights_704ILR = { 64, 60, 60, 60, 8, 50, 42, /*fill*/ 0 };
+            // La fila 6 (mensaje de estado) crece con el texto, con 42 px de alto minimo
+            // en el rotulo: con alto fijo, un mensaje de mas de dos lineas quedaba cortado.
+            int[] heights_704ILR = { 64, 60, 60, 60, 8, 50, /*auto*/ 42, /*fill*/ 0 };
             for (int i_704ILR = 0; i_704ILR < heights_704ILR.Length; i_704ILR++)
                 tbl_704ILR.RowStyles.Add(i_704ILR == 7
                     ? new RowStyle(SizeType.Percent, 100)
-                    : new RowStyle(SizeType.Absolute, heights_704ILR[i_704ILR]));
+                    : i_704ILR == 6
+                        ? new RowStyle(SizeType.AutoSize)
+                        : new RowStyle(SizeType.Absolute, heights_704ILR[i_704ILR]));
 
             var lblLogo_704ILR = new Label
             {
@@ -101,6 +110,8 @@ namespace EvenTech.UI
             _lblStatus_704ILR = new Label
             {
                 Dock = DockStyle.Fill,
+                AutoSize = true,
+                MinimumSize = new Size(0, 42),
                 ForeColor = Color.FromArgb(255, 170, 170),
                 Font = Theme_704ILR.FontSmall_704ILR,
                 TextAlign = ContentAlignment.MiddleCenter,
@@ -132,17 +143,17 @@ namespace EvenTech.UI
 
             if (string.IsNullOrWhiteSpace(user_704ILR) || string.IsNullOrEmpty(p1_704ILR))
             {
-                SetStatus_704ILR(T_704ILR("CC_MSG_COMPLETAR", "Completar todos los campos."), error_704ILR: true);
+                SetStatus_704ILR(() => T_704ILR("CC_MSG_COMPLETAR", "Completar todos los campos."), error_704ILR: true);
                 return;
             }
             if (p1_704ILR != p2_704ILR)
             {
-                SetStatus_704ILR(T_704ILR("CC_MSG_NO_COINCIDEN", "Las contraseñas no coinciden."), error_704ILR: true);
+                SetStatus_704ILR(() => T_704ILR("CC_MSG_NO_COINCIDEN", "Las contraseñas no coinciden."), error_704ILR: true);
                 return;
             }
             if (p1_704ILR.Length < 4)
             {
-                SetStatus_704ILR(T_704ILR("CC_MSG_PASS_CORTA", "La contraseña debe tener al menos 4 caracteres."), error_704ILR: true);
+                SetStatus_704ILR(() => T_704ILR("CC_MSG_PASS_CORTA", "La contraseña debe tener al menos 4 caracteres."), error_704ILR: true);
                 return;
             }
 
@@ -156,31 +167,40 @@ namespace EvenTech.UI
                 switch (r_704ILR)
                 {
                     case CreateUserResult_704ILR.Success_704ILR:
-                        SetStatus_704ILR(T_704ILR("CC_MSG_OK", "Usuario creado. Ya podes iniciar sesion."), error_704ILR: false);
+                        SetStatus_704ILR(() => T_704ILR("CC_MSG_OK", "Usuario creado. Ya podés iniciar sesión."), error_704ILR: false);
                         _txtUser_704ILR.Clear();
                         break;
                     case CreateUserResult_704ILR.InvalidUsername_704ILR:
-                        SetStatus_704ILR(T_704ILR("CC_MSG_USER_INVALIDO", "Usuario invalido (3-50, letras/numeros/._-)."), error_704ILR: true);
+                        SetStatus_704ILR(() => T_704ILR("CC_MSG_USER_INVALIDO", "Usuario inválido (3-50, letras/números/._-)."), error_704ILR: true);
                         break;
                     case CreateUserResult_704ILR.UsernameAlreadyExists_704ILR:
-                        SetStatus_704ILR(T_704ILR("CC_MSG_USER_EXISTE", "Ese usuario ya existe."), error_704ILR: true);
+                        SetStatus_704ILR(() => T_704ILR("CC_MSG_USER_EXISTE", "Ese usuario ya existe."), error_704ILR: true);
                         break;
                     case CreateUserResult_704ILR.InvalidPassword_704ILR:
-                        SetStatus_704ILR(T_704ILR("CC_MSG_PASS_INVALIDA", "Contraseña invalida."), error_704ILR: true);
+                        SetStatus_704ILR(() => T_704ILR("CC_MSG_PASS_INVALIDA", "Contraseña inválida."), error_704ILR: true);
                         break;
                 }
             }
             catch (Exception ex_704ILR)
             {
+                // El detalle tecnico va a la bitacora. En pantalla, un mensaje traducido: el
+                // texto del motor salia en ingles, con el nombre de la base y la cuenta de
+                // Windows, y no entraba en el rotulo. La causa se clasifica como en el resto de
+                // las pantallas (Tr_704ILR.MensajeExcepcion_704ILR): el aviso propio del alta
+                // queda para cuando no se pudo acceder a la base; un alta frenada por un bloqueo
+                // de otra estacion, con la base en linea, es una operacion no completada.
                 BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "CrearCuenta", "Alta de usuario");
-                SetStatus_704ILR(T_704ILR("CC_MSG_ERROR", "Error:") + " " + ex_704ILR.Message, error_704ILR: true);
+                SetStatus_704ILR(() => Tr_704ILR.EsSinBase_704ILR(ex_704ILR)
+                    ? T_704ILR("CC_MSG_ERR_SIN_BASE", "La cuenta no se creó: no se pudo acceder a la base de datos. Reintentá más tarde.")
+                    : Tr_704ILR.MensajeExcepcion_704ILR(ex_704ILR), error_704ILR: true);
             }
         }
 
-        private void SetStatus_704ILR(string msg_704ILR, bool error_704ILR)
+        private void SetStatus_704ILR(Func<string> mensaje_704ILR, bool error_704ILR)
         {
+            _mensajeEstado_704ILR = mensaje_704ILR;
             _lblStatus_704ILR.ForeColor = error_704ILR ? Color.FromArgb(255, 170, 170) : Color.FromArgb(170, 235, 170);
-            _lblStatus_704ILR.Text = msg_704ILR;
+            _lblStatus_704ILR.Text = mensaje_704ILR();
         }
 
         // Devuelve la traduccion de 'clave' o, si falta, el texto por defecto dado.
@@ -190,14 +210,19 @@ namespace EvenTech.UI
             return t_704ILR == clave_704ILR ? defecto_704ILR : t_704ILR;
         }
 
-        // Observador (patron Observer): re-traduce titulo, captions y boton.
+        // Observador (patron Observer): re-traduce titulo, captions y boton. Todas llevan texto
+        // por defecto, como el login: si la carga de idiomas sigue fallando al abrir el alta (el
+        // reintento no alcanza con la base caida o una tabla bloqueada), la ventana se ve en
+        // castellano y no con las claves crudas.
         public void ActualizarTextos_704ILR()
         {
-            if (_lblTitle_704ILR != null) _lblTitle_704ILR.Text = Tr_704ILR.T_704ILR("CC_TITULO");
-            if (_lblUser_704ILR != null)  _lblUser_704ILR.Text  = Tr_704ILR.T_704ILR("CC_USER");
-            if (_lblPass_704ILR != null)  _lblPass_704ILR.Text  = Tr_704ILR.T_704ILR("CC_PASS");
-            if (_lblPass2_704ILR != null) _lblPass2_704ILR.Text = Tr_704ILR.T_704ILR("CC_PASS2");
-            if (_btnCrear_704ILR != null) _btnCrear_704ILR.Text = Tr_704ILR.T_704ILR("CC_CREAR");
+            if (_lblTitle_704ILR != null) _lblTitle_704ILR.Text = T_704ILR("CC_TITULO", "Crear cuenta");
+            if (_lblUser_704ILR != null)  _lblUser_704ILR.Text  = T_704ILR("CC_USER", "Usuario");
+            if (_lblPass_704ILR != null)  _lblPass_704ILR.Text  = T_704ILR("CC_PASS", "Contraseña");
+            if (_lblPass2_704ILR != null) _lblPass2_704ILR.Text = T_704ILR("CC_PASS2", "Repetir contraseña");
+            if (_btnCrear_704ILR != null) _btnCrear_704ILR.Text = T_704ILR("CC_CREAR", "Crear");
+            // El mensaje de estado a la vista se vuelve a armar en el idioma nuevo.
+            if (_lblStatus_704ILR != null) _lblStatus_704ILR.Text = _mensajeEstado_704ILR?.Invoke() ?? "";
         }
     }
 }

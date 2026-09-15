@@ -60,7 +60,7 @@ namespace EvenTech.UI
             if (Permisos_704ILR.Tiene_704ILR("INTEGRIDAD_RECALC"))
             {
                 var toolbar_704ILR = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = Theme_704ILR.BgContent_704ILR };
-                _btnRecalc_704ILR = Ui_704ILR.Primary_704ILR(T_704ILR("AUD_RECALC_BTN", "Recalcular linea base"));
+                _btnRecalc_704ILR = Ui_704ILR.Primary_704ILR(T_704ILR("AUD_RECALC_BTN", "Recalcular línea base"));
                 _btnRecalc_704ILR.BehindColor_704ILR = Theme_704ILR.BgContent_704ILR;
                 _btnRecalc_704ILR.Size = new Size(240, 38);
                 _btnRecalc_704ILR.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
@@ -84,10 +84,12 @@ namespace EvenTech.UI
             // vuelve a exigirlo antes de reescribir la linea base de integridad.
             if (!Permisos_704ILR.Exigir_704ILR("INTEGRIDAD_RECALC", FindForm(), "recalcular la linea base de DV")) return;
 
+            // La linea base nueva reemplaza a la vigente como referencia de integridad: la pregunta
+            // arranca en No, como las demas confirmaciones que reemplazan o descartan datos.
             var confirma_704ILR = MessageBox.Show(
                 T_704ILR("AUD_RECALC_CONFIRMA",
-                  "Recalcular los digitos verificadores de todas las reservas? Usar despues de corregir datos alterados: la linea base nueva pasa a ser la referencia de integridad."),
-                "EvenTech", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                  "¿Recalcular los dígitos verificadores de todas las reservas? Usar después de corregir datos alterados: la línea base nueva pasa a ser la referencia de integridad."),
+                "EvenTech", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
             if (confirma_704ILR != DialogResult.Yes) return;
 
             try
@@ -96,14 +98,14 @@ namespace EvenTech.UI
                 var resultado_704ILR = BLL_Integridad_704ILR.Verificar_704ILR();
                 MessageBox.Show(
                     Tr_704ILR.F_704ILR("AUD_RECALC_OK",
-                        "Linea base recalculada ({0} reservas). Verificacion posterior: {1} inconsistencia(s).",
+                        "Línea base recalculada ({0} reservas). Verificación posterior: {1} inconsistencia(s).",
                         total_704ILR, resultado_704ILR.Inconsistencias_704ILR.Count),
                     "EvenTech", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex_704ILR)
             {
                 BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Integridad", "Recalculo de linea base");
-                MessageBox.Show(Tr_704ILR.T_704ILR("MSG_ERROR_PREFIJO") + ex_704ILR.Message, Tr_704ILR.T_704ILR("MSG_ERROR"),
+                MessageBox.Show(Tr_704ILR.MensajeExcepcion_704ILR(ex_704ILR), T_704ILR("MSG_ERROR", "Error"),
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
@@ -117,11 +119,11 @@ namespace EvenTech.UI
 
         public void ActualizarTextos_704ILR()
         {
-            if (_tabBitacora_704ILR != null) _tabBitacora_704ILR.Text = Tr_704ILR.T_704ILR("AUD_TAB_BITACORA");
-            if (_tabLogin_704ILR != null) _tabLogin_704ILR.Text = Tr_704ILR.T_704ILR("AUD_TAB_LOGIN");
-            if (_btnRecalc_704ILR != null) _btnRecalc_704ILR.Text = T_704ILR("AUD_RECALC_BTN", "Recalcular linea base");
+            if (_tabBitacora_704ILR != null) _tabBitacora_704ILR.Text = T_704ILR("AUD_TAB_BITACORA", "Bitácora general");
+            if (_tabLogin_704ILR != null) _tabLogin_704ILR.Text = T_704ILR("AUD_TAB_LOGIN", "Auditoría de login");
+            if (_btnRecalc_704ILR != null) _btnRecalc_704ILR.Text = T_704ILR("AUD_RECALC_BTN", "Recalcular línea base");
             if (_lblSinConsulta_704ILR != null)
-                _lblSinConsulta_704ILR.Text = T_704ILR("AUD_SIN_CONSULTA", "El perfil no tiene permisos de consulta de auditoria.");
+                _lblSinConsulta_704ILR.Text = T_704ILR("AUD_SIN_CONSULTA", "El perfil no tiene permisos de consulta de auditoría.");
         }
     }
 }

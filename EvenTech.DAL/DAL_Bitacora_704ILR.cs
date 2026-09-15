@@ -27,12 +27,39 @@ namespace EvenTech.DAL
             }
         }
 
+        // Anchos de Bitacora.Usuario y Bitacora.Accion en la base.
+        private const int AnchoUsuario_704ILR = 50;
+        private const int AnchoAccion_704ILR = 100;
+
+        // Patron LIKE de "contiene" para un texto que el usuario escribe como literal.
+        // '%', '_' y '[' son comodines de LIKE: se escapan entre corchetes, si no
+        // "a_b" encuentra tambien "axb" y "%" devuelve todos los asientos. Un texto
+        // mas largo que la columna no puede estar contenido en ella: se recorta a
+        // ancho + 1 (sigue sin coincidir) para que el patron quepa siempre en el
+        // parametro y el driver no lo corte en medio de un escape.
+        internal static string PatronContiene_704ILR(string texto_704ILR, int anchoColumna_704ILR)
+        {
+            string t_704ILR = (texto_704ILR ?? string.Empty).Trim();
+            if (t_704ILR.Length > anchoColumna_704ILR + 1) t_704ILR = t_704ILR.Substring(0, anchoColumna_704ILR + 1);
+            var sb_704ILR = new StringBuilder(LargoPatron_704ILR(anchoColumna_704ILR)).Append('%');
+            foreach (char c_704ILR in t_704ILR)
+            {
+                if (c_704ILR == '%' || c_704ILR == '_' || c_704ILR == '[') sb_704ILR.Append('[').Append(c_704ILR).Append(']');
+                else sb_704ILR.Append(c_704ILR);
+            }
+            return sb_704ILR.Append('%').ToString();
+        }
+
+        // Largo maximo del patron para una columna: cada caracter escapado ocupa tres
+        // posiciones, mas los dos comodines de los extremos.
+        internal static int LargoPatron_704ILR(int anchoColumna_704ILR) => 3 * (anchoColumna_704ILR + 1) + 2;
+
         // Busqueda combinada: cada filtro es opcional y se concatena con AND solo
         // si viene informado (patron WHERE 1=1 + parametros opcionales). Los
         // parametros llevan tipo y longitud explicitos como en el resto de la DAL:
         // sin ellos el driver infiere NVARCHAR(largo del valor) y cada largo
-        // distinto genera un plan distinto. Los patrones LIKE reservan dos
-        // posiciones mas que la columna para los comodines.
+        // distinto genera un plan distinto. Usuario y accion se buscan como texto
+        // literal contenido (ver PatronContiene_704ILR).
         public static List<BE_BitacoraEntry_704ILR> Buscar_704ILR(BitacoraFiltros_704ILR f_704ILR)
         {
             var sb_704ILR = new StringBuilder(
@@ -42,7 +69,8 @@ namespace EvenTech.DAL
             if (!string.IsNullOrWhiteSpace(f_704ILR.Usuario_704ILR))
             {
                 sb_704ILR.Append("AND Usuario LIKE @usuario ");
-                ps_704ILR.Add(new SqlParameter("@usuario", SqlDbType.NVarChar, 52) { Value = "%" + f_704ILR.Usuario_704ILR.Trim() + "%" });
+                ps_704ILR.Add(new SqlParameter("@usuario", SqlDbType.NVarChar, LargoPatron_704ILR(AnchoUsuario_704ILR))
+                    { Value = PatronContiene_704ILR(f_704ILR.Usuario_704ILR, AnchoUsuario_704ILR) });
             }
             if (f_704ILR.FechaInicio_704ILR.HasValue)
             {
@@ -62,7 +90,8 @@ namespace EvenTech.DAL
             if (!string.IsNullOrWhiteSpace(f_704ILR.Accion_704ILR))
             {
                 sb_704ILR.Append("AND Accion LIKE @accion ");
-                ps_704ILR.Add(new SqlParameter("@accion", SqlDbType.NVarChar, 102) { Value = "%" + f_704ILR.Accion_704ILR.Trim() + "%" });
+                ps_704ILR.Add(new SqlParameter("@accion", SqlDbType.NVarChar, LargoPatron_704ILR(AnchoAccion_704ILR))
+                    { Value = PatronContiene_704ILR(f_704ILR.Accion_704ILR, AnchoAccion_704ILR) });
             }
             if (f_704ILR.Criticidad_704ILR.HasValue)
             {

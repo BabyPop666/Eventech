@@ -42,6 +42,19 @@ namespace EvenTech.DAL
             }
         }
 
+        // Un servicio por Id (null si no existe). La modificacion lo usa para comparar
+        // contra lo guardado y no escribir ni asentar un cambio que no ocurrio.
+        public static BE_Servicio_704ILR GetById_704ILR(int id_704ILR)
+        {
+            using (var cn_704ILR = new DAL_DB_Connection_704ILR())
+            using (var cmd_704ILR = new SqlCommand(SelectBase_704ILR + "WHERE Id = @id", cn_704ILR.OpenConnection_704ILR()))
+            {
+                cmd_704ILR.Parameters.Add("@id", SqlDbType.Int).Value = id_704ILR;
+                using (var r_704ILR = cmd_704ILR.ExecuteReader())
+                    return r_704ILR.Read() ? Map_704ILR(r_704ILR) : null;
+            }
+        }
+
         public static bool ExistsNombre_704ILR(string nombre_704ILR, int excluirId_704ILR)
         {
             using (var cn_704ILR = new DAL_DB_Connection_704ILR())

@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 namespace EvenTech.UI
@@ -10,6 +12,18 @@ namespace EvenTech.UI
     // Borderless heredando de FormBase, con identidad de marca (azul oscuro + dorado).
     public class frmAlertaIntegridad_704ILR : FormBase_704ILR
     {
+        // La verificacion devuelve cada inconsistencia como texto en castellano (es
+        // tambien el detalle que queda asentado en bitacora). La pantalla reconoce
+        // las tres formas que produce y las muestra con la leyenda del idioma activo.
+        private static readonly Regex RxDvhFaltante_704ILR =
+            new Regex(@"^Reserva #(\d+): sin DV horizontal almacenado", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        private static readonly Regex RxDvhNoCoincide_704ILR =
+            new Regex(@"^Reserva #(\d+): (el )?DV horizontal no coincide", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        private static readonly Regex RxDvvNoCoincide_704ILR =
+            new Regex(@"^(el )?DV vertical de Reservas no coincide", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        private static readonly Regex RxEstadoFueraDominio_704ILR =
+            new Regex(@"^Reserva #(\d+): estado almacenado fuera del dominio", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
         public frmAlertaIntegridad_704ILR(IReadOnlyList<string> inconsistencias_704ILR)
         {
             BuildUi_704ILR(inconsistencias_704ILR);
@@ -88,7 +102,7 @@ namespace EvenTech.UI
 
             var lblTitle_704ILR = new Label
             {
-                Text = Tr_704ILR.T_704ILR("ALERT_TITULO"),
+                Text = Tr_704ILR.F_704ILR("ALERT_TITULO", "Se detectaron problemas de integridad"),
                 Tag = "T:ALERT_TITULO",
                 Font = Theme_704ILR.FontH1_704ILR,
                 ForeColor = Theme_704ILR.TextOnDark_704ILR,
@@ -103,7 +117,7 @@ namespace EvenTech.UI
 
             var lblHint_704ILR = new Label
             {
-                Text = Tr_704ILR.T_704ILR("ALERT_HINT"),
+                Text = Tr_704ILR.F_704ILR("ALERT_HINT", "La verificación de dígitos verificadores encontró datos alterados por fuera del sistema. Avise al administrador antes de operar."),
                 Tag = "T:ALERT_HINT",
                 Font = Theme_704ILR.FontSmall_704ILR,
                 ForeColor = Theme_704ILR.TextLight_704ILR,
@@ -116,6 +130,9 @@ namespace EvenTech.UI
             };
 
             // Lista de inconsistencias: superficie oscura, texto claro, monoespaciado.
+            // Con barra horizontal: una linea mas ancha que la lista (la del DV vertical
+            // mide unos 700 px contra 510) se puede leer entera. El ancho desplazable lo
+            // calcula la lista a partir del item mas largo.
             var lst_704ILR = new ListBox
             {
                 Dock = DockStyle.Fill,
@@ -124,12 +141,13 @@ namespace EvenTech.UI
                 ForeColor = Theme_704ILR.TextOnDark_704ILR,
                 BorderStyle = BorderStyle.FixedSingle,
                 IntegralHeight = false,
+                HorizontalScrollbar = true,
                 Margin = new Padding(0)
             };
-            foreach (var i_704ILR in inconsistencias_704ILR) lst_704ILR.Items.Add(i_704ILR);
+            foreach (var i_704ILR in inconsistencias_704ILR) lst_704ILR.Items.Add(TextoInconsistencia_704ILR(i_704ILR));
 
             // Boton continuar: primario dorado, alineado a la derecha. Cierra el dialogo.
-            var btnContinuar_704ILR = Ui_704ILR.Primary_704ILR(Tr_704ILR.T_704ILR("ALERT_BTN"));
+            var btnContinuar_704ILR = Ui_704ILR.Primary_704ILR(Tr_704ILR.F_704ILR("ALERT_BTN", "Revisado, continuar"));
             btnContinuar_704ILR.Tag = "T:ALERT_BTN";
             btnContinuar_704ILR.BehindColor_704ILR = Theme_704ILR.BgLogin_704ILR;
             btnContinuar_704ILR.Size = new Size(200, 40);
@@ -146,6 +164,30 @@ namespace EvenTech.UI
             Controls.Add(pnlTitle_704ILR);
 
             AcceptButton = btnContinuar_704ILR;
+        }
+
+        // Leyenda de una inconsistencia en el idioma activo. Un texto que no responde a
+        // ninguna de las formas conocidas (otra verificacion) se muestra tal cual.
+        private static string TextoInconsistencia_704ILR(string inconsistencia_704ILR)
+        {
+            if (string.IsNullOrEmpty(inconsistencia_704ILR)) return inconsistencia_704ILR;
+
+            Match faltante_704ILR = RxDvhFaltante_704ILR.Match(inconsistencia_704ILR);
+            if (faltante_704ILR.Success && int.TryParse(faltante_704ILR.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out int idFaltante_704ILR))
+                return Tr_704ILR.F_704ILR("ALERT_DVH_FALTANTE", "Reserva #{0}: sin DV horizontal almacenado.", idFaltante_704ILR);
+
+            Match distinto_704ILR = RxDvhNoCoincide_704ILR.Match(inconsistencia_704ILR);
+            if (distinto_704ILR.Success && int.TryParse(distinto_704ILR.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out int idDistinto_704ILR))
+                return Tr_704ILR.F_704ILR("ALERT_DVH_NO_COINCIDE", "Reserva #{0}: el DV horizontal no coincide (posible alteración externa).", idDistinto_704ILR);
+
+            Match estado_704ILR = RxEstadoFueraDominio_704ILR.Match(inconsistencia_704ILR);
+            if (estado_704ILR.Success && int.TryParse(estado_704ILR.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out int idEstado_704ILR))
+                return Tr_704ILR.F_704ILR("ALERT_ESTADO_FUERA_DOMINIO", "Reserva #{0}: estado almacenado fuera del dominio de la tabla de estados (posible alteración externa).", idEstado_704ILR);
+
+            if (RxDvvNoCoincide_704ILR.IsMatch(inconsistencia_704ILR))
+                return Tr_704ILR.F_704ILR("ALERT_DVV_NO_COINCIDE", "El DV vertical de Reservas no coincide (filas agregadas, quitadas o reordenadas por fuera del sistema).");
+
+            return inconsistencia_704ILR;
         }
     }
 }

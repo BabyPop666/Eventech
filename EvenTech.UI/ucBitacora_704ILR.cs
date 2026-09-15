@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
+using System.Text;
 using System.Windows.Forms;
 using EvenTech.BE;
 using EvenTech.BLL;
@@ -20,13 +22,35 @@ namespace EvenTech.UI
         private DataGridView _grid_704ILR;
         private Label _lblCount_704ILR, _lblError_704ILR;
         private AppButton_704ILR _btnBuscar_704ILR, _btnLimpiar_704ILR;
+        // Aviso vigente, guardado de forma re-traducible: la clave y el texto por defecto
+        // si sale de una clave, o la excepcion si sale de un error (su texto se vuelve a
+        // armar con Tr_704ILR.MensajeExcepcion_704ILR en el idioma activo). Clave y
+        // excepcion en null = no hay aviso (la ultima busqueda se ejecuto bien).
+        private string _claveAviso_704ILR, _defectoAviso_704ILR;
+        private Exception _excepcionAviso_704ILR;
+        // False mientras la lista de modulos no se pudo leer (base caida al abrir la
+        // vista): la proxima busqueda que termina bien la vuelve a pedir.
+        private bool _modulosCargados_704ILR;
+
+        // Prefijos de las claves con que se traducen los valores guardados.
+        private const string PrefijoModulo_704ILR = "MOD_";
+        private const string PrefijoAccion_704ILR = "BACC_";
 
         public ucBitacora_704ILR()
         {
             BackColor = Theme_704ILR.BgContent_704ILR;
             BuildUi_704ILR();
             ActualizarTextos_704ILR();
-            Load += (s_704ILR, e_704ILR) => { CargarModulos_704ILR(); SafeBuscar_704ILR(); GestorDeIdioma_704ILR.GetInstance_704ILR.Suscribir_704ILR(this); };
+            // El control puede crearse antes de mostrarse (pestana no seleccionada): si
+            // el idioma cambio en ese lapso no recibio el aviso (todavia no estaba
+            // suscripto), asi que al suscribirse se re-traduce.
+            Load += (s_704ILR, e_704ILR) =>
+            {
+                CargarModulos_704ILR();
+                SafeBuscar_704ILR();
+                GestorDeIdioma_704ILR.GetInstance_704ILR.Suscribir_704ILR(this);
+                ActualizarTextos_704ILR();
+            };
             Disposed += (s_704ILR, e_704ILR) => GestorDeIdioma_704ILR.GetInstance_704ILR.Desuscribir_704ILR(this);
         }
 
@@ -88,10 +112,13 @@ namespace EvenTech.UI
 
             _cboModulo_704ILR = Ui_704ILR.Combo_704ILR();
             _cboModulo_704ILR.Width = 160;
+            // Los modulos son items ModuloItem_704ILR: filtran por el valor guardado y
+            // se dibujan con la leyenda del idioma activo.
+            Ui_704ILR.DibujarEnum_704ILR(_cboModulo_704ILR, o_704ILR => o_704ILR?.ToString());
 
             _cboCriticidad_704ILR = Ui_704ILR.Combo_704ILR();
             _cboCriticidad_704ILR.Width = 140;
-            _cboCriticidad_704ILR.Items.Add(Tr_704ILR.T_704ILR("OPT_TODAS"));
+            _cboCriticidad_704ILR.Items.Add(Tr_704ILR.F_704ILR("OPT_TODAS", "(Todas)"));
             _cboCriticidad_704ILR.Items.Add(CriticidadBitacora_704ILR.Info);
             _cboCriticidad_704ILR.Items.Add(CriticidadBitacora_704ILR.Advertencia);
             _cboCriticidad_704ILR.Items.Add(CriticidadBitacora_704ILR.Error);
@@ -179,7 +206,9 @@ namespace EvenTech.UI
             _grid_704ILR.CellFormatting += Grid_CellFormatting_704ILR;
 
             _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cId",     HeaderText = "Id",         DataPropertyName = "Id_704ILR",         FillWeight = 25 });
-            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cFecha",  HeaderText = "Fecha",      DataPropertyName = "Fecha_704ILR",      FillWeight = 80, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm:ss" } });
+            // Fecha en gregoriano con separadores invariantes, como el Detalle de los asientos: el patron
+            // solo fija el orden, y con la cultura de la estacion th-TH mostraba 2569 y fi-FI 01.15.05.
+            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cFecha",  HeaderText = "Fecha",      DataPropertyName = "Fecha_704ILR",      FillWeight = 80, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm:ss", FormatProvider = CultureInfo.InvariantCulture } });
             _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cUsuario",HeaderText = "Usuario",    DataPropertyName = "Usuario_704ILR",    FillWeight = 60 });
             _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cModulo", HeaderText = "Modulo",     DataPropertyName = "Modulo_704ILR",     FillWeight = 55 });
             _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cAccion", HeaderText = "Accion",     DataPropertyName = "Accion_704ILR",     FillWeight = 90 });
@@ -227,9 +256,15 @@ namespace EvenTech.UI
                 int sel_704ILR = _cboModulo_704ILR.SelectedIndex;
                 _cboModulo_704ILR.Items[0] = Tr_704ILR.T_704ILR("OPT_TODOS");
                 _cboModulo_704ILR.SelectedIndex = sel_704ILR;
+                _cboModulo_704ILR.Invalidate(); // re-dibuja los modulos en el idioma nuevo
             }
-            if (_grid_704ILR.DataSource != null && _lblCount_704ILR.Visible) _lblCount_704ILR.Text = _grid_704ILR.Rows.Count + " " + Tr_704ILR.T_704ILR("BIT_COUNT");
-            _grid_704ILR.Invalidate(); // re-traduce los valores de criticidad en las celdas
+            // Conteo y aviso se re-traducen segun el aviso vigente y no segun Visible: en
+            // la pestana no seleccionada del hub los controles no estan visibles y, al
+            // volver a ella, quedarian en el idioma anterior.
+            bool hayAviso_704ILR = HayAviso_704ILR();
+            if (_grid_704ILR.DataSource != null && !hayAviso_704ILR) _lblCount_704ILR.Text = _grid_704ILR.Rows.Count + " " + Tr_704ILR.F_704ILR("BIT_COUNT", "registros");
+            if (hayAviso_704ILR) _lblError_704ILR.Text = TextoAviso_704ILR();
+            _grid_704ILR.Invalidate(); // re-traduce modulo, accion y criticidad en las celdas
         }
 
         // Recorre el arbol buscando paneles Ui.Field con Tag "FIELD:CLAVE" y traduce
@@ -249,16 +284,30 @@ namespace EvenTech.UI
             }
         }
 
+        // Lista de modulos del filtro. Si la base no responde, el combo conserva lo que
+        // ya ofrecia (al abrir, solo "(Todos)", elegido) y _modulosCargados_704ILR queda
+        // en false para que SafeBuscar_704ILR la vuelva a pedir. Al recargar se conserva
+        // el modulo elegido.
         private void CargarModulos_704ILR()
         {
-            try
+            List<string> modulos_704ILR;
+            try { modulos_704ILR = BLL_Bitacora_704ILR.GetModulos_704ILR(); }
+            catch
             {
-                _cboModulo_704ILR.Items.Clear();
-                _cboModulo_704ILR.Items.Add(Tr_704ILR.T_704ILR("OPT_TODOS"));
-                foreach (var m_704ILR in BLL_Bitacora_704ILR.GetModulos_704ILR()) _cboModulo_704ILR.Items.Add(m_704ILR);
-                _cboModulo_704ILR.SelectedIndex = 0;
+                if (_cboModulo_704ILR.Items.Count == 0) _cboModulo_704ILR.Items.Add(Tr_704ILR.T_704ILR("OPT_TODOS"));
+                if (_cboModulo_704ILR.SelectedIndex < 0) _cboModulo_704ILR.SelectedIndex = 0;
+                return;
             }
-            catch { _cboModulo_704ILR.SelectedIndex = -1; }
+            string elegido_704ILR = (_cboModulo_704ILR.SelectedItem as ModuloItem_704ILR)?.Valor_704ILR;
+            _cboModulo_704ILR.Items.Clear();
+            _cboModulo_704ILR.Items.Add(Tr_704ILR.T_704ILR("OPT_TODOS"));
+            _cboModulo_704ILR.SelectedIndex = 0;
+            foreach (var m_704ILR in modulos_704ILR)
+            {
+                int indice_704ILR = _cboModulo_704ILR.Items.Add(new ModuloItem_704ILR(m_704ILR));
+                if (m_704ILR == elegido_704ILR) _cboModulo_704ILR.SelectedIndex = indice_704ILR;
+            }
+            _modulosCargados_704ILR = true;
         }
 
         private void LimpiarFiltros_704ILR()
@@ -276,14 +325,15 @@ namespace EvenTech.UI
             // exige aca y no solo donde se decide mostrarla.
             if (!Permisos_704ILR.Tiene_704ILR("BITACORA_VER"))
             {
-                _lblCount_704ILR.Visible = false;
-                _lblError_704ILR.Text = Tr_704ILR.T_704ILR("MSG_SIN_PERMISO");
-                _lblError_704ILR.Visible = true;
+                MostrarAviso_704ILR("MSG_SIN_PERMISO", "No tenés permiso para realizar esta acción.");
                 return;
             }
+            if (!RangoFechasValido_704ILR()) return;
 
             try
             {
+                _claveAviso_704ILR = null;
+                _excepcionAviso_704ILR = null;
                 _lblError_704ILR.Visible = false;
                 _lblCount_704ILR.Visible = true;
 
@@ -292,27 +342,88 @@ namespace EvenTech.UI
                     Usuario_704ILR = string.IsNullOrWhiteSpace(_txtUsuario_704ILR.Text) ? null : _txtUsuario_704ILR.Text.Trim(),
                     FechaInicio_704ILR = _dtDesde_704ILR.Checked ? _dtDesde_704ILR.Value : (DateTime?)null,
                     FechaFin_704ILR = _dtHasta_704ILR.Checked ? _dtHasta_704ILR.Value : (DateTime?)null,
-                    Modulo_704ILR = (_cboModulo_704ILR.SelectedIndex > 0) ? _cboModulo_704ILR.SelectedItem.ToString() : null,
+                    Modulo_704ILR = (_cboModulo_704ILR.SelectedItem is ModuloItem_704ILR mi_704ILR) ? mi_704ILR.Valor_704ILR : null,
                     Criticidad_704ILR = (_cboCriticidad_704ILR.SelectedItem is CriticidadBitacora_704ILR c_704ILR) ? c_704ILR : (CriticidadBitacora_704ILR?)null
                 };
 
                 List<BE_BitacoraEntry_704ILR> data_704ILR = BLL_Bitacora_704ILR.Buscar_704ILR(filtros_704ILR);
                 _grid_704ILR.DataSource = data_704ILR;
-                _lblCount_704ILR.Text = data_704ILR.Count + " " + Tr_704ILR.T_704ILR("BIT_COUNT");
+                _lblCount_704ILR.Text = data_704ILR.Count + " " + Tr_704ILR.F_704ILR("BIT_COUNT", "registros");
+                // Si al abrir la vista la base no respondia, el combo quedo solo con
+                // "(Todos)": con la base de vuelta se cargan los modulos sin reabrirla.
+                if (!_modulosCargados_704ILR) CargarModulos_704ILR();
             }
             catch (Exception ex_704ILR)
             {
                 BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Bitacora", "Buscar");
-                _lblCount_704ILR.Visible = false;
-                _lblError_704ILR.Text = Tr_704ILR.T_704ILR("MSG_ERROR_PREFIJO") + ex_704ILR.GetType().Name + " - " + ex_704ILR.Message;
-                _lblError_704ILR.Visible = true;
+                MostrarAvisoExcepcion_704ILR(ex_704ILR);
             }
         }
+
+        // Un rango invertido (Desde posterior a Hasta) no se consulta: el resultado
+        // vacio haria pensar que no hubo actividad. Se comparan dias, como el filtro.
+        private bool RangoFechasValido_704ILR()
+        {
+            if (!_dtDesde_704ILR.Checked || !_dtHasta_704ILR.Checked || _dtDesde_704ILR.Value.Date <= _dtHasta_704ILR.Value.Date) return true;
+            MostrarAviso_704ILR("MSG_RANGO_FECHAS", "La fecha Desde no puede ser posterior a la fecha Hasta.");
+            return false;
+        }
+
+        // Muestra un aviso que sale de una clave de traduccion y la recuerda, para
+        // re-traducirlo si el idioma cambia mientras sigue vigente.
+        private void MostrarAviso_704ILR(string clave_704ILR, string defecto_704ILR)
+        {
+            _claveAviso_704ILR = clave_704ILR;
+            _defectoAviso_704ILR = defecto_704ILR;
+            _excepcionAviso_704ILR = null;
+            PresentarAviso_704ILR();
+        }
+
+        // Muestra el aviso de una consulta que fallo. Se guarda la excepcion y no el
+        // texto, para re-traducirlo si el idioma cambia mientras sigue vigente.
+        private void MostrarAvisoExcepcion_704ILR(Exception ex_704ILR)
+        {
+            _claveAviso_704ILR = null;
+            _defectoAviso_704ILR = null;
+            _excepcionAviso_704ILR = ex_704ILR;
+            PresentarAviso_704ILR();
+        }
+
+        // Con un aviso la consulta no se ejecuto (sin permiso, rango invertido o error):
+        // la grilla se vacia, porque las filas de la busqueda anterior no corresponden
+        // a los filtros que quedan a la vista.
+        private void PresentarAviso_704ILR()
+        {
+            _grid_704ILR.DataSource = new List<BE_BitacoraEntry_704ILR>();
+            _lblCount_704ILR.Visible = false;
+            _lblError_704ILR.Text = TextoAviso_704ILR();
+            _lblError_704ILR.Visible = true;
+        }
+
+        private bool HayAviso_704ILR() => _claveAviso_704ILR != null || _excepcionAviso_704ILR != null;
+
+        // Texto del aviso vigente en el idioma activo.
+        private string TextoAviso_704ILR() => _claveAviso_704ILR != null
+            ? Tr_704ILR.F_704ILR(_claveAviso_704ILR, _defectoAviso_704ILR)
+            : Tr_704ILR.MensajeExcepcion_704ILR(_excepcionAviso_704ILR);
 
         private void Grid_CellFormatting_704ILR(object sender_704ILR, DataGridViewCellFormattingEventArgs e_704ILR)
         {
             if (e_704ILR.RowIndex < 0 || e_704ILR.ColumnIndex < 0 || e_704ILR.ColumnIndex >= _grid_704ILR.Columns.Count) return;
-            if (_grid_704ILR.Columns[e_704ILR.ColumnIndex].DataPropertyName != "Criticidad_704ILR") return;
+            string propiedad_704ILR = _grid_704ILR.Columns[e_704ILR.ColumnIndex].DataPropertyName;
+
+            // Modulo y accion se guardan como leyendas en castellano (son datos: asi
+            // filtra la consulta y asi quedan en la base). Se traduce lo que se muestra.
+            if (propiedad_704ILR == "Modulo_704ILR" || propiedad_704ILR == "Accion_704ILR")
+            {
+                if (e_704ILR.Value is string valor_704ILR && valor_704ILR.Length > 0)
+                {
+                    e_704ILR.Value = TextoDato_704ILR(propiedad_704ILR == "Modulo_704ILR" ? PrefijoModulo_704ILR : PrefijoAccion_704ILR, valor_704ILR);
+                    e_704ILR.FormattingApplied = true;
+                }
+                return;
+            }
+            if (propiedad_704ILR != "Criticidad_704ILR") return;
 
             switch (e_704ILR.Value?.ToString())
             {
@@ -322,6 +433,51 @@ namespace EvenTech.UI
             }
             // Traduce el valor mostrado (el color se calculo arriba con el valor crudo).
             if (e_704ILR.Value is CriticidadBitacora_704ILR cb_704ILR) { e_704ILR.Value = Tr_704ILR.Criticidad_704ILR(cb_704ILR); e_704ILR.FormattingApplied = true; }
+        }
+
+        // Leyenda traducida de un valor guardado en la bitacora (modulo o accion). Si
+        // la clave no existe (un modulo o una accion nuevos, todavia sin sembrar) se
+        // muestra el valor tal cual, nunca la clave cruda.
+        private static string TextoDato_704ILR(string prefijo_704ILR, string valor_704ILR)
+        {
+            if (string.IsNullOrEmpty(valor_704ILR)) return valor_704ILR;
+            string clave_704ILR = ClaveDato_704ILR(prefijo_704ILR, valor_704ILR);
+            string texto_704ILR = Tr_704ILR.T_704ILR(clave_704ILR);
+            return texto_704ILR == clave_704ILR ? valor_704ILR : texto_704ILR;
+        }
+
+        // Clave de traduccion de un valor: prefijo + valor en mayusculas, sin tildes y
+        // con un '_' por cada tramo que no es letra ni digito ("Cancelacion de reserva"
+        // -> BACC_CANCELACION_DE_RESERVA). Traducciones.Clave admite 60 caracteres.
+        private static string ClaveDato_704ILR(string prefijo_704ILR, string valor_704ILR)
+        {
+            var sb_704ILR = new StringBuilder(prefijo_704ILR);
+            bool separador_704ILR = false;
+            foreach (char c_704ILR in valor_704ILR.Normalize(NormalizationForm.FormD))
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(c_704ILR) == UnicodeCategory.NonSpacingMark) continue;
+                if (c_704ILR < 128 && char.IsLetterOrDigit(c_704ILR))
+                {
+                    sb_704ILR.Append(char.ToUpperInvariant(c_704ILR));
+                    separador_704ILR = false;
+                }
+                else if (!separador_704ILR && sb_704ILR.Length > prefijo_704ILR.Length)
+                {
+                    sb_704ILR.Append('_');
+                    separador_704ILR = true;
+                }
+            }
+            while (sb_704ILR.Length > prefijo_704ILR.Length && sb_704ILR[sb_704ILR.Length - 1] == '_') sb_704ILR.Length--;
+            return sb_704ILR.Length > 60 ? sb_704ILR.ToString(0, 60) : sb_704ILR.ToString();
+        }
+
+        // Item del combo de modulos: conserva el valor guardado (es lo que filtra la
+        // consulta) y muestra la leyenda traducida (ToString se re-evalua al repintar).
+        private sealed class ModuloItem_704ILR
+        {
+            public string Valor_704ILR { get; }
+            public ModuloItem_704ILR(string valor_704ILR) { Valor_704ILR = valor_704ILR; }
+            public override string ToString() => TextoDato_704ILR(PrefijoModulo_704ILR, Valor_704ILR);
         }
     }
 }

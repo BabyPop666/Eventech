@@ -32,23 +32,12 @@ namespace EvenTech.DAL
             return list_704ILR;
         }
 
-        // Reemplaza (en una transaccion) el set de servicios de la reserva.
-        public static void ReplaceForReserva_704ILR(int reservaId_704ILR, IEnumerable<BE_ReservaServicio_704ILR> items_704ILR)
-        {
-            using (var cn_704ILR = new DAL_DB_Connection_704ILR())
-            {
-                var conn_704ILR = cn_704ILR.OpenConnection_704ILR();
-                using (var tx_704ILR = conn_704ILR.BeginTransaction())
-                {
-                    ReplaceForReserva_704ILR(reservaId_704ILR, items_704ILR, conn_704ILR, tx_704ILR);
-                    tx_704ILR.Commit();
-                }
-            }
-        }
-
-        // Sobrecarga transaccional: no abre ni cierra nada, escribe donde le digan.
-        // Asi la reserva y sus servicios se guardan bajo una unica transaccion y no
-        // puede quedar el Monto de la reserva sin las lineas que lo componen.
+        // Reemplaza el set de servicios de la reserva dentro de la transaccion que le
+        // pasen: no abre ni cierra nada, escribe donde le digan. Asi la reserva y sus
+        // servicios se guardan bajo una unica transaccion y no puede quedar el Monto de
+        // la reserva sin las lineas que lo componen. No hay otra via de escritura de las
+        // lineas: la sobrecarga que abria su propia transaccion permitia cambiarlas sin
+        // la cabecera (y sin las reglas de la reserva) y se quito.
         public static void ReplaceForReserva_704ILR(int reservaId_704ILR,
             IEnumerable<BE_ReservaServicio_704ILR> items_704ILR,
             SqlConnection conn_704ILR, SqlTransaction tx_704ILR)

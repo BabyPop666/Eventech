@@ -110,15 +110,52 @@ namespace EvenTech.DAL
             return grafo_704ILR;
         }
 
+        // Recurso del bloqueo de aplicacion que serializa las grabaciones que pueden
+        // cambiar quien gestiona perfiles: la composicion de un perfil y el perfil de las
+        // cuentas. Es un nombre de recurso del servidor, no un identificador del codigo.
+        private const string RecursoGestionPerfiles_704ILR = "EvenTech_GestionPerfiles";
+
+        // Toma, dentro de la transaccion dada, el bloqueo exclusivo de la gestion de
+        // perfiles; se libera con el COMMIT o el ROLLBACK. Si otra grabacion lo retiene
+        // mas de 20 s, el servidor devuelve un error y no se graba nada.
+        internal static void TomarBloqueoGestion_704ILR(SqlConnection conn_704ILR, SqlTransaction tx_704ILR)
+        {
+            using (var cmd_704ILR = new SqlCommand(
+                "DECLARE @r INT; " +
+                "EXEC @r = sp_getapplock @Resource = @recurso, @LockMode = N'Exclusive', @LockOwner = N'Transaction', @LockTimeout = 20000; " +
+                "IF @r < 0 RAISERROR(N'No se pudo obtener el bloqueo de la gestión de perfiles.', 16, 1);",
+                conn_704ILR, tx_704ILR))
+            {
+                cmd_704ILR.Parameters.Add("@recurso", SqlDbType.NVarChar, 255).Value = RecursoGestionPerfiles_704ILR;
+                cmd_704ILR.ExecuteNonQuery();
+            }
+        }
+
         // Reemplaza la composicion completa del perfil (permisos + perfiles
-        // incluidos) en una unica transaccion.
-        public static void SetComposicion_704ILR(int perfilId_704ILR, IEnumerable<int> permisoIds_704ILR, IEnumerable<int> perfilesIncluidos_704ILR)
+        // incluidos) en una unica transaccion, serializada con las demas grabaciones
+        // de la gestion de perfiles.
+        public static void SetComposicion_704ILR(int perfilId_704ILR, IEnumerable<int> permisoIds_704ILR, IEnumerable<int> perfilesIncluidos_704ILR) =>
+            SetComposicion_704ILR(perfilId_704ILR, permisoIds_704ILR, perfilesIncluidos_704ILR, null);
+
+        // Igual que la anterior, pero con el bloqueo ya tomado y antes de escribir consulta
+        // 'puedeGrabar' (las reglas de la BLL): si devuelve false no escribe nada y devuelve
+        // false. Mientras se evalua, ninguna otra grabacion de composiciones ni de
+        // asignaciones de perfil puede cambiar lo que las reglas leen.
+        public static bool SetComposicion_704ILR(int perfilId_704ILR, IEnumerable<int> permisoIds_704ILR, IEnumerable<int> perfilesIncluidos_704ILR,
+            Func<bool> puedeGrabar_704ILR)
         {
             using (var cn_704ILR = new DAL_DB_Connection_704ILR())
             {
                 var conn_704ILR = cn_704ILR.OpenConnection_704ILR();
                 using (var tx_704ILR = conn_704ILR.BeginTransaction())
                 {
+                    TomarBloqueoGestion_704ILR(conn_704ILR, tx_704ILR);
+                    if (puedeGrabar_704ILR != null && !puedeGrabar_704ILR())
+                    {
+                        tx_704ILR.Rollback();
+                        return false;
+                    }
+
                     using (var del_704ILR = new SqlCommand("DELETE FROM dbo.PerfilPermiso WHERE PerfilId = @p", conn_704ILR, tx_704ILR))
                     {
                         del_704ILR.Parameters.Add("@p", SqlDbType.Int).Value = perfilId_704ILR;
@@ -152,6 +189,7 @@ namespace EvenTech.DAL
                     }
 
                     tx_704ILR.Commit();
+                    return true;
                 }
             }
         }
@@ -172,7 +210,8 @@ namespace EvenTech.DAL
             return set_704ILR;
         }
 
-        // Reemplaza el set de permisos del perfil dentro de una transaccion.
+        // Reemplaza el set de permisos del perfil dentro de una transaccion (serializada
+        // con las demas grabaciones de la gestion de perfiles).
         public static void SetPermisos_704ILR(int perfilId_704ILR, IEnumerable<int> permisoIds_704ILR)
         {
             using (var cn_704ILR = new DAL_DB_Connection_704ILR())
@@ -180,6 +219,7 @@ namespace EvenTech.DAL
                 var conn_704ILR = cn_704ILR.OpenConnection_704ILR();
                 using (var tx_704ILR = conn_704ILR.BeginTransaction())
                 {
+                    TomarBloqueoGestion_704ILR(conn_704ILR, tx_704ILR);
                     using (var del_704ILR = new SqlCommand("DELETE FROM dbo.PerfilPermiso WHERE PerfilId = @p", conn_704ILR, tx_704ILR))
                     {
                         del_704ILR.Parameters.Add("@p", SqlDbType.Int).Value = perfilId_704ILR;

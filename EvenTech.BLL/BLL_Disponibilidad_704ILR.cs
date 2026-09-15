@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using EvenTech.BE;
 using EvenTech.DAL;
@@ -16,15 +17,25 @@ namespace EvenTech.BLL
         // Hasta cuantos dias hacia adelante se busca una fecha alternativa.
         public const int HorizontePropuestasDias_704ILR = 60;
 
+        // Ultimo dia que admiten los calendarios de la aplicacion (el tope del
+        // selector de fechas de Windows). Una propuesta posterior no podria
+        // cargarse en la ficha de la reserva, asi que no se ofrece.
+        private static readonly DateTime FechaMaximaPropuesta_704ILR = new DateTime(9998, 12, 31);
+
         public static List<BE_DisponibilidadSalon_704ILR> Consultar_704ILR(DateTime fecha_704ILR, int capacidadRequerida_704ILR)
         {
             fecha_704ILR = fecha_704ILR.Date;
             if (fecha_704ILR < DateTime.Today) fecha_704ILR = DateTime.Today;
             if (capacidadRequerida_704ILR < 0) capacidadRequerida_704ILR = 0;
 
+            // Fin del horizonte de busqueda, sin desbordar DateTime cerca de su maximo.
+            DateTime hasta_704ILR = fecha_704ILR <= DateTime.MaxValue.Date.AddDays(-HorizontePropuestasDias_704ILR)
+                ? fecha_704ILR.AddDays(HorizontePropuestasDias_704ILR)
+                : DateTime.MaxValue.Date;
+
             List<BE_Salon_704ILR> salones_704ILR = DAL_Salon_704ILR.GetAll_704ILR();
             Dictionary<int, HashSet<DateTime>> ocupadas_704ILR =
-                DAL_Reserva_704ILR.FechasConfirmadasPorSalon_704ILR(fecha_704ILR, fecha_704ILR.AddDays(HorizontePropuestasDias_704ILR));
+                DAL_Reserva_704ILR.FechasConfirmadasPorSalon_704ILR(fecha_704ILR, hasta_704ILR);
 
             var resultado_704ILR = new List<BE_DisponibilidadSalon_704ILR>();
             foreach (var salon_704ILR in salones_704ILR)
@@ -49,6 +60,9 @@ namespace EvenTech.BLL
                 {
                     for (int i_704ILR = 1; i_704ILR <= HorizontePropuestasDias_704ILR; i_704ILR++)
                     {
+                        // Pasado el ultimo dia del calendario no hay propuesta utilizable
+                        // (se compara sin sumar dias, para no desbordar DateTime).
+                        if (fecha_704ILR > FechaMaximaPropuesta_704ILR.AddDays(-i_704ILR)) break;
                         DateTime candidata_704ILR = fecha_704ILR.AddDays(i_704ILR);
                         if (!fechasSalon_704ILR.Contains(candidata_704ILR))
                         {
@@ -76,9 +90,14 @@ namespace EvenTech.BLL
             // (CUN001, postcondicion). Se asienta aca, en la capa de negocio, como
             // el resto de las operaciones del proceso: asi vale para cualquier
             // llamador y no solo para el dialogo.
+            // La fecha del detalle se escribe con la cultura invariante (calendario
+            // gregoriano), igual que el historial de cambios: con la configuracion
+            // regional de la estacion salia en otro calendario (2569 en th-TH, 1448 en
+            // ar-SA) y, con un calendario que no admite la fecha consultada (UmAlQura
+            // llega hasta 2077), la consulta entera lanzaba antes de devolver resultados.
             int disponibles_704ILR = ordenado_704ILR.Count(d_704ILR => d_704ILR.Disponible_704ILR);
             BLL_Bitacora_704ILR.Registrar_704ILR("Reservas", "Disponibilidad consultada", CriticidadBitacora_704ILR.Info,
-                "Fecha " + fecha_704ILR.ToString("yyyy-MM-dd") + " | Invitados " + capacidadRequerida_704ILR +
+                "Fecha " + fecha_704ILR.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + " | Invitados " + capacidadRequerida_704ILR +
                 " | Disponibles: " + disponibles_704ILR + "/" + ordenado_704ILR.Count);
 
             return ordenado_704ILR;

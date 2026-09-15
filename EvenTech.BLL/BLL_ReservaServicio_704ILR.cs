@@ -14,13 +14,22 @@ namespace EvenTech.BLL
         public static List<BE_ReservaServicio_704ILR> GetByReserva_704ILR(int reservaId_704ILR) =>
             DAL_ReservaServicio_704ILR.GetByReserva_704ILR(reservaId_704ILR);
 
-        // Reemplaza las lineas de una reserva sin tocar su cabecera. Las lineas se
-        // validan igual que en el alta/modificacion de la reserva.
-        public static void Guardar_704ILR(int reservaId_704ILR, IEnumerable<BE_ReservaServicio_704ILR> items_704ILR)
+        // Reemplaza las lineas de una reserva. No escribe por su cuenta: delega en la
+        // modificacion de la reserva con la cabecera guardada, que es la unica via de
+        // escritura de las lineas y aplica todas sus reglas en una transaccion (reserva
+        // cancelada = estado terminal, monto = suma de las lineas, RN-04, version,
+        // control de cambios, bitacora y digitos verificadores). Escribiendo directo en
+        // la capa de datos, las lineas cambiaban aun en una reserva cancelada, el monto
+        // quedaba distinto de la suma y no quedaba asiento.
+        // Una linea invalida sigue siendo un error del llamador (ArgumentException).
+        public static ReservaResult_704ILR Guardar_704ILR(int reservaId_704ILR, IEnumerable<BE_ReservaServicio_704ILR> items_704ILR)
         {
             if (!ValidarLineas_704ILR(items_704ILR))
                 throw new ArgumentException("Hay lineas con cantidad no positiva o precio negativo.", nameof(items_704ILR));
-            DAL_ReservaServicio_704ILR.ReplaceForReserva_704ILR(reservaId_704ILR, items_704ILR ?? new List<BE_ReservaServicio_704ILR>());
+            BE_Reserva_704ILR reserva_704ILR = BLL_Reserva_704ILR.GetById_704ILR(reservaId_704ILR);
+            if (reserva_704ILR == null) return ReservaResult_704ILR.NotFound_704ILR;
+            return BLL_Reserva_704ILR.Actualizar_704ILR(reserva_704ILR,
+                (items_704ILR ?? Enumerable.Empty<BE_ReservaServicio_704ILR>()).ToList());
         }
 
         // Total de una lista de servicios contratados (lo usa la UI y el alta de reserva).

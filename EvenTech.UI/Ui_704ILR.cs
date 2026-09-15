@@ -64,14 +64,34 @@ namespace EvenTech.UI
             cbo_704ILR.DrawMode = DrawMode.OwnerDrawFixed;
             cbo_704ILR.DrawItem += (s_704ILR, e_704ILR) =>
             {
-                e_704ILR.DrawBackground();
+                // Deshabilitado, el item se dibuja como el de un combo comun deshabilitado: sobre el fondo
+                // del control, con el texto en el gris del sistema y sin resaltado ni foco. Con el dibujo
+                // del estado normal se seguia viendo en negro, como editable, al lado de Cliente o Salon
+                // ya grises (la ficha de una reserva cancelada, incompleta o sin permiso de edicion).
+                bool habilitado_704ILR = cbo_704ILR.Enabled;
+                if (habilitado_704ILR)
+                    e_704ILR.DrawBackground();
+                else
+                    using (var fondo_704ILR = new SolidBrush(cbo_704ILR.BackColor))
+                        e_704ILR.Graphics.FillRectangle(fondo_704ILR, e_704ILR.Bounds);
                 if (e_704ILR.Index >= 0 && e_704ILR.Index < cbo_704ILR.Items.Count)
                 {
                     string txt_704ILR = textOf_704ILR(cbo_704ILR.Items[e_704ILR.Index]) ?? string.Empty;
-                    TextRenderer.DrawText(e_704ILR.Graphics, txt_704ILR, cbo_704ILR.Font, e_704ILR.Bounds, e_704ILR.ForeColor,
-                        TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+                    var flags_704ILR = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix;
+                    // Una traduccion que no entra en el item (por ejemplo, una editada desde la
+                    // gestion de idiomas) termina en puntos suspensivos en lugar de cortarse en
+                    // seco a mitad de palabra. Se decide midiendo el texto sin el margen derecho
+                    // que reserva TextRenderer: EndEllipsis a secas acortaba tambien textos que
+                    // hoy se ven completos ("Confirmada" en el Estado de la ficha de Reservas).
+                    var alto_704ILR = new Size(int.MaxValue, e_704ILR.Bounds.Height);
+                    int sinMargen_704ILR = TextRenderer.MeasureText(e_704ILR.Graphics, txt_704ILR, cbo_704ILR.Font, alto_704ILR, flags_704ILR | TextFormatFlags.NoPadding).Width;
+                    int conMargen_704ILR = TextRenderer.MeasureText(e_704ILR.Graphics, txt_704ILR, cbo_704ILR.Font, alto_704ILR, flags_704ILR).Width;
+                    if ((conMargen_704ILR - sinMargen_704ILR) / 2 + sinMargen_704ILR > e_704ILR.Bounds.Width)
+                        flags_704ILR |= TextFormatFlags.EndEllipsis;
+                    TextRenderer.DrawText(e_704ILR.Graphics, txt_704ILR, cbo_704ILR.Font, e_704ILR.Bounds,
+                        habilitado_704ILR ? e_704ILR.ForeColor : SystemColors.GrayText, flags_704ILR);
                 }
-                e_704ILR.DrawFocusRectangle();
+                if (habilitado_704ILR) e_704ILR.DrawFocusRectangle();
             };
         }
 
@@ -177,10 +197,24 @@ namespace EvenTech.UI
                 };
                 eye_704ILR.MouseEnter += (s_704ILR, e_704ILR) => eye_704ILR.ForeColor = Theme_704ILR.TextOnDark_704ILR;
                 eye_704ILR.MouseLeave += (s_704ILR, e_704ILR) => eye_704ILR.ForeColor = Theme_704ILR.TextLight_704ILR;
+                // Con la clave a la vista, el mismo ojo se dibuja tachado. La fuente de
+                // iconos de Windows 10 (Segoe MDL2 Assets) no trae un ojo tachado: el
+                // glifo que se usaba solo existe en la de Windows 11 y en Windows 10 se
+                // veia como un recuadro vacio. La tachadura escala con la fuente (DPI).
+                eye_704ILR.Paint += (s_704ILR, e_704ILR) =>
+                {
+                    if (theBox_704ILR.UseSystemPasswordChar) return;
+                    int cx_704ILR = eye_704ILR.ClientSize.Width / 2;
+                    int cy_704ILR = eye_704ILR.ClientSize.Height / 2;
+                    int d_704ILR = System.Math.Max(4, eye_704ILR.Font.Height * 2 / 5);
+                    e_704ILR.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    using (var pen_704ILR = new Pen(eye_704ILR.ForeColor, System.Math.Max(1.5F, eye_704ILR.Font.Height / 9F)))
+                        e_704ILR.Graphics.DrawLine(pen_704ILR, cx_704ILR - d_704ILR, cy_704ILR + d_704ILR, cx_704ILR + d_704ILR, cy_704ILR - d_704ILR);
+                };
                 eye_704ILR.Click += (s_704ILR, e_704ILR) =>
                 {
                     theBox_704ILR.UseSystemPasswordChar = !theBox_704ILR.UseSystemPasswordChar;
-                    eye_704ILR.Text = theBox_704ILR.UseSystemPasswordChar ? Theme_704ILR.IcoEye_704ILR : Theme_704ILR.IcoEyeOff_704ILR;
+                    eye_704ILR.Invalidate();
                 };
                 inputBox_704ILR.Controls.Add(eye_704ILR);
             }
@@ -189,6 +223,16 @@ namespace EvenTech.UI
             t_704ILR.Controls.Add(captionLabel_704ILR, 0, 0);
             t_704ILR.Controls.Add(inputBox_704ILR, 0, 1);
             return t_704ILR;
+        }
+
+        // Vuelve a ocultar la contrasena de un campo armado con DarkField (lo usa el
+        // login al volver de la ventana principal: el que ingresa despues no tiene que
+        // tipear su clave a la vista). El ojo se repinta segun el estado del campo.
+        public static void OcultarClave_704ILR(TextBox box_704ILR)
+        {
+            if (box_704ILR == null) return;
+            box_704ILR.UseSystemPasswordChar = true;
+            box_704ILR.Parent?.Invalidate(true);
         }
 
         // ---------- Selector de idioma compacto para barras oscuras ----------

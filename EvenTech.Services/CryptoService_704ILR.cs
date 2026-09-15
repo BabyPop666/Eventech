@@ -49,19 +49,15 @@ namespace EvenTech.Services
 
         public static string Desproteger_704ILR(string almacenado_704ILR)
         {
-            // Sin prefijo es un dato legado en texto plano: se devuelve tal cual.
+            // Sin la forma de un paquete AES-CBC (IV + al menos un bloque, multiplo de 16) no
+            // es descifrable: un dato legado en texto plano, un "ENC:" tipeado a mano o un
+            // dato truncado se devuelven tal cual, igual que un dato de otra maquina, para
+            // que una fila rota no voltee el listado completo.
             if (!EstaProtegido_704ILR(almacenado_704ILR)) return almacenado_704ILR;
 
             try
             {
                 byte[] paquete_704ILR = Convert.FromBase64String(almacenado_704ILR.Substring(Prefijo_704ILR.Length));
-
-                // Un paquete AES-CBC real es IV + al menos un bloque, multiplo de 16.
-                // Cualquier otra forma (un "ENC:" tipeado a mano, un dato truncado) no
-                // es descifrable: se devuelve tal cual, igual que un dato de otra
-                // maquina, para que una fila rota no voltee el listado completo.
-                if (paquete_704ILR.Length < IvBytes_704ILR * 2 || paquete_704ILR.Length % IvBytes_704ILR != 0)
-                    return almacenado_704ILR;
 
                 using (var aes_704ILR = Aes.Create())
                 {
@@ -101,8 +97,23 @@ namespace EvenTech.Services
             }
         }
 
-        public static bool EstaProtegido_704ILR(string valor_704ILR) =>
-            valor_704ILR != null && valor_704ILR.StartsWith(Prefijo_704ILR, StringComparison.Ordinal);
+        // "Ya cifrado" es SOLO la forma exacta que produce Proteger: prefijo, Base64
+        // canonico y un paquete de IV mas al menos un bloque, con largo multiplo de 16.
+        // Mirar solo el prefijo confundia un paquete que no se puede abrir (la base
+        // restaurada en otra PC) con un texto tipeado que empieza con "ENC:": ese texto
+        // salteaba la validacion del email y se guardaba sin cifrar.
+        public static bool EstaProtegido_704ILR(string valor_704ILR)
+        {
+            if (valor_704ILR == null || !valor_704ILR.StartsWith(Prefijo_704ILR, StringComparison.Ordinal)) return false;
+            string cuerpo_704ILR = valor_704ILR.Substring(Prefijo_704ILR.Length);
+            if (cuerpo_704ILR.Length == 0 || cuerpo_704ILR.Length % 4 != 0) return false;
+            byte[] paquete_704ILR;
+            try { paquete_704ILR = Convert.FromBase64String(cuerpo_704ILR); }
+            catch (FormatException) { return false; }
+            return paquete_704ILR.Length >= IvBytes_704ILR * 2
+                && paquete_704ILR.Length % IvBytes_704ILR == 0
+                && Convert.ToBase64String(paquete_704ILR) == cuerpo_704ILR;
+        }
 
         private static byte[] GetKey_704ILR()
         {
@@ -133,9 +144,9 @@ namespace EvenTech.Services
                     // el alta de un cliente muera con una excepcion cruda del framework.
                     throw new InvalidOperationException(
                         Texto_704ILR("CRYPTO_CLAVE_INVALIDA",
-                            "La clave de cifrado {0} no se puede leer: esta danada o fue creada en otra maquina. " +
-                            "Restaure el archivo original o eliminelo para generar una clave nueva " +
-                            "(los contactos ya cifrados quedaran ilegibles).", ruta_704ILR), ex_704ILR);
+                            "La clave de cifrado {0} no se puede leer: está dañada o fue creada en otra máquina. " +
+                            "Restaure el archivo original o elimínelo para generar una clave nueva " +
+                            "(los contactos ya cifrados quedarán ilegibles).", ruta_704ILR), ex_704ILR);
                 }
             }
 
@@ -159,12 +170,9 @@ namespace EvenTech.Services
 
         // Mensaje traducido con respaldo: si la clave no esta cargada (o el texto
         // editado esta mal formado) se usa el texto por defecto del codigo.
+        // Mismo criterio que Tr_704ILR.F_704ILR: una plantilla traducida que no formatea
+        // o que solo agrega relleno desmesurado cae al texto por defecto.
         private static string Texto_704ILR(string clave_704ILR, string defecto_704ILR, params object[] args_704ILR)
-        {
-            string plantilla_704ILR = GestorDeIdioma_704ILR.GetInstance_704ILR.Traducir_704ILR(clave_704ILR);
-            if (plantilla_704ILR == clave_704ILR) plantilla_704ILR = defecto_704ILR;
-            try { return string.Format(plantilla_704ILR, args_704ILR); }
-            catch (FormatException) { return string.Format(defecto_704ILR, args_704ILR); }
-        }
+            => GestorDeIdioma_704ILR.GetInstance_704ILR.Formatear_704ILR(clave_704ILR, defecto_704ILR, args_704ILR);
     }
 }
