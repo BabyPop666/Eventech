@@ -43,9 +43,17 @@ namespace EvenTech.DAL
         public static int InsertIdioma_704ILR(string codigo_704ILR, string nombre_704ILR)
         {
             using (var cn_704ILR = new DAL_DB_Connection_704ILR())
+                return InsertIdioma_704ILR(codigo_704ILR, nombre_704ILR, cn_704ILR.OpenConnection_704ILR(), null);
+        }
+
+        // Sobrecarga transaccional: no abre ni cierra nada, escribe donde le digan.
+        // Asi el idioma y la copia de sus leyendas quedan en una sola transaccion.
+        public static int InsertIdioma_704ILR(string codigo_704ILR, string nombre_704ILR,
+            SqlConnection conn_704ILR, SqlTransaction tx_704ILR)
+        {
             using (var cmd_704ILR = new SqlCommand(
                 "INSERT INTO dbo.Idiomas (Codigo, Nombre) OUTPUT INSERTED.Id VALUES (@c, @n)",
-                cn_704ILR.OpenConnection_704ILR()))
+                conn_704ILR, tx_704ILR))
             {
                 cmd_704ILR.Parameters.Add("@c", SqlDbType.NVarChar, 5).Value = codigo_704ILR;
                 cmd_704ILR.Parameters.Add("@n", SqlDbType.NVarChar, 50).Value = nombre_704ILR;
@@ -71,12 +79,20 @@ namespace EvenTech.DAL
         public static void UpsertTraduccion_704ILR(int idiomaId_704ILR, string clave_704ILR, string texto_704ILR)
         {
             using (var cn_704ILR = new DAL_DB_Connection_704ILR())
+                UpsertTraduccion_704ILR(idiomaId_704ILR, clave_704ILR, texto_704ILR, cn_704ILR.OpenConnection_704ILR(), null);
+        }
+
+        // Sobrecarga transaccional del upsert: un lote de traducciones se guarda
+        // entero o no se guarda.
+        public static void UpsertTraduccion_704ILR(int idiomaId_704ILR, string clave_704ILR, string texto_704ILR,
+            SqlConnection conn_704ILR, SqlTransaction tx_704ILR)
+        {
             using (var cmd_704ILR = new SqlCommand(
                 "IF EXISTS (SELECT 1 FROM dbo.Traducciones WHERE IdiomaId = @i AND Clave = @c) " +
                 "  UPDATE dbo.Traducciones SET Texto = @t WHERE IdiomaId = @i AND Clave = @c; " +
                 "ELSE " +
                 "  INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto) VALUES (@i, @c, @t);",
-                cn_704ILR.OpenConnection_704ILR()))
+                conn_704ILR, tx_704ILR))
             {
                 cmd_704ILR.Parameters.Add("@i", SqlDbType.Int).Value = idiomaId_704ILR;
                 cmd_704ILR.Parameters.Add("@c", SqlDbType.NVarChar, 60).Value = clave_704ILR;

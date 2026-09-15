@@ -749,6 +749,11 @@ try
     Esperar_704ILR("alta sin nombre", BLL_Cliente_704ILR.Crear_704ILR(sinNombre_704ILR, out _),
         ClienteResult_704ILR.NombreInvalido_704ILR);
 
+    // Un nombre formado solo por caracteres que no se ven tampoco es un nombre.
+    var invisible_704ILR = new EvenTech.BE.BE_Cliente_704ILR { Nombre_704ILR = "\u200B", Apellido_704ILR = "Invisible" };
+    Esperar_704ILR("alta con nombre de caracteres invisibles", BLL_Cliente_704ILR.Crear_704ILR(invisible_704ILR, out _),
+        ClienteResult_704ILR.NombreInvalido_704ILR);
+
     var mailMalo_704ILR = new EvenTech.BE.BE_Cliente_704ILR
     { Nombre_704ILR = "Mail", Apellido_704ILR = "Invalido", Email_704ILR = "sin-arroba" };
     Esperar_704ILR("alta con email invalido", BLL_Cliente_704ILR.Crear_704ILR(mailMalo_704ILR, out _),
@@ -1661,6 +1666,24 @@ try
         sinDato_704ILR.Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.CONFIRMADA;
         Esperar_704ILR("confirmar sin invitados", BLL_Reserva_704ILR.Actualizar_704ILR(sinDato_704ILR),
             ReservaResult_704ILR.InvalidInvitados_704ILR);
+
+        // Topes de la ficha: la BLL no registra lo que la ficha despues no puede mostrar ni corregir
+        // (mas invitados que el maximo del campo, o una fecha posterior al ultimo dia del selector).
+        var sobreTope_704ILR = new EvenTech.BE.BE_Reserva_704ILR
+        {
+            ClienteId_704ILR = cliC_704ILR[0].Id_704ILR,
+            SalonId_704ILR = chico_704ILR.Id_704ILR,
+            FechaEvento_704ILR = DateTime.Today.AddDays(5000 + desfasaje_704ILR),
+            Estado_704ILR = EvenTech.BE.EstadoReserva_704ILR.COTIZACION,
+            CantidadInvitados_704ILR = BLL_Reserva_704ILR.InvitadosMaximo_704ILR + 1,
+            Monto_704ILR = 1500m
+        };
+        Esperar_704ILR("cotizar con mas invitados que el maximo del campo",
+            BLL_Reserva_704ILR.Crear_704ILR(sobreTope_704ILR, out _), ReservaResult_704ILR.InvalidInvitados_704ILR);
+        sobreTope_704ILR.CantidadInvitados_704ILR = exceso_704ILR;
+        sobreTope_704ILR.FechaEvento_704ILR = new DateTime(9998, 12, 31, 12, 0, 0);
+        Esperar_704ILR("cotizar con fecha posterior al ultimo dia del selector",
+            BLL_Reserva_704ILR.Crear_704ILR(sobreTope_704ILR, out _), ReservaResult_704ILR.InvalidFecha_704ILR);
 
         Adelanto_704ILR(idC_704ILR, 100m);   // RN-07
         var ajustada_704ILR = BLL_Reserva_704ILR.GetById_704ILR(idC_704ILR);

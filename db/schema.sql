@@ -20,17 +20,24 @@
 -- Los indices filtrados (UX_Clientes_Dni, UX_Reservas_SalonFecha_Confirmada)
 -- exigen QUOTED_IDENTIFIER ON. El sqlcmd que instala SQL Server arranca con
 -- OFF salvo que se pase -I, asi que se fija aca para no depender del cliente.
+-- NOEXEC OFF va primero: si en la misma sesion (una ventana de SSMS) una corrida
+-- anterior cayo en la guarda de abajo, la sesion quedo con NOEXEC ON y todo lo
+-- que sigue se compilaria sin ejecutarse, guarda incluida: volver a ejecutar
+-- terminaria "sin errores" sin crear nada. Asi la guarda se evalua de nuevo.
+SET NOEXEC OFF;
 SET QUOTED_IDENTIFIER ON;
 SET ANSI_NULLS ON;
 GO
 
 -- Guarda: el script no debe correr sobre una base del sistema (pasa al
 -- olvidar -d). Con sqlcmd -b el error corta la ejecucion; sin -b, NOEXEC deja
--- el resto del script sin ejecutar.
+-- el resto del script sin ejecutar. El ultimo lote del script vuelve a SET
+-- NOEXEC OFF, asi que en SSMS alcanza con elegir la base en el combo y volver
+-- a ejecutar (verificado en una misma sesion: la segunda corrida crea el esquema).
 IF DB_NAME() IN (N'master', N'tempdb', N'model', N'msdb')
 BEGIN
     DECLARE @baseActual SYSNAME = DB_NAME();
-    RAISERROR(N'schema.sql: la base actual es "%s". Ejecutar con -d <base> sobre la base de EvenTech (ver db/README.md).', 16, 1, @baseActual);
+    RAISERROR(N'schema.sql: la base actual es "%s". Ejecutar con -d <base> sobre la base de EvenTech; en SSMS, elegir esa base en el combo y volver a ejecutar (ver db/README.md).', 16, 1, @baseActual);
     SET NOEXEC ON;
 END
 GO
@@ -343,7 +350,7 @@ BEGIN
         CONSTRAINT UQ_MetodosPago_Nombre UNIQUE (Nombre)
     );
     INSERT INTO dbo.MetodosPago (Nombre) VALUES
-        (N'Efectivo'), (N'Tarjeta de credito'), (N'Tarjeta de debito'), (N'Transferencia'), (N'MercadoPago');
+        (N'Efectivo'), (N'Tarjeta de crédito'), (N'Tarjeta de débito'), (N'Transferencia'), (N'MercadoPago');
 END
 GO
 
@@ -719,7 +726,7 @@ GO
         -- Columnas compartidas
         (N'ES', N'COL_ID',         N'Id'),        (N'EN', N'COL_ID',         N'Id'),        (N'PT', N'COL_ID',         N'Id'),
         (N'ES', N'COL_CLIENTE',    N'Cliente'),   (N'EN', N'COL_CLIENTE',    N'Client'),    (N'PT', N'COL_CLIENTE',    N'Cliente'),
-        (N'ES', N'COL_SALON', N'Salón'),     (N'EN', N'COL_SALON',      N'Hall'),      (N'PT', N'COL_SALON', N'Salão'),
+        (N'ES', N'COL_SALON', N'Salón'),     (N'EN', N'COL_SALON',      N'Venue'),      (N'PT', N'COL_SALON', N'Salão'),
         (N'ES', N'COL_FECHA',      N'Fecha'),     (N'EN', N'COL_FECHA',      N'Date'),      (N'PT', N'COL_FECHA',      N'Data'),
         (N'ES', N'COL_ESTADO',     N'Estado'),    (N'EN', N'COL_ESTADO',     N'Status'),    (N'PT', N'COL_ESTADO',     N'Estado'),
         (N'ES', N'COL_MONTO',      N'Monto'),     (N'EN', N'COL_MONTO',      N'Amount'),    (N'PT', N'COL_MONTO',      N'Valor'),
@@ -796,7 +803,7 @@ GO
         -- Mensajes de reservas
         (N'ES', N'MSG_MONTO_INVALIDO', N'El monto no es un número válido.'), (N'EN', N'MSG_MONTO_INVALIDO', N'The amount is not a valid number.'), (N'PT', N'MSG_MONTO_INVALIDO', N'O valor não é um número válido.'),
         (N'ES', N'MSG_RES_CLIENTE', N'Seleccione un cliente válido.'), (N'EN', N'MSG_RES_CLIENTE', N'Select a valid client.'), (N'PT', N'MSG_RES_CLIENTE', N'Selecione um cliente válido.'),
-        (N'ES', N'MSG_RES_SALON', N'Seleccione un salón válido.'),(N'EN', N'MSG_RES_SALON',  N'Select a valid hall.'),     (N'PT', N'MSG_RES_SALON', N'Selecione um salão válido.'),
+        (N'ES', N'MSG_RES_SALON', N'Seleccione un salón válido.'),(N'EN', N'MSG_RES_SALON',  N'Select a valid venue.'),     (N'PT', N'MSG_RES_SALON', N'Selecione um salão válido.'),
         (N'ES', N'MSG_RES_FECHA',  N'La fecha del evento no puede ser anterior a hoy.'), (N'EN', N'MSG_RES_FECHA', N'The event date cannot be before today.'), (N'PT', N'MSG_RES_FECHA', N'A data do evento não pode ser anterior a hoje.'),
         (N'ES', N'MSG_RES_MONTO',  N'El monto no puede ser negativo.'), (N'EN', N'MSG_RES_MONTO', N'The amount cannot be negative.'), (N'PT', N'MSG_RES_MONTO', N'O valor não pode ser negativo.'),
         (N'ES', N'MSG_RES_NOTFOUND', N'La reserva ya no existe.'),(N'EN', N'MSG_RES_NOTFOUND', N'The reservation no longer exists.'), (N'PT', N'MSG_RES_NOTFOUND', N'A reserva não existe mais.'),
@@ -806,7 +813,6 @@ GO
         (N'ES', N'LOGIN_TAGLINE', N'Gestión de eventos y reservas'), (N'EN', N'LOGIN_TAGLINE',  N'Event and booking management'), (N'PT', N'LOGIN_TAGLINE', N'Gestão de eventos e reservas'),
         (N'ES', N'LOGIN_REMEMBER', N'Recordar cuenta'),                (N'EN', N'LOGIN_REMEMBER', N'Remember me'),                   (N'PT', N'LOGIN_REMEMBER', N'Lembrar conta'),
         (N'ES', N'LOGIN_COMPLETAR', N'Completar usuario y contraseña.'), (N'EN', N'LOGIN_COMPLETAR', N'Enter username and password.'), (N'PT', N'LOGIN_COMPLETAR', N'Preencha usuário e senha.'),
-        (N'ES', N'LOGIN_ERR_CONEXION', N'Error de conexión:'),         (N'EN', N'LOGIN_ERR_CONEXION', N'Connection error:'),         (N'PT', N'LOGIN_ERR_CONEXION', N'Erro de conexão:'),
         -- Un solo mensaje para usuario inexistente y clave incorrecta: no revela cual de los dos fallo.
         (N'ES', N'LOGIN_ERR_CREDENCIALES', N'Usuario o contraseña incorrectos.'), (N'EN', N'LOGIN_ERR_CREDENCIALES', N'Incorrect username or password.'), (N'PT', N'LOGIN_ERR_CREDENCIALES', N'Usuário ou senha incorretos.'),
         -- Crear cuenta (mensajes)
@@ -817,7 +823,6 @@ GO
         (N'ES', N'CC_MSG_USER_INVALIDO', N'Usuario inválido (3-50, letras/números/._-).'), (N'EN', N'CC_MSG_USER_INVALIDO', N'Invalid username (3-50, letters/digits/._-).'), (N'PT', N'CC_MSG_USER_INVALIDO', N'Usuário inválido (3-50, letras/números/._-).'),
         (N'ES', N'CC_MSG_USER_EXISTE', N'Ese usuario ya existe.'),      (N'EN', N'CC_MSG_USER_EXISTE', N'That username already exists.'), (N'PT', N'CC_MSG_USER_EXISTE', N'Esse usuário já existe.'),
         (N'ES', N'CC_MSG_PASS_INVALIDA', N'Contraseña inválida.'),      (N'EN', N'CC_MSG_PASS_INVALIDA', N'Invalid password.'),       (N'PT', N'CC_MSG_PASS_INVALIDA', N'Senha inválida.'),
-        (N'ES', N'CC_MSG_ERROR', N'Error:'),                           (N'EN', N'CC_MSG_ERROR', N'Error:'),                          (N'PT', N'CC_MSG_ERROR', N'Erro:'),
         -- Varios
         (N'ES', N'HIST_VACIO', N'Sin cambios registrados.'),           (N'EN', N'HIST_VACIO', N'No changes recorded.'),              (N'PT', N'HIST_VACIO', N'Sem alterações registradas.'),
         (N'ES', N'BTN_CANCELAR', N'Cancelar'),                         (N'EN', N'BTN_CANCELAR', N'Cancel'),                          (N'PT', N'BTN_CANCELAR', N'Cancelar'),
@@ -855,14 +860,14 @@ GO
         (N'ES', N'CLI_COUNT', N'clientes'), (N'EN', N'CLI_COUNT', N'clients'), (N'PT', N'CLI_COUNT', N'clientes'),
         (N'ES', N'COL_NOMBRE', N'Nombre'), (N'EN', N'COL_NOMBRE', N'Name'), (N'PT', N'COL_NOMBRE', N'Nome'),
         (N'ES', N'COL_APELLIDO', N'Apellido'), (N'EN', N'COL_APELLIDO', N'Last name'), (N'PT', N'COL_APELLIDO', N'Sobrenome'),
-        (N'ES', N'COL_DNI', N'DNI'), (N'EN', N'COL_DNI', N'ID'), (N'PT', N'COL_DNI', N'Documento'),
+        (N'ES', N'COL_DNI', N'DNI'), (N'EN', N'COL_DNI', N'ID'), (N'PT', N'COL_DNI', N'DNI'),
         (N'ES', N'COL_EMAIL', N'Email'), (N'EN', N'COL_EMAIL', N'Email'), (N'PT', N'COL_EMAIL', N'Email'),
         (N'ES', N'COL_TELEFONO', N'Teléfono'), (N'EN', N'COL_TELEFONO', N'Phone'), (N'PT', N'COL_TELEFONO', N'Telefone'),
         (N'ES', N'MSG_CLI_NOMBRE', N'Ingrese el nombre del cliente.'), (N'EN', N'MSG_CLI_NOMBRE', N'Enter the client name.'), (N'PT', N'MSG_CLI_NOMBRE', N'Informe o nome do cliente.'),
         (N'ES', N'MSG_CLI_DNI_DUP', N'Ya existe un cliente con ese DNI.'), (N'EN', N'MSG_CLI_DNI_DUP', N'A client with that ID already exists.'), (N'PT', N'MSG_CLI_DNI_DUP', N'Já existe um cliente com esse documento.'),
         (N'ES', N'MSG_CLI_EMAIL', N'El email no es válido.'), (N'EN', N'MSG_CLI_EMAIL', N'The email is not valid.'), (N'PT', N'MSG_CLI_EMAIL', N'O email não é válido.'),
         (N'ES', N'MSG_CLI_OK', N'Cliente guardado.'), (N'EN', N'MSG_CLI_OK', N'Client saved.'), (N'PT', N'MSG_CLI_OK', N'Cliente salvo.'),
-        (N'ES', N'MSG_RES_SALON_OCUPADO', N'El salón ya está reservado para esa fecha.'), (N'EN', N'MSG_RES_SALON_OCUPADO', N'The hall is already booked for that date.'), (N'PT', N'MSG_RES_SALON_OCUPADO', N'O salão já está reservado para essa data.'),
+        (N'ES', N'MSG_RES_SALON_OCUPADO', N'El salón ya está reservado para esa fecha.'), (N'EN', N'MSG_RES_SALON_OCUPADO', N'The venue is already booked for that date.'), (N'PT', N'MSG_RES_SALON_OCUPADO', N'O salão já está reservado para essa data.'),
         -- Servicios (Proceso 1)
         (N'ES', N'MENU_SERVICIOS', N'Servicios'), (N'EN', N'MENU_SERVICIOS', N'Services'), (N'PT', N'MENU_SERVICIOS', N'Serviços'),
         (N'ES', N'SRV_TITULO', N'Gestión de Servicios'), (N'EN', N'SRV_TITULO', N'Services Management'), (N'PT', N'SRV_TITULO', N'Gestão de Serviços'),
@@ -933,7 +938,7 @@ GO
         -- Pulido i18n: acciones de auditoria de login (combo + grilla)
         (N'ES', N'ACC_LOGIN_OK', N'Ingreso correcto'), (N'EN', N'ACC_LOGIN_OK', N'Login OK'), (N'PT', N'ACC_LOGIN_OK', N'Login OK'),
         (N'ES', N'ACC_LOGIN_FAIL', N'Ingreso fallido'), (N'EN', N'ACC_LOGIN_FAIL', N'Login failed'), (N'PT', N'ACC_LOGIN_FAIL', N'Falha no login'),
-        (N'ES', N'ACC_LOGOUT', N'Cierre de sesión'), (N'EN', N'ACC_LOGOUT', N'Logout'), (N'PT', N'ACC_LOGOUT', N'Encerramento de sessão'),
+        (N'ES', N'ACC_LOGOUT', N'Cierre de sesión'), (N'EN', N'ACC_LOGOUT', N'Logout'), (N'PT', N'ACC_LOGOUT', N'Fim de sessão'),
         -- Pulido i18n: mensajes de error genericos
         (N'ES', N'MSG_ERROR', N'Error'), (N'EN', N'MSG_ERROR', N'Error'), (N'PT', N'MSG_ERROR', N'Erro'),
         (N'ES', N'MSG_ERROR_PREFIJO', N'Error: '), (N'EN', N'MSG_ERROR_PREFIJO', N'Error: '), (N'PT', N'MSG_ERROR_PREFIJO', N'Erro: '),
@@ -1112,7 +1117,6 @@ GO
         -- Reserva cancelada (estado terminal)
         (N'ES', N'MSG_RES_VENCIDA', N'La operación venció: renovala antes de cambiar su estado.'), (N'EN', N'MSG_RES_VENCIDA', N'The operation expired: renew it before changing its status.'), (N'PT', N'MSG_RES_VENCIDA', N'A operação venceu: renove-a antes de mudar seu estado.'),
         (N'ES', N'COL_VENCE', N'Vence'), (N'EN', N'COL_VENCE', N'Expires'), (N'PT', N'COL_VENCE', N'Vence'),
-        (N'ES', N'BTN_RENOVAR', N'Renovar'), (N'EN', N'BTN_RENOVAR', N'Renew'), (N'PT', N'BTN_RENOVAR', N'Renovar'),
         (N'ES', N'MSG_RES_RENOVADA', N'Vigencia renovada.'), (N'EN', N'MSG_RES_RENOVADA', N'Validity renewed.'), (N'PT', N'MSG_RES_RENOVADA', N'Vigência renovada.'),
         (N'ES', N'MSG_RES_SIN_PLAZO', N'La operación no tiene un plazo de vigencia que renovar.'), (N'EN', N'MSG_RES_SIN_PLAZO', N'The operation has no validity period to renew.'), (N'PT', N'MSG_RES_SIN_PLAZO', N'A operação não possui prazo de validade para renovar.'),
         (N'ES', N'MSG_RES_CANCELAR', N'¿Cancelar la reserva #{0}?'), (N'EN', N'MSG_RES_CANCELAR', N'Cancel reservation #{0}?'), (N'PT', N'MSG_RES_CANCELAR', N'Cancelar a reserva #{0}?'),
@@ -1168,64 +1172,6 @@ WHERE p.Nombre = N'Administrador'
                   WHERE pp.PerfilId = p.Id AND pp.PermisoId = pe.Id);
 GO
 
--- ===========================================================================
--- Perfiles operativos (roles de G04) sobre el Composite de dos niveles:
---   Vendedor   : opera la venta (disponibilidad, clientes, reservas, cobros).
---   Supervisor : incluye a Vendedor y suma auditoria y anulacion de pagos.
---   Gerencial  : incluye a Supervisor y suma el recalculo de la linea base.
---   Restaurar versiones queda reservado al Administrador (RN-05 de la Carpeta).
--- Idempotente y guardado por nombre: el perfil, cada permiso directo y cada
--- inclusion se agregan solo si faltan; lo que un administrador haya cambiado
--- desde Gestion de Perfiles se conserva. Administrador no se toca (arriba).
--- Va aca porque todos los permisos hoja ya existen en este punto.
--- ===========================================================================
-;WITH Perf(Nombre, Descripcion) AS (
-    SELECT * FROM (VALUES
-        (N'Vendedor',   N'Atiende la venta: disponibilidad, clientes, cotizaciones, reservas y cobros'),
-        (N'Supervisor', N'Incluye al perfil Vendedor y suma la consulta de auditoría y la anulación de pagos'),
-        (N'Gerencial',  N'Incluye al perfil Supervisor y suma la corrección administrativa de la línea base de integridad')
-    ) AS v(Nombre, Descripcion)
-)
-MERGE dbo.Perfiles AS p
-USING Perf AS s ON p.Nombre = s.Nombre
-WHEN NOT MATCHED THEN INSERT (Nombre, Descripcion) VALUES (s.Nombre, s.Descripcion)
-WHEN MATCHED AND p.Descripcion IS NULL THEN UPDATE SET Descripcion = s.Descripcion;
-
-;WITH Asig(Perfil, Clave) AS (
-    SELECT * FROM (VALUES
-        (N'Vendedor',   N'DISPONIBILIDAD_CONSULTAR'),
-        (N'Vendedor',   N'CLIENTES_GESTION'),
-        (N'Vendedor',   N'RESERVA_CREAR'),
-        (N'Vendedor',   N'RESERVA_EDITAR'),
-        (N'Vendedor',   N'RESERVA_HISTORIAL'),
-        (N'Vendedor',   N'PAGOS_REGISTRAR'),
-        (N'Supervisor', N'BITACORA_VER'),
-        (N'Supervisor', N'AUDIT_LOGIN_VER'),
-        (N'Supervisor', N'PAGOS_ANULAR'),
-        (N'Gerencial',  N'INTEGRIDAD_RECALC')
-    ) AS v(Perfil, Clave)
-)
-INSERT INTO dbo.PerfilPermiso (PerfilId, PermisoId)
-SELECT p.Id, pe.Id
-FROM Asig a
-JOIN dbo.Perfiles p  ON p.Nombre = a.Perfil
-JOIN dbo.Permisos pe ON pe.Clave = a.Clave
-WHERE NOT EXISTS (SELECT 1 FROM dbo.PerfilPermiso pp
-                  WHERE pp.PerfilId = p.Id AND pp.PermisoId = pe.Id);
-
--- Composite: Supervisor contiene a Vendedor; Gerencial contiene a Supervisor
--- (los ciclos los valida BLL_Perfil; estas dos filas no forman ninguno).
-;WITH Inc(Padre, Hijo) AS (
-    SELECT * FROM (VALUES (N'Supervisor', N'Vendedor'), (N'Gerencial', N'Supervisor')) AS v(Padre, Hijo)
-)
-INSERT INTO dbo.PerfilIncluido (PerfilPadreId, PerfilHijoId)
-SELECT pa.Id, hi.Id
-FROM Inc i
-JOIN dbo.Perfiles pa ON pa.Nombre = i.Padre
-JOIN dbo.Perfiles hi ON hi.Nombre = i.Hijo
-WHERE NOT EXISTS (SELECT 1 FROM dbo.PerfilIncluido x
-                  WHERE x.PerfilPadreId = pa.Id AND x.PerfilHijoId = hi.Id);
-GO
 
 ;WITH Txt(Codigo, Clave, Texto) AS (
     SELECT * FROM (VALUES
@@ -1412,7 +1358,6 @@ GO
         (N'ES', N'MSG_RES_SALON', N'Seleccione un salon valido.', N'Seleccione un salón válido.'),
         (N'ES', N'LOGIN_TAGLINE', N'Gestion de eventos y reservas', N'Gestión de eventos y reservas'),
         (N'ES', N'LOGIN_COMPLETAR', N'Completar usuario y contrasena.', N'Completar usuario y contraseña.'),
-        (N'ES', N'LOGIN_ERR_CONEXION', N'Error de conexion:', N'Error de conexión:'),
         (N'ES', N'CC_MSG_NO_COINCIDEN', N'Las contrasenas no coinciden.', N'Las contraseñas no coinciden.'),
         (N'ES', N'CC_MSG_PASS_CORTA', N'La contrasena debe tener al menos 4 caracteres.', N'La contraseña debe tener al menos 4 caracteres.'),
         (N'ES', N'CC_MSG_OK', N'Usuario creado. Ya podes iniciar sesion.', N'Usuario creado. Ya podés iniciar sesión.'),
@@ -1502,7 +1447,6 @@ GO
         (N'PT', N'MSG_RES_SELECCIONE', N'Selecione uma reserva existente para ver seu historico.', N'Selecione uma reserva existente para ver seu histórico.'),
         (N'PT', N'LOGIN_TAGLINE', N'Gestao de eventos e reservas', N'Gestão de eventos e reservas'),
         (N'PT', N'LOGIN_COMPLETAR', N'Preencha usuario e senha.', N'Preencha usuário e senha.'),
-        (N'PT', N'LOGIN_ERR_CONEXION', N'Erro de conexao:', N'Erro de conexão:'),
         (N'PT', N'CC_MSG_NO_COINCIDEN', N'As senhas nao coincidem.', N'As senhas não coincidem.'),
         (N'PT', N'CC_MSG_OK', N'Conta criada. Voce ja pode entrar.', N'Conta criada. Você já pode entrar.'),
         (N'PT', N'CC_MSG_USER_INVALIDO', N'Usuario invalido (3-50, letras/numeros/._-).', N'Usuário inválido (3-50, letras/números/._-).'),
@@ -1546,7 +1490,7 @@ GO
         (N'PT', N'MSG_EMAIL_SIN_CORREO', N'O cliente nao tem email cadastrado.', N'O cliente não tem email cadastrado.'),
         (N'PT', N'EST_COTIZACION', N'Orcamento', N'Orçamento'),
         (N'PT', N'CRIT_INFO', N'Informacao', N'Informação'),
-        (N'PT', N'ACC_LOGOUT', N'Encerramento de sessao', N'Encerramento de sessão'),
+        (N'PT', N'ACC_LOGOUT', N'Encerramento de sessao', N'Fim de sessão'),
         (N'PT', N'AUD_RECALC_CONFIRMA', N'Recalcular os digitos verificadores de todas as reservas? Usar apos corrigir dados alterados: a nova linha de base passa a ser a referencia de integridade.', N'Recalcular os dígitos verificadores de todas as reservas? Usar após corrigir dados alterados: a nova linha de base passa a ser a referência de integridade.'),
         (N'PT', N'AUD_RECALC_OK', N'Linha de base recalculada ({0} reservas). Verificacao posterior: {1} inconsistencia(s).', N'Linha de base recalculada ({0} reservas). Verificação posterior: {1} inconsistência(s).'),
         (N'PT', N'PERF_INCLUIDOS', N'Perfis incluidos', N'Perfis incluídos'),
@@ -1602,7 +1546,8 @@ GO
 -- traducciones no ofrezca textos que nunca se muestran.
 DELETE FROM dbo.Traducciones
  WHERE Clave IN (N'MAIN_USER', N'BTN_REFRESCAR', N'MSG_PERF_CREADO', N'MSG_CLI_SELECCIONE',
-                 N'MSG_RES_SERVICIOS_ERROR', N'LOGIN_ERR_USUARIO', N'LOGIN_ERR_PASS');
+                 N'MSG_RES_SERVICIOS_ERROR', N'LOGIN_ERR_USUARIO', N'LOGIN_ERR_PASS',
+                 N'LOGIN_ERR_CONEXION', N'CC_MSG_ERROR');
 GO
 
 -- ===========================================================================
@@ -1660,4 +1605,1383 @@ JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
 WHERE t.Clave IN (N'MSG_PERF_OK', N'MSG_PERF_ASIG_OK')
   AND t.Texto IN (N'Permisos guardados.', N'Permissions saved.', N'Permissões salvas.', N'Permissoes salvas.',
                   N'Asignaciones guardadas.', N'Assignments saved.', N'Atribuições salvas.', N'Atribuicoes salvas.');
+GO
+
+-- ===========================================================================
+-- QA-12/09/2026 F01
+-- ===========================================================================
+-- ===========================================================================
+-- schema_add.sql - paquete F01 (perfiles, usuarios y permisos).
+-- Idempotente. Corre sobre la base que indica -d, despues de db/schema.sql
+-- (necesita las tablas, los permisos y los perfiles ya sembrados).
+--   1. Perfiles operativos: la composicion de fabrica se siembra solo en el
+--      perfil que se da de alta (BD-04). REEMPLAZA el bloque "Perfiles
+--      operativos" de schema.sql, que hay que quitar: mientras siga ahi, cada
+--      corrida repone lo que el administrador quito.
+--   2. Cuenta inicial sin perfil y sin nadie que gestione perfiles (BD-13).
+--   3. Traducciones nuevas: avisos de Gestion de Perfiles y nombres del arbol de
+--      permisos (PERM_<Clave> para las hojas, PERMG_<NOMBRE> para los grupos).
+-- Guardado en UTF-8 con BOM (tildes y enie para sqlcmd).
+-- ===========================================================================
+-- ===========================================================================
+-- 1. Perfiles operativos (roles de G04) sobre el Composite de dos niveles:
+--   Vendedor   : opera la venta (disponibilidad, clientes, reservas, cobros).
+--   Supervisor : incluye a Vendedor y suma auditoria y anulacion de pagos.
+--   Gerencial  : incluye a Supervisor y suma el recalculo de la linea base.
+--   Restaurar versiones queda reservado al Administrador (RN-05 de la Carpeta).
+-- Idempotente y guardado por nombre: el perfil que falte se da de alta y SOLO ese
+-- perfil recibe su composicion de fabrica (permisos directos e inclusion). Un
+-- perfil que ya existe no se toca, asi que lo que un administrador le haya
+-- quitado o agregado desde Gestion de Perfiles se conserva al volver a correr el
+-- script (antes cada corrida reponia todo par perfil/permiso faltante y devolvia
+-- lo revocado). Administrador no se toca aca: tiene su bloque de acceso total.
+-- Alta y composicion van en una transaccion: un perfil no queda creado sin su
+-- composicion si la corrida se corta en el medio.
+-- ===========================================================================
+BEGIN TRY
+    BEGIN TRANSACTION;
+
+    DECLARE @PerfilesSembrados TABLE (
+        Accion NVARCHAR(10) COLLATE DATABASE_DEFAULT NOT NULL,
+        Id     INT NOT NULL,
+        Nombre NVARCHAR(80) COLLATE DATABASE_DEFAULT NOT NULL
+    );
+
+    ;WITH Perf(Nombre, Descripcion) AS (
+        SELECT * FROM (VALUES
+            (N'Vendedor',   N'Atiende la venta: disponibilidad, clientes, cotizaciones, reservas y cobros'),
+            (N'Supervisor', N'Incluye al perfil Vendedor y suma la consulta de auditoría y la anulación de pagos'),
+            (N'Gerencial',  N'Incluye al perfil Supervisor y suma la corrección administrativa de la línea base de integridad')
+        ) AS v(Nombre, Descripcion)
+    )
+    MERGE dbo.Perfiles AS p
+    USING Perf AS s ON p.Nombre = s.Nombre
+    WHEN NOT MATCHED THEN INSERT (Nombre, Descripcion) VALUES (s.Nombre, s.Descripcion)
+    WHEN MATCHED AND p.Descripcion IS NULL THEN UPDATE SET Descripcion = s.Descripcion
+    OUTPUT $action, inserted.Id, inserted.Nombre INTO @PerfilesSembrados (Accion, Id, Nombre);
+
+    ;WITH Asig(Perfil, Clave) AS (
+        SELECT * FROM (VALUES
+            (N'Vendedor',   N'DISPONIBILIDAD_CONSULTAR'),
+            (N'Vendedor',   N'CLIENTES_GESTION'),
+            (N'Vendedor',   N'RESERVA_CREAR'),
+            (N'Vendedor',   N'RESERVA_EDITAR'),
+            (N'Vendedor',   N'RESERVA_HISTORIAL'),
+            (N'Vendedor',   N'PAGOS_REGISTRAR'),
+            (N'Supervisor', N'BITACORA_VER'),
+            (N'Supervisor', N'AUDIT_LOGIN_VER'),
+            (N'Supervisor', N'PAGOS_ANULAR'),
+            (N'Gerencial',  N'INTEGRIDAD_RECALC')
+        ) AS v(Perfil, Clave)
+    )
+    INSERT INTO dbo.PerfilPermiso (PerfilId, PermisoId)
+    SELECT n.Id, pe.Id
+    FROM Asig a
+    JOIN @PerfilesSembrados n ON n.Nombre = a.Perfil AND n.Accion = N'INSERT'
+    JOIN dbo.Permisos pe ON pe.Clave = a.Clave
+    WHERE NOT EXISTS (SELECT 1 FROM dbo.PerfilPermiso pp
+                      WHERE pp.PerfilId = n.Id AND pp.PermisoId = pe.Id);
+
+    -- Composite: Supervisor contiene a Vendedor; Gerencial contiene a Supervisor
+    -- (los ciclos los valida BLL_Perfil; estas dos filas no forman ninguno). La
+    -- inclusion es parte de la composicion del perfil que incluye: se siembra solo
+    -- si ese perfil se dio de alta en esta corrida.
+    ;WITH Inc(Padre, Hijo) AS (
+        SELECT * FROM (VALUES (N'Supervisor', N'Vendedor'), (N'Gerencial', N'Supervisor')) AS v(Padre, Hijo)
+    )
+    INSERT INTO dbo.PerfilIncluido (PerfilPadreId, PerfilHijoId)
+    SELECT n.Id, hi.Id
+    FROM Inc i
+    JOIN @PerfilesSembrados n ON n.Nombre = i.Padre AND n.Accion = N'INSERT'
+    JOIN dbo.Perfiles hi ON hi.Nombre = i.Hijo
+    WHERE NOT EXISTS (SELECT 1 FROM dbo.PerfilIncluido x
+                      WHERE x.PerfilPadreId = n.Id AND x.PerfilHijoId = hi.Id);
+
+    COMMIT TRANSACTION;
+END TRY
+BEGIN CATCH
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+    THROW;
+END CATCH
+GO
+
+-- ===========================================================================
+-- 2. Cuenta inicial sin perfil. La siembra de admin la da de alta si falta, pero
+-- el perfil solo se le asigna al sembrar la tabla de perfiles vacia: si la cuenta
+-- se borro y el script la volvio a sembrar, quedaba sin permisos y sin nadie que
+-- pudiera asignarle un perfil. Se le asigna Administrador solo en ese caso de
+-- recuperacion: admin sin perfil y ningun usuario activo y no bloqueado que
+-- resuelva PERFILES_GESTION por el Composite (asignado directo o por un grupo que
+-- lo contiene, en su perfil o en los perfiles que este incluye). Si otra cuenta
+-- gestiona los perfiles, la decision de dejar a admin sin perfil se conserva.
+-- ===========================================================================
+;WITH Ancestros(PermisoId, AncestroId, PadreId, Nivel) AS (
+    SELECT Id, Id, PermisoPadreId, 0 FROM dbo.Permisos WHERE Clave = N'PERFILES_GESTION'
+    UNION ALL
+    SELECT a.PermisoId, pe.Id, pe.PermisoPadreId, a.Nivel + 1
+    FROM Ancestros a
+    JOIN dbo.Permisos pe ON pe.Id = a.PadreId
+    WHERE a.Nivel < 32
+),
+Contenidos(PerfilId, IncluidoId, Nivel) AS (
+    SELECT Id, Id, 0 FROM dbo.Perfiles
+    UNION ALL
+    SELECT c.PerfilId, i.PerfilHijoId, c.Nivel + 1
+    FROM Contenidos c
+    JOIN dbo.PerfilIncluido i ON i.PerfilPadreId = c.IncluidoId
+    WHERE c.Nivel < 32
+),
+Gestores(PerfilId) AS (
+    SELECT DISTINCT c.PerfilId
+    FROM Contenidos c
+    JOIN dbo.PerfilPermiso pp ON pp.PerfilId = c.IncluidoId
+    JOIN Ancestros a ON a.AncestroId = pp.PermisoId
+)
+UPDATE u SET PerfilId = pa.Id
+FROM dbo.Users u
+JOIN dbo.Perfiles pa ON pa.Nombre = N'Administrador'
+WHERE u.Username = N'admin'
+  AND u.PerfilId IS NULL
+  AND NOT EXISTS (SELECT 1 FROM dbo.Users x
+                  JOIN Gestores g ON g.PerfilId = x.PerfilId
+                  WHERE x.Activo = 1 AND x.Blocked = 0)
+OPTION (MAXRECURSION 100);
+GO
+
+-- ===========================================================================
+-- 3. Traducciones de Gestion de Perfiles (idempotente: solo inserta las que falten).
+-- ===========================================================================
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        -- Avisos
+        (N'ES', N'MSG_PERF_SIN_GESTOR', N'No se puede guardar: ningún usuario activo quedaría con permiso para gestionar perfiles y desbloquear cuentas.'),
+        (N'EN', N'MSG_PERF_SIN_GESTOR', N'Cannot save: no active user would keep permission to manage profiles and unblock accounts.'),
+        (N'PT', N'MSG_PERF_SIN_GESTOR', N'Não é possível salvar: nenhum usuário ativo ficaria com permissão para gerenciar perfis e desbloquear contas.'),
+        (N'ES', N'MSG_PERF_NO_CARGADO', N'No se pudo cargar la composición de este perfil. Vuelva a seleccionarlo antes de guardar.'),
+        (N'EN', N'MSG_PERF_NO_CARGADO', N'The composition of this profile could not be loaded. Select it again before saving.'),
+        (N'PT', N'MSG_PERF_NO_CARGADO', N'Não foi possível carregar a composição deste perfil. Selecione-o novamente antes de salvar.'),
+        -- Grupos del arbol de permisos
+        (N'ES', N'PERMG_ADMINISTRACION', N'Administración'),                       (N'EN', N'PERMG_ADMINISTRACION', N'Administration'),                     (N'PT', N'PERMG_ADMINISTRACION', N'Administração'),
+        (N'ES', N'PERMG_GESTION_DE_RESERVAS', N'Gestión de Reservas'),             (N'EN', N'PERMG_GESTION_DE_RESERVAS', N'Reservations Management'),       (N'PT', N'PERMG_GESTION_DE_RESERVAS', N'Gestão de Reservas'),
+        (N'ES', N'PERMG_AUDITORIA', N'Auditoría'),                                 (N'EN', N'PERMG_AUDITORIA', N'Audit'),                                   (N'PT', N'PERMG_AUDITORIA', N'Auditoria'),
+        (N'ES', N'PERMG_ADMINISTRACION_DEL_SISTEMA', N'Administración del sistema'), (N'EN', N'PERMG_ADMINISTRACION_DEL_SISTEMA', N'System administration'), (N'PT', N'PERMG_ADMINISTRACION_DEL_SISTEMA', N'Administração do sistema'),
+        (N'ES', N'PERMG_VENTAS', N'Ventas'),                                       (N'EN', N'PERMG_VENTAS', N'Sales'),                                      (N'PT', N'PERMG_VENTAS', N'Vendas'),
+        -- Permisos (hojas)
+        (N'ES', N'PERM_RESERVA_CREAR', N'Crear Reserva'),                          (N'EN', N'PERM_RESERVA_CREAR', N'Create Reservation'),                   (N'PT', N'PERM_RESERVA_CREAR', N'Criar Reserva'),
+        (N'ES', N'PERM_RESERVA_EDITAR', N'Editar Reserva'),                        (N'EN', N'PERM_RESERVA_EDITAR', N'Edit Reservation'),                    (N'PT', N'PERM_RESERVA_EDITAR', N'Editar Reserva'),
+        (N'ES', N'PERM_RESERVA_HISTORIAL', N'Ver Historial Reserva'),              (N'EN', N'PERM_RESERVA_HISTORIAL', N'View Reservation History'),         (N'PT', N'PERM_RESERVA_HISTORIAL', N'Ver Histórico da Reserva'),
+        (N'ES', N'PERM_RESERVA_RESTAURAR', N'Restaurar Versión de Reserva'),       (N'EN', N'PERM_RESERVA_RESTAURAR', N'Restore Reservation Version'),      (N'PT', N'PERM_RESERVA_RESTAURAR', N'Restaurar Versão da Reserva'),
+        (N'ES', N'PERM_DISPONIBILIDAD_CONSULTAR', N'Consultar Disponibilidad'),    (N'EN', N'PERM_DISPONIBILIDAD_CONSULTAR', N'Check Availability'),        (N'PT', N'PERM_DISPONIBILIDAD_CONSULTAR', N'Consultar Disponibilidade'),
+        (N'ES', N'PERM_BITACORA_VER', N'Ver Bitácora'),                            (N'EN', N'PERM_BITACORA_VER', N'View Audit Log'),                        (N'PT', N'PERM_BITACORA_VER', N'Ver Registro'),
+        (N'ES', N'PERM_AUDIT_LOGIN_VER', N'Ver Auditoría Login'),                  (N'EN', N'PERM_AUDIT_LOGIN_VER', N'View Login Audit'),                   (N'PT', N'PERM_AUDIT_LOGIN_VER', N'Ver Auditoria de Login'),
+        (N'ES', N'PERM_INTEGRIDAD_RECALC', N'Recalcular línea base'),              (N'EN', N'PERM_INTEGRIDAD_RECALC', N'Recalculate baseline'),             (N'PT', N'PERM_INTEGRIDAD_RECALC', N'Recalcular linha de base'),
+        (N'ES', N'PERM_CLIENTES_GESTION', N'Gestión de Clientes'),                 (N'EN', N'PERM_CLIENTES_GESTION', N'Clients Management'),                (N'PT', N'PERM_CLIENTES_GESTION', N'Gestão de Clientes'),
+        (N'ES', N'PERM_SERVICIOS_GESTION', N'Gestión de Servicios'),               (N'EN', N'PERM_SERVICIOS_GESTION', N'Services Management'),              (N'PT', N'PERM_SERVICIOS_GESTION', N'Gestão de Serviços'),
+        (N'ES', N'PERM_PERFILES_GESTION', N'Gestión de Perfiles'),                 (N'EN', N'PERM_PERFILES_GESTION', N'Profiles Management'),               (N'PT', N'PERM_PERFILES_GESTION', N'Gestão de Perfis'),
+        (N'ES', N'PERM_IDIOMAS_GESTION', N'Gestión de Idiomas'),                   (N'EN', N'PERM_IDIOMAS_GESTION', N'Languages Management'),               (N'PT', N'PERM_IDIOMAS_GESTION', N'Gestão de Idiomas'),
+        (N'ES', N'PERM_PAGOS_REGISTRAR', N'Registrar Pagos'),                      (N'EN', N'PERM_PAGOS_REGISTRAR', N'Register Payments'),                  (N'PT', N'PERM_PAGOS_REGISTRAR', N'Registrar Pagamentos'),
+        (N'ES', N'PERM_PAGOS_ANULAR', N'Anular Pagos'),                            (N'EN', N'PERM_PAGOS_ANULAR', N'Void Payments'),                         (N'PT', N'PERM_PAGOS_ANULAR', N'Anular Pagamentos')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
+GO
+
+-- ===========================================================================
+-- QA-12/09/2026 F02
+-- ===========================================================================
+-- EvenTech - Agregado al esquema del paquete F02 (Clientes).
+--
+-- Idempotente y con el mismo patron que db/schema.sql: corre sobre la base que
+-- indica -d y solo inserta las claves que falten. Se integra al final del bloque
+-- de traducciones de Clientes de schema.sql.
+--
+--   MSG_CLI_NOTFOUND     editar un cliente que ya no existe (antes se mostraba el
+--                        texto de Reservas "La reserva ya no existe.").
+--   MSG_CLI_DNI_INVALIDO el DNI no es un documento: letras o menos de 7 digitos
+--                        (puntos, espacios y guiones se ignoran).
+--   MSG_CLI_LARGO        un dato no entra en su columna (antes se guardaba
+--                        recortado sin aviso).
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        -- Clientes (Proceso 1): edicion de un cliente borrado y validaciones de DNI y largo
+        (N'ES', N'MSG_CLI_NOTFOUND', N'El cliente ya no existe.'), (N'EN', N'MSG_CLI_NOTFOUND', N'The client no longer exists.'), (N'PT', N'MSG_CLI_NOTFOUND', N'O cliente não existe mais.'),
+        (N'ES', N'MSG_CLI_DNI_INVALIDO', N'El DNI no es válido: use solo números (7 dígitos o más).'), (N'EN', N'MSG_CLI_DNI_INVALIDO', N'The ID is not valid: use digits only (7 or more).'), (N'PT', N'MSG_CLI_DNI_INVALIDO', N'O documento não é válido: use só números (7 dígitos ou mais).'),
+        (N'ES', N'MSG_CLI_LARGO', N'Dato muy largo: nombre y apellido 60, email 120, teléfono 30.'), (N'EN', N'MSG_CLI_LARGO', N'Value too long: name and last name 60, email 120, phone 30.'), (N'PT', N'MSG_CLI_LARGO', N'Dado longo demais: nome e sobrenome 60, email 120, telefone 30.')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
+GO
+
+-- ===========================================================================
+-- QA-12/09/2026 F03
+-- ===========================================================================
+-- EvenTech - Agregado al esquema del paquete F03 (Servicios: catalogo y servicios de la reserva)
+--
+-- Idempotente, mismo criterio que db/schema.sql: corre SOBRE la base que indica
+-- -d y solo inserta las claves que falten. Guardado en UTF-8 con BOM (tildes para
+-- sqlcmd).
+
+-- ===========================================================================
+-- Tope del precio del catalogo. dbo.Servicios.Precio es DECIMAL(12,2): un precio
+-- mayor a 9.999.999.999,99 no entra en la columna y el motor lo rechazaba con un
+-- error de desborde que llegaba a la pantalla sin manejar. La capa de negocio lo
+-- rechaza antes con este mensaje (ServicioResult_704ILR.PrecioExcedido_704ILR).
+-- Idempotente: solo inserta las claves que falten.
+-- ===========================================================================
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'MSG_SRV_PRECIO_MAX', N'El precio no puede superar 9.999.999.999,99.'), (N'EN', N'MSG_SRV_PRECIO_MAX', N'The price cannot exceed 9,999,999,999.99.'), (N'PT', N'MSG_SRV_PRECIO_MAX', N'O preço não pode ultrapassar 9.999.999.999,99.')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;
+GO
+
+-- ===========================================================================
+-- QA-12/09/2026 F04
+-- ===========================================================================
+-- ===========================================================================
+-- F04 - Ficha de reservas (ucReservas): textos nuevos de la interfaz.
+-- Idempotente: solo inserta las claves que falten (mismo patron que db/schema.sql,
+-- con GROUP BY i.Id, t.Clave para que una clave repetida no rompa UQ_Traducciones).
+-- Guardado en UTF-8 con BOM: signos de apertura, tildes y cedilla para sqlcmd.
+-- ===========================================================================
+SET QUOTED_IDENTIFIER ON;
+GO
+
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        -- RN-01: pregunta propia para ofrecer la renovacion de la vigencia (antes se
+        -- armaba con el rotulo BTN_RENOVAR y un "?" fijo, sin signo de apertura en ES)
+        (N'ES', N'MSG_RES_RENOVAR_PREGUNTA', N'¿Renovar la vigencia?'), (N'EN', N'MSG_RES_RENOVAR_PREGUNTA', N'Renew the validity?'), (N'PT', N'MSG_RES_RENOVAR_PREGUNTA', N'Renovar a vigência?'),
+        -- Lectura fallida de los servicios contratados al abrir una reserva: la ficha
+        -- queda de solo lectura hasta volver a abrirla
+        (N'ES', N'MSG_RES_SERVICIOS_NO_LEIDOS', N'No se pudieron leer los servicios contratados de la reserva: no se admite modificarla. Seleccione otra reserva y vuelva a abrirla.'),
+        (N'EN', N'MSG_RES_SERVICIOS_NO_LEIDOS', N'The contracted services of the reservation could not be read: it cannot be modified. Select another reservation and open it again.'),
+        (N'PT', N'MSG_RES_SERVICIOS_NO_LEIDOS', N'Não foi possível ler os serviços contratados da reserva: não é possível modificá-la. Selecione outra reserva e abra-a novamente.')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;
+GO
+
+-- BTN_RENOVAR ya no la consume ninguna pantalla (la pregunta usa MSG_RES_RENOVAR_PREGUNTA):
+-- se quita de las bases existentes, igual que las demas claves retiradas de las semillas.
+DELETE FROM dbo.Traducciones WHERE Clave = N'BTN_RENOVAR';
+GO
+
+-- ===========================================================================
+-- QA-12/09/2026 F05
+-- ===========================================================================
+-- ===========================================================================
+-- Paquete F05 - Pagos: aviso de la RN-07 al anular un pago y nombres de los
+-- metodos de pago (ortografia y traduccion). Idempotente: se puede correr
+-- cualquier cantidad de veces, con sqlcmd ODBC o go-sqlcmd, sobre la base de -d.
+-- Guardado como UTF-8 con BOM (tildes para sqlcmd).
+-- ===========================================================================
+
+-- Ortografia de los metodos de pago sembrados por versiones anteriores del
+-- script. Se corrige solo el valor de fabrica exacto, y solo si el nombre
+-- corregido no existe ya (UQ_MetodosPago_Nombre). Los pagos referencian el
+-- metodo por Id, asi que ningun pago cambia; MetodosPago no participa de los
+-- digitos verificadores.
+UPDATE dbo.MetodosPago SET Nombre = N'Tarjeta de crédito'
+ WHERE Nombre = N'Tarjeta de credito' COLLATE Latin1_General_CS_AS
+   AND NOT EXISTS (SELECT 1 FROM dbo.MetodosPago x WHERE x.Nombre = N'Tarjeta de crédito' COLLATE Latin1_General_CS_AS);
+UPDATE dbo.MetodosPago SET Nombre = N'Tarjeta de débito'
+ WHERE Nombre = N'Tarjeta de debito' COLLATE Latin1_General_CS_AS
+   AND NOT EXISTS (SELECT 1 FROM dbo.MetodosPago x WHERE x.Nombre = N'Tarjeta de débito' COLLATE Latin1_General_CS_AS);
+GO
+
+-- Textos nuevos. Solo inserta las claves que falten: una traduccion editada por
+-- el usuario desde Gestion de Idiomas se conserva.
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        -- RN-07 al anular: una reserva confirmada no puede quedar sin nada cobrado
+        (N'ES', N'MSG_PAGO_ANULAR_SIN_ADELANTO', N'La reserva está confirmada: anular este pago la dejaría sin adelanto. Registre primero el pago que lo reemplaza o cancele la reserva.'),
+        (N'EN', N'MSG_PAGO_ANULAR_SIN_ADELANTO', N'The reservation is confirmed: voiding this payment would leave it without a deposit. Record the replacement payment first or cancel the reservation.'),
+        (N'PT', N'MSG_PAGO_ANULAR_SIN_ADELANTO', N'A reserva está confirmada: anular este pagamento a deixaria sem adiantamento. Registre primeiro o pagamento que o substitui ou cancele a reserva.'),
+        -- Nombres de los metodos de pago: clave MP_ + nombre del catalogo en
+        -- mayusculas y sin tildes (frmReservaPagos_704ILR.TextoMetodo_704ILR)
+        (N'ES', N'MP_EFECTIVO', N'Efectivo'), (N'EN', N'MP_EFECTIVO', N'Cash'), (N'PT', N'MP_EFECTIVO', N'Dinheiro'),
+        (N'ES', N'MP_TARJETA_DE_CREDITO', N'Tarjeta de crédito'), (N'EN', N'MP_TARJETA_DE_CREDITO', N'Credit card'), (N'PT', N'MP_TARJETA_DE_CREDITO', N'Cartão de crédito'),
+        (N'ES', N'MP_TARJETA_DE_DEBITO', N'Tarjeta de débito'), (N'EN', N'MP_TARJETA_DE_DEBITO', N'Debit card'), (N'PT', N'MP_TARJETA_DE_DEBITO', N'Cartão de débito'),
+        (N'ES', N'MP_TRANSFERENCIA', N'Transferencia'), (N'EN', N'MP_TRANSFERENCIA', N'Bank transfer'), (N'PT', N'MP_TRANSFERENCIA', N'Transferência'),
+        (N'ES', N'MP_MERCADOPAGO', N'MercadoPago'), (N'EN', N'MP_MERCADOPAGO', N'MercadoPago'), (N'PT', N'MP_MERCADOPAGO', N'MercadoPago')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
+GO
+
+-- ===========================================================================
+-- QA-12/09/2026 F06
+-- ===========================================================================
+-- ===========================================================================
+-- Paquete F06 - Reglas de reserva en la BLL. Agregado para db/schema.sql.
+-- Idempotente. Va al final del script, despues del bloque "Integridad del
+-- modelo de datos" (el que crea CK_Reservas_Estado y CK_ReservaMemento_Estado)
+-- y despues de las semillas de traducciones. Guardado en UTF-8 con BOM.
+-- ===========================================================================
+SET QUOTED_IDENTIFIER ON;
+GO
+
+-- Dominio de Estado sensible a mayusculas (Reservas). La intercalacion de la
+-- base no distingue mayusculas, asi que el CHECK original admitia 'confirmada'
+-- o 'Cotizacion': el motor los trata como estados validos y la aplicacion no.
+-- La restriccion se reemplaza por una que compara en binario, solo si todas las
+-- filas ya cumplen el dominio exacto: el script no debe romper una base real
+-- (la lectura tolerante de la aplicacion y la verificacion de integridad
+-- informan esas filas). No hace nada si la restriccion binaria ya existe.
+IF NOT EXISTS (SELECT 1 FROM dbo.Reservas
+               WHERE Estado COLLATE Latin1_General_BIN2 NOT IN (N'COTIZACION', N'PENDIENTE', N'CONFIRMADA', N'CANCELADA'))
+   AND NOT EXISTS (SELECT 1 FROM sys.check_constraints
+                   WHERE name = N'CK_Reservas_Estado' AND parent_object_id = OBJECT_ID(N'dbo.Reservas')
+                     AND definition LIKE N'%Latin1_General_BIN2%')
+BEGIN
+    SET XACT_ABORT ON;
+    BEGIN TRANSACTION;
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_Reservas_Estado' AND parent_object_id = OBJECT_ID(N'dbo.Reservas'))
+        ALTER TABLE dbo.Reservas DROP CONSTRAINT CK_Reservas_Estado;
+    ALTER TABLE dbo.Reservas WITH CHECK ADD CONSTRAINT CK_Reservas_Estado
+        CHECK (Estado COLLATE Latin1_General_BIN2 IN (N'COTIZACION', N'PENDIENTE', N'CONFIRMADA', N'CANCELADA'));
+    COMMIT TRANSACTION;
+    SET XACT_ABORT OFF;
+END
+GO
+
+-- Mismo criterio para la foto Memento de la reserva.
+IF NOT EXISTS (SELECT 1 FROM dbo.ReservaMemento
+               WHERE Estado COLLATE Latin1_General_BIN2 NOT IN (N'COTIZACION', N'PENDIENTE', N'CONFIRMADA', N'CANCELADA'))
+   AND NOT EXISTS (SELECT 1 FROM sys.check_constraints
+                   WHERE name = N'CK_ReservaMemento_Estado' AND parent_object_id = OBJECT_ID(N'dbo.ReservaMemento')
+                     AND definition LIKE N'%Latin1_General_BIN2%')
+BEGIN
+    SET XACT_ABORT ON;
+    BEGIN TRANSACTION;
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_ReservaMemento_Estado' AND parent_object_id = OBJECT_ID(N'dbo.ReservaMemento'))
+        ALTER TABLE dbo.ReservaMemento DROP CONSTRAINT CK_ReservaMemento_Estado;
+    ALTER TABLE dbo.ReservaMemento WITH CHECK ADD CONSTRAINT CK_ReservaMemento_Estado
+        CHECK (Estado COLLATE Latin1_General_BIN2 IN (N'COTIZACION', N'PENDIENTE', N'CONFIRMADA', N'CANCELADA'));
+    COMMIT TRANSACTION;
+    SET XACT_ABORT OFF;
+END
+GO
+
+-- MSG_RES_MONTO: el rechazo por monto (InvalidMonto) cubre ahora tambien el tope
+-- de DECIMAL(12,2) de Reservas.Monto (9.999.999.999,99). El texto sembrado solo
+-- nombraba el monto negativo y quedaba falso ante un total excedido. Se corrige
+-- solo mientras conserve el valor de fabrica (con y sin tildes).
+;WITH Fix(Codigo, Clave, Anterior, Nuevo) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'MSG_RES_MONTO', N'El monto no puede ser negativo.', N'El monto debe estar entre 0,00 y 9.999.999.999,99.'),
+        (N'EN', N'MSG_RES_MONTO', N'The amount cannot be negative.',  N'The amount must be between 0.00 and 9,999,999,999.99.'),
+        (N'PT', N'MSG_RES_MONTO', N'O valor não pode ser negativo.',   N'O valor deve estar entre 0,00 e 9.999.999.999,99.'),
+        (N'PT', N'MSG_RES_MONTO', N'O valor nao pode ser negativo.',   N'O valor deve estar entre 0,00 e 9.999.999.999,99.')
+    ) AS v(Codigo, Clave, Anterior, Nuevo)
+)
+UPDATE t SET Texto = f.Nuevo
+FROM dbo.Traducciones t
+JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
+JOIN Fix f ON f.Codigo = i.Codigo AND f.Clave = t.Clave
+WHERE t.Texto = f.Anterior;
+GO
+
+-- ===========================================================================
+-- QA-12/09/2026 F07
+-- ===========================================================================
+-- F07 (disponibilidad y comprobante): traducciones nuevas y terminologia EN.
+--
+-- Idempotente, con el mismo patron que db/schema.sql: corre sobre la base que
+-- indica -d, despues de las semillas de traducciones, y se puede repetir.
+-- Resumen de la consulta de disponibilidad cuando ningun salon esta disponible y
+-- no hay propuesta alternativa que informar (CUN001, paso 4 y flujo 4.1): no hay
+-- salones registrados, ninguno alcanza en capacidad, o los que alcanzan no tienen
+-- una fecha libre dentro del horizonte de busqueda.
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'DISP_RESUMEN_SIN_SALONES', N'No hay salones registrados.'), (N'EN', N'DISP_RESUMEN_SIN_SALONES', N'No venues are registered.'), (N'PT', N'DISP_RESUMEN_SIN_SALONES', N'Não há salões cadastrados.'),
+        (N'ES', N'DISP_RESUMEN_SIN_CAPACIDAD', N'Ningún salón tiene capacidad para {0} invitados.'), (N'EN', N'DISP_RESUMEN_SIN_CAPACIDAD', N'No venue can hold {0} guests.'), (N'PT', N'DISP_RESUMEN_SIN_CAPACIDAD', N'Nenhum salão tem capacidade para {0} convidados.'),
+        (N'ES', N'DISP_RESUMEN_SIN_FECHAS', N'Ningún salón con capacidad suficiente tiene fechas libres en los {0} días siguientes.'), (N'EN', N'DISP_RESUMEN_SIN_FECHAS', N'No venue with enough capacity has free dates within the next {0} days.'), (N'PT', N'DISP_RESUMEN_SIN_FECHAS', N'Nenhum salão com capacidade suficiente tem datas livres nos próximos {0} dias.')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
+GO
+
+-- Terminologia EN: un unico termino ("venue") para el salon. Las semillas en
+-- ingles decian "hall" en tres claves y "venue" en las demas, y las dos palabras
+-- aparecian juntas en la misma pantalla. Solo se pisa el texto mientras siga
+-- siendo el sembrado de fabrica: una traduccion editada por el usuario se conserva.
+;WITH FixEn(Codigo, Clave, Anterior, Nuevo) AS (
+    SELECT * FROM (VALUES
+        (N'EN', N'COL_SALON', N'Hall', N'Venue'),
+        (N'EN', N'MSG_RES_SALON', N'Select a valid hall.', N'Select a valid venue.'),
+        (N'EN', N'MSG_RES_SALON_OCUPADO', N'The hall is already booked for that date.', N'The venue is already booked for that date.')
+    ) AS v(Codigo, Clave, Anterior, Nuevo)
+)
+UPDATE t SET Texto = f.Nuevo
+FROM dbo.Traducciones t
+JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
+JOIN FixEn f ON f.Codigo = i.Codigo AND f.Clave = t.Clave
+WHERE t.Texto = f.Anterior;
+GO
+
+-- ===========================================================================
+-- QA-12/09/2026 F08
+-- ===========================================================================
+-- ===========================================================================
+-- Paquete F08 (auditoria): agregado idempotente para db/schema.sql.
+-- Se ejecuta SOBRE la base que indica -d, despues de schema.sql. Guardado en
+-- UTF-8 con BOM (tildes, enie y cedilla para sqlcmd).
+-- ===========================================================================
+-- ===========================================================================
+-- Auditoria: textos nuevos de pantalla.
+--  * MSG_RANGO_FECHAS: aviso de rango invertido en Bitacora y Auditoria de login.
+--  * ALERT_DV*: detalle de la alerta de integridad en el idioma activo (la
+--    verificacion lo devuelve en castellano; la pantalla lo traduce).
+--  * MOD_* / BACC_*: modulos y acciones que la capa de negocio asienta en la
+--    bitacora. Lo guardado en Bitacora no cambia (es dato); la grilla y el
+--    combo de modulos muestran la leyenda traducida y, si falta la clave, el
+--    valor guardado. La clave se arma con el valor en mayusculas, sin tildes y
+--    con '_' en lugar de lo que no es letra o digito.
+-- Idempotente: solo inserta las claves que falten.
+-- ===========================================================================
+;WITH Txt AS (
+    SELECT * FROM (VALUES
+        -- Rango de fechas invertido
+        (N'ES', N'MSG_RANGO_FECHAS', N'La fecha Desde no puede ser posterior a la fecha Hasta.'),
+        (N'EN', N'MSG_RANGO_FECHAS', N'The From date cannot be later than the To date.'),
+        (N'PT', N'MSG_RANGO_FECHAS', N'A data De não pode ser posterior à data Até.'),
+        -- Alerta de integridad: detalle de cada inconsistencia
+        (N'ES', N'ALERT_DVH_FALTANTE', N'Reserva #{0}: sin DV horizontal almacenado.'),
+        (N'EN', N'ALERT_DVH_FALTANTE', N'Reservation #{0}: no stored horizontal check digit.'),
+        (N'PT', N'ALERT_DVH_FALTANTE', N'Reserva #{0}: sem DV horizontal armazenado.'),
+        (N'ES', N'ALERT_DVH_NO_COINCIDE', N'Reserva #{0}: el DV horizontal no coincide (posible alteración externa).'),
+        (N'EN', N'ALERT_DVH_NO_COINCIDE', N'Reservation #{0}: the horizontal check digit does not match (possible external alteration).'),
+        (N'PT', N'ALERT_DVH_NO_COINCIDE', N'Reserva #{0}: o DV horizontal não confere (possível alteração externa).'),
+        (N'ES', N'ALERT_DVV_NO_COINCIDE', N'El DV vertical de Reservas no coincide (filas agregadas, quitadas o reordenadas por fuera del sistema).'),
+        (N'EN', N'ALERT_DVV_NO_COINCIDE', N'The vertical check digit of Reservations does not match (rows added, removed or reordered outside the system).'),
+        (N'PT', N'ALERT_DVV_NO_COINCIDE', N'O DV vertical de Reservas não confere (linhas adicionadas, removidas ou reordenadas fora do sistema).'),
+        -- Bitacora: modulos
+        (N'ES', N'MOD_AUDITORIA', N'Auditoría'),                 (N'EN', N'MOD_AUDITORIA', N'Audit'),                    (N'PT', N'MOD_AUDITORIA', N'Auditoria'),
+        (N'ES', N'MOD_BITACORA', N'Bitácora'),                   (N'EN', N'MOD_BITACORA', N'Audit log'),                 (N'PT', N'MOD_BITACORA', N'Registro do sistema'),
+        (N'ES', N'MOD_CLIENTES', N'Clientes'),                   (N'EN', N'MOD_CLIENTES', N'Clients'),                   (N'PT', N'MOD_CLIENTES', N'Clientes'),
+        (N'ES', N'MOD_CONEXION', N'Conexión'),                   (N'EN', N'MOD_CONEXION', N'Connection'),                (N'PT', N'MOD_CONEXION', N'Conexão'),
+        (N'ES', N'MOD_CREARCUENTA', N'Crear cuenta'),            (N'EN', N'MOD_CREARCUENTA', N'Create account'),         (N'PT', N'MOD_CREARCUENTA', N'Criar conta'),
+        (N'ES', N'MOD_HISTORIALRESERVA', N'Historial de la reserva'), (N'EN', N'MOD_HISTORIALRESERVA', N'Reservation history'), (N'PT', N'MOD_HISTORIALRESERVA', N'Histórico da reserva'),
+        (N'ES', N'MOD_IDIOMAS', N'Idiomas'),                     (N'EN', N'MOD_IDIOMAS', N'Languages'),                  (N'PT', N'MOD_IDIOMAS', N'Idiomas'),
+        (N'ES', N'MOD_INTEGRIDAD', N'Integridad'),               (N'EN', N'MOD_INTEGRIDAD', N'Integrity'),               (N'PT', N'MOD_INTEGRIDAD', N'Integridade'),
+        (N'ES', N'MOD_LOGIN', N'Inicio de sesión'),              (N'EN', N'MOD_LOGIN', N'Login'),                        (N'PT', N'MOD_LOGIN', N'Login'),
+        (N'ES', N'MOD_PAGOS', N'Pagos'),                         (N'EN', N'MOD_PAGOS', N'Payments'),                     (N'PT', N'MOD_PAGOS', N'Pagamentos'),
+        (N'ES', N'MOD_PERFILES', N'Perfiles'),                   (N'EN', N'MOD_PERFILES', N'Profiles'),                  (N'PT', N'MOD_PERFILES', N'Perfis'),
+        (N'ES', N'MOD_RESERVAS', N'Reservas'),                   (N'EN', N'MOD_RESERVAS', N'Reservations'),              (N'PT', N'MOD_RESERVAS', N'Reservas'),
+        (N'ES', N'MOD_SEGURIDAD', N'Seguridad'),                 (N'EN', N'MOD_SEGURIDAD', N'Security'),                 (N'PT', N'MOD_SEGURIDAD', N'Segurança'),
+        (N'ES', N'MOD_SERVICIOS', N'Servicios'),                 (N'EN', N'MOD_SERVICIOS', N'Services'),                 (N'PT', N'MOD_SERVICIOS', N'Serviços'),
+        (N'ES', N'MOD_USUARIOS', N'Usuarios'),                   (N'EN', N'MOD_USUARIOS', N'Users'),                     (N'PT', N'MOD_USUARIOS', N'Usuários'),
+        -- Bitacora: acciones
+        (N'ES', N'BACC_ACCESO_DENEGADO', N'Acceso denegado'),                         (N'EN', N'BACC_ACCESO_DENEGADO', N'Access denied'),                         (N'PT', N'BACC_ACCESO_DENEGADO', N'Acesso negado'),
+        (N'ES', N'BACC_ACTUALIZACION_DE_PERMISOS', N'Actualización de permisos'),     (N'EN', N'BACC_ACTUALIZACION_DE_PERMISOS', N'Permissions updated'),         (N'PT', N'BACC_ACTUALIZACION_DE_PERMISOS', N'Permissões atualizadas'),
+        (N'ES', N'BACC_ALTA_DE_CLIENTE', N'Alta de cliente'),                         (N'EN', N'BACC_ALTA_DE_CLIENTE', N'Client created'),                        (N'PT', N'BACC_ALTA_DE_CLIENTE', N'Cliente cadastrado'),
+        (N'ES', N'BACC_ALTA_DE_CUENTA', N'Alta de cuenta'),                           (N'EN', N'BACC_ALTA_DE_CUENTA', N'Account created'),                        (N'PT', N'BACC_ALTA_DE_CUENTA', N'Conta criada'),
+        (N'ES', N'BACC_ALTA_DE_IDIOMA', N'Alta de idioma'),                           (N'EN', N'BACC_ALTA_DE_IDIOMA', N'Language created'),                       (N'PT', N'BACC_ALTA_DE_IDIOMA', N'Idioma cadastrado'),
+        (N'ES', N'BACC_ALTA_DE_PERFIL', N'Alta de perfil'),                           (N'EN', N'BACC_ALTA_DE_PERFIL', N'Profile created'),                        (N'PT', N'BACC_ALTA_DE_PERFIL', N'Perfil criado'),
+        (N'ES', N'BACC_ALTA_DE_SERVICIO', N'Alta de servicio'),                       (N'EN', N'BACC_ALTA_DE_SERVICIO', N'Service created'),                      (N'PT', N'BACC_ALTA_DE_SERVICIO', N'Serviço cadastrado'),
+        (N'ES', N'BACC_ALTA_RECHAZADA', N'Alta rechazada'),                           (N'EN', N'BACC_ALTA_RECHAZADA', N'Creation rejected'),                      (N'PT', N'BACC_ALTA_RECHAZADA', N'Cadastro recusado'),
+        (N'ES', N'BACC_ANULACION_DE_PAGO', N'Anulación de pago'),                     (N'EN', N'BACC_ANULACION_DE_PAGO', N'Payment voided'),                      (N'PT', N'BACC_ANULACION_DE_PAGO', N'Pagamento anulado'),
+        (N'ES', N'BACC_ANULACION_RECHAZADA', N'Anulación rechazada'),                 (N'EN', N'BACC_ANULACION_RECHAZADA', N'Void rejected'),                     (N'PT', N'BACC_ANULACION_RECHAZADA', N'Anulação recusada'),
+        (N'ES', N'BACC_ASIGNACION_DE_PERFIL', N'Asignación de perfil'),               (N'EN', N'BACC_ASIGNACION_DE_PERFIL', N'Profile assigned'),                 (N'PT', N'BACC_ASIGNACION_DE_PERFIL', N'Perfil atribuído'),
+        (N'ES', N'BACC_CAMBIO_DE_ESTADO_RECHAZADO', N'Cambio de estado rechazado'),   (N'EN', N'BACC_CAMBIO_DE_ESTADO_RECHAZADO', N'Status change rejected'),     (N'PT', N'BACC_CAMBIO_DE_ESTADO_RECHAZADO', N'Mudança de estado recusada'),
+        (N'ES', N'BACC_CANCELACION_DE_RESERVA', N'Cancelación de reserva'),           (N'EN', N'BACC_CANCELACION_DE_RESERVA', N'Reservation cancelled'),          (N'PT', N'BACC_CANCELACION_DE_RESERVA', N'Cancelamento de reserva'),
+        (N'ES', N'BACC_CANCELACION_RECHAZADA_POR_VIA_INCORRECTA', N'Cancelación rechazada por vía incorrecta'), (N'EN', N'BACC_CANCELACION_RECHAZADA_POR_VIA_INCORRECTA', N'Cancellation rejected (wrong path)'), (N'PT', N'BACC_CANCELACION_RECHAZADA_POR_VIA_INCORRECTA', N'Cancelamento recusado por via incorreta'),
+        (N'ES', N'BACC_COMPROBANTE_GENERADO', N'Comprobante generado'),               (N'EN', N'BACC_COMPROBANTE_GENERADO', N'Receipt generated'),                (N'PT', N'BACC_COMPROBANTE_GENERADO', N'Comprovante gerado'),
+        (N'ES', N'BACC_COMPROBANTE_PREPARADO_PARA_ENVIO', N'Comprobante preparado para envío'), (N'EN', N'BACC_COMPROBANTE_PREPARADO_PARA_ENVIO', N'Receipt prepared for sending'), (N'PT', N'BACC_COMPROBANTE_PREPARADO_PARA_ENVIO', N'Comprovante preparado para envio'),
+        (N'ES', N'BACC_CONFIGURACION_DE_CONEXION', N'Configuración de conexión'),     (N'EN', N'BACC_CONFIGURACION_DE_CONEXION', N'Connection configured'),       (N'PT', N'BACC_CONFIGURACION_DE_CONEXION', N'Configuração de conexão'),
+        (N'ES', N'BACC_CONFIRMACION_RECHAZADA', N'Confirmación rechazada'),           (N'EN', N'BACC_CONFIRMACION_RECHAZADA', N'Confirmation rejected'),          (N'PT', N'BACC_CONFIRMACION_RECHAZADA', N'Confirmação recusada'),
+        (N'ES', N'BACC_COTIZACION_GENERADA', N'Cotización generada'),                 (N'EN', N'BACC_COTIZACION_GENERADA', N'Quote created'),                     (N'PT', N'BACC_COTIZACION_GENERADA', N'Orçamento gerado'),
+        (N'ES', N'BACC_DESBLOQUEO_DE_CUENTA', N'Desbloqueo de cuenta'),               (N'EN', N'BACC_DESBLOQUEO_DE_CUENTA', N'Account unlocked'),                 (N'PT', N'BACC_DESBLOQUEO_DE_CUENTA', N'Desbloqueio de conta'),
+        (N'ES', N'BACC_DISPONIBILIDAD_CONSULTADA', N'Disponibilidad consultada'),     (N'EN', N'BACC_DISPONIBILIDAD_CONSULTADA', N'Availability checked'),        (N'PT', N'BACC_DISPONIBILIDAD_CONSULTADA', N'Disponibilidade consultada'),
+        (N'ES', N'BACC_EDICION_DE_TRADUCCIONES', N'Edición de traducciones'),         (N'EN', N'BACC_EDICION_DE_TRADUCCIONES', N'Translations edited'),           (N'PT', N'BACC_EDICION_DE_TRADUCCIONES', N'Edição de traduções'),
+        (N'ES', N'BACC_ERROR', N'Error'),                                             (N'EN', N'BACC_ERROR', N'Error'),                                           (N'PT', N'BACC_ERROR', N'Erro'),
+        (N'ES', N'BACC_MODIFICACION_DE_CLIENTE', N'Modificación de cliente'),         (N'EN', N'BACC_MODIFICACION_DE_CLIENTE', N'Client updated'),                (N'PT', N'BACC_MODIFICACION_DE_CLIENTE', N'Alteração de cliente'),
+        (N'ES', N'BACC_MODIFICACION_DE_RESERVA', N'Modificación de reserva'),         (N'EN', N'BACC_MODIFICACION_DE_RESERVA', N'Reservation updated'),           (N'PT', N'BACC_MODIFICACION_DE_RESERVA', N'Alteração de reserva'),
+        (N'ES', N'BACC_MODIFICACION_DE_SERVICIO', N'Modificación de servicio'),       (N'EN', N'BACC_MODIFICACION_DE_SERVICIO', N'Service updated'),              (N'PT', N'BACC_MODIFICACION_DE_SERVICIO', N'Alteração de serviço'),
+        (N'ES', N'BACC_MODIFICACION_RECHAZADA', N'Modificación rechazada'),           (N'EN', N'BACC_MODIFICACION_RECHAZADA', N'Update rejected'),                (N'PT', N'BACC_MODIFICACION_RECHAZADA', N'Alteração recusada'),
+        (N'ES', N'BACC_PAGO_RECHAZADO', N'Pago rechazado'),                           (N'EN', N'BACC_PAGO_RECHAZADO', N'Payment rejected'),                       (N'PT', N'BACC_PAGO_RECHAZADO', N'Pagamento recusado'),
+        (N'ES', N'BACC_PERMISOS_NO_DISPONIBLES', N'Permisos no disponibles'),         (N'EN', N'BACC_PERMISOS_NO_DISPONIBLES', N'Permissions unavailable'),       (N'PT', N'BACC_PERMISOS_NO_DISPONIBLES', N'Permissões indisponíveis'),
+        (N'ES', N'BACC_RECALCULO_DE_LINEA_BASE', N'Recálculo de línea base'),         (N'EN', N'BACC_RECALCULO_DE_LINEA_BASE', N'Baseline recalculation'),        (N'PT', N'BACC_RECALCULO_DE_LINEA_BASE', N'Recálculo da linha de base'),
+        (N'ES', N'BACC_REGISTRO_DE_PAGO', N'Registro de pago'),                       (N'EN', N'BACC_REGISTRO_DE_PAGO', N'Payment recorded'),                     (N'PT', N'BACC_REGISTRO_DE_PAGO', N'Registro de pagamento'),
+        (N'ES', N'BACC_RENOVACION_DE_VIGENCIA', N'Renovación de vigencia'),           (N'EN', N'BACC_RENOVACION_DE_VIGENCIA', N'Validity renewed'),               (N'PT', N'BACC_RENOVACION_DE_VIGENCIA', N'Renovação de validade'),
+        (N'ES', N'BACC_RESERVA_GENERADA', N'Reserva generada'),                       (N'EN', N'BACC_RESERVA_GENERADA', N'Reservation created'),                  (N'PT', N'BACC_RESERVA_GENERADA', N'Reserva gerada'),
+        (N'ES', N'BACC_RESTABLECER_CONEXION', N'Restablecer conexión'),               (N'EN', N'BACC_RESTABLECER_CONEXION', N'Connection reset'),                 (N'PT', N'BACC_RESTABLECER_CONEXION', N'Restabelecer conexão'),
+        (N'ES', N'BACC_RESTAURACION_DE_VERSION', N'Restauración de versión'),         (N'EN', N'BACC_RESTAURACION_DE_VERSION', N'Version restored'),              (N'PT', N'BACC_RESTAURACION_DE_VERSION', N'Restauração de versão'),
+        (N'ES', N'BACC_RESTAURACION_RECHAZADA', N'Restauración rechazada'),           (N'EN', N'BACC_RESTAURACION_RECHAZADA', N'Restore rejected'),               (N'PT', N'BACC_RESTAURACION_RECHAZADA', N'Restauração recusada'),
+        (N'ES', N'BACC_TRANSICION_RECHAZADA', N'Transición rechazada'),               (N'EN', N'BACC_TRANSICION_RECHAZADA', N'Transition rejected'),              (N'PT', N'BACC_TRANSICION_RECHAZADA', N'Transição recusada'),
+        (N'ES', N'BACC_VERIFICACION_DE_INTEGRIDAD_FALLIDA', N'Verificación de integridad fallida'), (N'EN', N'BACC_VERIFICACION_DE_INTEGRIDAD_FALLIDA', N'Integrity check failed'), (N'PT', N'BACC_VERIFICACION_DE_INTEGRIDAD_FALLIDA', N'Falha na verificação de integridade')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
+GO
+
+-- ===========================================================================
+-- LoginAuditLog.Action: dominio cerrado (LOGIN_OK, LOGIN_FAIL, LOGOUT), igual
+-- que el estado de Reservas y de ReservaMemento. La comparacion es binaria:
+-- con la intercalacion CI de la base 'login_ok' pasaria el CHECK y la lectura no
+-- lo reconoceria como accion. Las filas que ya existan fuera de dominio no se
+-- borran (son evidencia de auditoria): en ese caso la restriccion se crea WITH
+-- NOCHECK y rige solo para las escrituras nuevas.
+-- ===========================================================================
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_LoginAuditLog_Action' AND parent_object_id = OBJECT_ID('dbo.LoginAuditLog'))
+BEGIN
+    IF EXISTS (SELECT 1 FROM dbo.LoginAuditLog
+               WHERE [Action] COLLATE Latin1_General_BIN NOT IN (N'LOGIN_OK', N'LOGIN_FAIL', N'LOGOUT'))
+        ALTER TABLE dbo.LoginAuditLog WITH NOCHECK ADD CONSTRAINT CK_LoginAuditLog_Action
+            CHECK ([Action] COLLATE Latin1_General_BIN IN (N'LOGIN_OK', N'LOGIN_FAIL', N'LOGOUT'));
+    ELSE
+        ALTER TABLE dbo.LoginAuditLog WITH CHECK ADD CONSTRAINT CK_LoginAuditLog_Action
+            CHECK ([Action] COLLATE Latin1_General_BIN IN (N'LOGIN_OK', N'LOGIN_FAIL', N'LOGOUT'));
+END
+GO
+
+-- ===========================================================================
+-- QA-12/09/2026 F09
+-- ===========================================================================
+-- ===========================================================================
+-- F09 - Login, cuentas, sesion y menu principal. Agregado a db/schema.sql.
+-- Idempotente y guardado en UTF-8 con BOM (tildes para sqlcmd). Se ejecuta sobre
+-- la base que indica -d, igual que schema.sql.
+-- ===========================================================================
+SET QUOTED_IDENTIFIER ON;
+GO
+
+-- Errores de acceso a la base de datos con un mensaje funcional traducido en lugar
+-- del texto crudo del motor (en ingles, con el nombre de la base y el usuario de
+-- Windows): LOG-08, ROB-11, AUD-13. Inserta solo lo que falte.
+--   LOGIN_ERR_SIN_BASE y CC_MSG_ERR_SIN_BASE: login y alta de cuenta.
+--   MSG_ERROR_SIN_BASE: mensaje comun para las demas pantallas que hoy concatenan
+--   MSG_ERROR_PREFIJO con el mensaje de la excepcion (Reservas, Clientes, Bitacora,
+--   Auditoria, historial y versiones de la reserva, recalculo de digitos
+--   verificadores, alta rapida de cliente y de perfil).
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'LOGIN_ERR_SIN_BASE', N'No se pudo acceder a la base de datos. Reintentá o contactate con un administrador.'),
+        (N'EN', N'LOGIN_ERR_SIN_BASE', N'The database could not be reached. Try again or contact an administrator.'),
+        (N'PT', N'LOGIN_ERR_SIN_BASE', N'Não foi possível acessar o banco de dados. Tente novamente ou contate um administrador.'),
+        (N'ES', N'CC_MSG_ERR_SIN_BASE', N'La cuenta no se creó: no se pudo acceder a la base de datos. Reintentá más tarde.'),
+        (N'EN', N'CC_MSG_ERR_SIN_BASE', N'The account was not created: the database could not be reached. Try again later.'),
+        (N'PT', N'CC_MSG_ERR_SIN_BASE', N'A conta não foi criada: não foi possível acessar o banco de dados. Tente mais tarde.'),
+        (N'ES', N'MSG_ERROR_SIN_BASE', N'No se pudo acceder a la base de datos. Reintentá o contactate con un administrador.'),
+        (N'EN', N'MSG_ERROR_SIN_BASE', N'The database could not be reached. Try again or contact an administrator.'),
+        (N'PT', N'MSG_ERROR_SIN_BASE', N'Não foi possível acessar o banco de dados. Tente novamente ou contate um administrador.')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;
+GO
+
+-- Claves que ninguna pantalla consume desde este cambio: eran el prefijo que se
+-- concatenaba con el mensaje del motor en el login y en el alta. Se quitan de las
+-- bases existentes (en todos los idiomas), con el mismo criterio que las claves
+-- retiradas en schema.sql; al integrar, retirar tambien sus semillas.
+DELETE FROM dbo.Traducciones
+ WHERE Clave IN (N'LOGIN_ERR_CONEXION', N'CC_MSG_ERROR');
+GO
+
+-- Textos PT que no entraban con la ventana principal en su tamano por defecto (VIS-17):
+--   COL_DNI: "Documento" en el encabezado de la grilla de Clientes (99 px en una columna
+--   de 95). "DNI" es el nombre del documento del dominio y es el texto que ya usa ES.
+--   ACC_LOGOUT: "Encerramento de sessão" en la accion de la auditoria de login (164 px en
+--   una columna de 141, y cortado tambien en el combo de filtro de 150 px). "Fim de sessão"
+--   es el par de "Cierre de sesión".
+-- Solo pisa el valor de fabrica: una traduccion editada por el usuario se conserva. La
+-- tercera tupla cubre una base sembrada antes de la correccion de ortografia de schema.sql.
+;WITH Fix(Codigo, Clave, Anterior, Nuevo) AS (
+    SELECT * FROM (VALUES
+        (N'PT', N'COL_DNI',    N'Documento',              N'DNI'),
+        (N'PT', N'ACC_LOGOUT', N'Encerramento de sessão', N'Fim de sessão'),
+        (N'PT', N'ACC_LOGOUT', N'Encerramento de sessao', N'Fim de sessão')
+    ) AS v(Codigo, Clave, Anterior, Nuevo)
+)
+UPDATE t SET Texto = f.Nuevo
+FROM dbo.Traducciones t
+JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
+JOIN Fix f ON f.Codigo = i.Codigo AND f.Clave = t.Clave
+WHERE t.Texto = f.Anterior;
+GO
+
+-- ===========================================================================
+-- QA-12/09/2026 F10
+-- ===========================================================================
+-- EvenTech - F10 Idiomas y editor de traducciones (agregado a db/schema.sql)
+--
+-- Idempotente: se ejecuta sobre la base que indica -d, despues de db/schema.sql,
+-- tantas veces como se quiera.
+--  * Siembra los textos nuevos del editor de idiomas (ES/EN/PT): aviso de
+--    "sin cambios", texto vacio, ediciones pendientes y nombre de idioma duplicado.
+--  * Corrige dos textos de fabrica que ya no describen la regla vigente
+--    (IDI_PLANTILLA_INVALIDA: ahora tambien se rechazan marcadores faltantes o con
+--    otro formato; MSG_IDI_COD_INV: el codigo admite letras, digitos y guion,
+--    empezando por letra). Solo se pisan mientras conserven el texto de fabrica:
+--    una traduccion editada por el usuario se respeta.
+
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        -- Guardar sin haber editado nada no es una edicion: no se informa ni se asienta
+        (N'ES', N'IDI_SIN_CAMBIOS', N'No hay cambios para guardar.'), (N'EN', N'IDI_SIN_CAMBIOS', N'There are no changes to save.'), (N'PT', N'IDI_SIN_CAMBIOS', N'Não há alterações para salvar.'),
+        -- Una traduccion vacia deja menus, titulos y botones sin texto
+        (N'ES', N'IDI_TEXTO_VACIO', N'El texto de ''{0}'' no puede quedar vacío.'), (N'EN', N'IDI_TEXTO_VACIO', N'The text for ''{0}'' cannot be empty.'), (N'PT', N'IDI_TEXTO_VACIO', N'O texto de ''{0}'' não pode ficar vazio.'),
+        -- Cambiar de idioma, crear uno o cerrar con ediciones sin guardar
+        (N'ES', N'IDI_CAMBIOS_PENDIENTES', N'Hay traducciones sin guardar en ''{0}''. ¿Desea guardarlas antes de continuar?'), (N'EN', N'IDI_CAMBIOS_PENDIENTES', N'There are unsaved translations in ''{0}''. Do you want to save them before continuing?'), (N'PT', N'IDI_CAMBIOS_PENDIENTES', N'Há traduções não salvas em ''{0}''. Deseja salvá-las antes de continuar?'),
+        -- Dos idiomas con el mismo nombre son indistinguibles en el selector
+        (N'ES', N'MSG_IDI_NOM_DUP', N'Ya existe un idioma con ese nombre.'), (N'EN', N'MSG_IDI_NOM_DUP', N'A language with that name already exists.'), (N'PT', N'MSG_IDI_NOM_DUP', N'Já existe um idioma com esse nome.')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
+GO
+
+-- Correcciones de textos de fabrica: solo si el texto vigente es EXACTAMENTE el
+-- sembrado (comparacion binaria; tambien la variante sin tildes de las versiones
+-- anteriores). Una traduccion editada por el usuario se conserva.
+;WITH Fix(Codigo, Clave, Anterior, Nuevo) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'IDI_PLANTILLA_INVALIDA', N'El texto de ''{0}'' tiene llaves sin cerrar o marcadores que la clave no admite.', N'El texto de ''{0}'' tiene llaves sin cerrar o marcadores que no coinciden con los que la clave necesita.'),
+        (N'EN', N'IDI_PLANTILLA_INVALIDA', N'The text for ''{0}'' has unclosed braces or placeholders that the key does not allow.', N'The text for ''{0}'' has unclosed braces or placeholders that do not match the ones the key needs.'),
+        (N'PT', N'IDI_PLANTILLA_INVALIDA', N'O texto de ''{0}'' tem chaves sem fechar ou marcadores que a chave não admite.', N'O texto de ''{0}'' tem chaves sem fechar ou marcadores que não coincidem com os que a chave precisa.'),
+        (N'ES', N'MSG_IDI_COD_INV', N'Código inválido (1 a 5 caracteres).', N'Código inválido: de 1 a 5 letras, números o guiones, empezando por una letra.'),
+        (N'ES', N'MSG_IDI_COD_INV', N'Codigo invalido (1 a 5 caracteres).', N'Código inválido: de 1 a 5 letras, números o guiones, empezando por una letra.'),
+        (N'EN', N'MSG_IDI_COD_INV', N'Invalid code (1 to 5 chars).', N'Invalid code: 1 to 5 letters, digits or hyphens, starting with a letter.'),
+        (N'PT', N'MSG_IDI_COD_INV', N'Código inválido (1 a 5 caracteres).', N'Código inválido: de 1 a 5 letras, números ou hifens, começando por uma letra.'),
+        (N'PT', N'MSG_IDI_COD_INV', N'Codigo invalido (1 a 5 caracteres).', N'Código inválido: de 1 a 5 letras, números ou hifens, começando por uma letra.')
+    ) AS v(Codigo, Clave, Anterior, Nuevo)
+)
+UPDATE t SET Texto = f.Nuevo
+FROM dbo.Traducciones t
+JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
+JOIN Fix f ON f.Codigo = i.Codigo AND f.Clave = t.Clave
+WHERE t.Texto COLLATE Latin1_General_BIN = f.Anterior COLLATE Latin1_General_BIN
+  AND DATALENGTH(t.Texto) = DATALENGTH(f.Anterior);   -- '=' ignora los espacios finales
+GO
+
+-- ===========================================================================
+-- QA-12/09/2026 F11
+-- ===========================================================================
+-- F11 - Conexion, arranque e instalacion: claves nuevas de la pantalla de conexion.
+-- Idempotente (solo inserta las claves que falten), mismo patron que db/schema.sql.
+-- Instancia y base son obligatorias: el rechazo reemplaza a la sustitucion
+-- silenciosa por la cadena de fabrica (localhost\SQLEXPRESS / EvenTechDB).
+-- El texto ES es impersonal ("Falta ..."): la ayuda de la pantalla y los
+-- diagnosticos de conexion no usan el mismo trato y el aviso no suma otro.
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'CONN_FALTA_SERVIDOR', N'Falta la instancia de SQL Server.'), (N'EN', N'CONN_FALTA_SERVIDOR', N'Enter the SQL Server instance.'), (N'PT', N'CONN_FALTA_SERVIDOR', N'Informe a instância do SQL Server.'),
+        (N'ES', N'CONN_FALTA_BASE', N'Falta el nombre de la base de datos.'), (N'EN', N'CONN_FALTA_BASE', N'Enter the database name.'), (N'PT', N'CONN_FALTA_BASE', N'Informe o nome do banco de dados.')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
+GO
+
+-- Correccion de fabrica: donde ya se hubiera sembrado el primer texto ES de estas
+-- claves ("Indicá ..."), pasa al texto nuevo. Solo pisa mientras el valor siga
+-- siendo aquel: un texto editado desde la aplicacion se respeta.
+;WITH Fix(Codigo, Clave, Anterior, Nuevo) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'CONN_FALTA_SERVIDOR', N'Indicá la instancia de SQL Server.', N'Falta la instancia de SQL Server.'),
+        (N'ES', N'CONN_FALTA_BASE', N'Indicá el nombre de la base de datos.', N'Falta el nombre de la base de datos.')
+    ) AS v(Codigo, Clave, Anterior, Nuevo)
+)
+UPDATE t SET Texto = f.Nuevo
+FROM dbo.Traducciones t
+JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
+JOIN Fix f ON f.Codigo = i.Codigo AND f.Clave = t.Clave
+WHERE t.Texto = f.Anterior;
+GO
+
+-- ===========================================================================
+-- QA-12/09/2026 integracion: acciones de bitacora que agregaron los paquetes de
+-- correccion (la grilla las traduce por la clave BACC_ derivada del valor
+-- guardado) y la inconsistencia de estado fuera del dominio de la alerta de
+-- integridad. Idempotente: solo inserta las que falten.
+-- ===========================================================================
+;WITH Txt AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'BACC_ASIGNACION_RECHAZADA', N'Asignación rechazada'), (N'EN', N'BACC_ASIGNACION_RECHAZADA', N'Assignment rejected'), (N'PT', N'BACC_ASIGNACION_RECHAZADA', N'Atribuição rejeitada'),
+        (N'ES', N'BACC_COMPOSICION_RECHAZADA', N'Composición rechazada'), (N'EN', N'BACC_COMPOSICION_RECHAZADA', N'Composition rejected'), (N'PT', N'BACC_COMPOSICION_RECHAZADA', N'Composição rejeitada'),
+        (N'ES', N'BACC_IDIOMA_RECHAZADO', N'Idioma rechazado'), (N'EN', N'BACC_IDIOMA_RECHAZADO', N'Language rejected'), (N'PT', N'BACC_IDIOMA_RECHAZADO', N'Idioma rejeitado'),
+        (N'ES', N'BACC_TRADUCCIONES_RECHAZADAS', N'Traducciones rechazadas'), (N'EN', N'BACC_TRADUCCIONES_RECHAZADAS', N'Translations rejected'), (N'PT', N'BACC_TRADUCCIONES_RECHAZADAS', N'Traduções rejeitadas'),
+        (N'ES', N'BACC_OPERACION_SOBRE_DATO_ALTERADO', N'Operación sobre dato alterado'), (N'EN', N'BACC_OPERACION_SOBRE_DATO_ALTERADO', N'Operation on altered data'), (N'PT', N'BACC_OPERACION_SOBRE_DATO_ALTERADO', N'Operação sobre dado alterado'),
+        (N'ES', N'BACC_CANCELACION_RECHAZADA', N'Cancelación rechazada'), (N'EN', N'BACC_CANCELACION_RECHAZADA', N'Cancellation rejected'), (N'PT', N'BACC_CANCELACION_RECHAZADA', N'Cancelamento rejeitado'),
+        (N'ES', N'BACC_EMISION_DE_COMPROBANTE_RECHAZADA', N'Emisión de comprobante rechazada'), (N'EN', N'BACC_EMISION_DE_COMPROBANTE_RECHAZADA', N'Receipt issuing rejected'), (N'PT', N'BACC_EMISION_DE_COMPROBANTE_RECHAZADA', N'Emissão de comprovante rejeitada'),
+        (N'ES', N'BACC_ENVIO_DE_COMPROBANTE_RECHAZADO', N'Envío de comprobante rechazado'), (N'EN', N'BACC_ENVIO_DE_COMPROBANTE_RECHAZADO', N'Receipt sending rejected'), (N'PT', N'BACC_ENVIO_DE_COMPROBANTE_RECHAZADO', N'Envio de comprovante rejeitado'),
+        (N'ES', N'BACC_ALTA_DE_SERVICIO_RECHAZADA', N'Alta de servicio rechazada'), (N'EN', N'BACC_ALTA_DE_SERVICIO_RECHAZADA', N'Service creation rejected'), (N'PT', N'BACC_ALTA_DE_SERVICIO_RECHAZADA', N'Cadastro de serviço rejeitado'),
+        (N'ES', N'BACC_MODIFICACION_DE_SERVICIO_RECHAZADA', N'Modificación de servicio rechazada'), (N'EN', N'BACC_MODIFICACION_DE_SERVICIO_RECHAZADA', N'Service update rejected'), (N'PT', N'BACC_MODIFICACION_DE_SERVICIO_RECHAZADA', N'Alteração de serviço rejeitada'),
+        (N'ES', N'ALERT_ESTADO_FUERA_DOMINIO', N'Reserva #{0}: estado almacenado fuera del dominio de la tabla de estados (posible alteración externa).'),
+        (N'EN', N'ALERT_ESTADO_FUERA_DOMINIO', N'Reservation #{0}: stored status outside the status table domain (possible external tampering).'),
+        (N'PT', N'ALERT_ESTADO_FUERA_DOMINIO', N'Reserva #{0}: estado armazenado fora do domínio da tabela de estados (possível alteração externa).')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
+GO
+
+-- ===========================================================================
+-- QA-13/09/2026 R03
+-- ===========================================================================
+-- ===========================================================================
+-- R03 - Ficha de reservas (ucReservas): texto nuevo de la interfaz.
+--  * MSG_RES_ESTADO_DESCONOCIDO: aviso de la ficha cuando la reserva abierta tiene
+--    un estado almacenado que no es ninguno de la tabla de estados (alteracion
+--    externa). La ficha queda de solo lectura, sin estado seleccionado, y no admite
+--    guardar, cargar servicios, cobrar ni emitir documentos.
+-- Idempotente: solo inserta las claves que falten (mismo patron que db/schema.sql,
+-- con GROUP BY i.Id, t.Clave para que una clave repetida no rompa UQ_Traducciones).
+-- Una traduccion editada por el usuario se conserva.
+-- Guardado en UTF-8 con BOM: tildes para sqlcmd.
+-- ===========================================================================
+SET QUOTED_IDENTIFIER ON;
+GO
+
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'MSG_RES_ESTADO_DESCONOCIDO', N'El estado registrado de la reserva no es válido: no admite modificaciones. Contactate con un administrador.'),
+        (N'EN', N'MSG_RES_ESTADO_DESCONOCIDO', N'The recorded status of the reservation is not valid: it cannot be modified. Contact an administrator.'),
+        (N'PT', N'MSG_RES_ESTADO_DESCONOCIDO', N'O estado registrado da reserva não é válido: não admite modificações. Contate um administrador.')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;
+GO
+
+-- ===========================================================================
+-- QA-13/09/2026 R04 (Pagos)
+-- ===========================================================================
+-- El aviso de la anulacion rechazada por la RN-07 (una reserva confirmada no
+-- puede quedar sin adelanto) no cita el codigo interno de la regla: como los
+-- demas mensajes de la pantalla, esta redactado para el usuario. El codigo de
+-- la regla sigue en el asiento de bitacora.
+-- Idempotente, mismo patron que db/schema.sql:
+--  1. Inserta la clave con el texto nuevo donde falte (una base nueva en la que
+--     este bloque corra antes del que siembra la clave queda ya con el texto
+--     nuevo, y aquel bloque la saltea por NOT EXISTS).
+--  2. Correccion de fabrica: donde la clave conserve EXACTAMENTE el texto
+--     sembrado con el codigo (comparacion binaria), pasa al texto nuevo. Una
+--     traduccion editada desde Gestion de idiomas se respeta.
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'MSG_PAGO_ANULAR_SIN_ADELANTO', N'La reserva está confirmada: anular este pago la dejaría sin adelanto. Registre primero el pago que lo reemplaza o cancele la reserva.'),
+        (N'EN', N'MSG_PAGO_ANULAR_SIN_ADELANTO', N'The reservation is confirmed: voiding this payment would leave it without a deposit. Record the replacement payment first or cancel the reservation.'),
+        (N'PT', N'MSG_PAGO_ANULAR_SIN_ADELANTO', N'A reserva está confirmada: anular este pagamento a deixaria sem adiantamento. Registre primeiro o pagamento que o substitui ou cancele a reserva.')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
+GO
+
+;WITH Fix(Codigo, Clave, Anterior, Nuevo) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'MSG_PAGO_ANULAR_SIN_ADELANTO', N'La reserva está confirmada: anular este pago la dejaría sin adelanto (RN-07). Registre primero el pago que lo reemplaza o cancele la reserva.', N'La reserva está confirmada: anular este pago la dejaría sin adelanto. Registre primero el pago que lo reemplaza o cancele la reserva.'),
+        (N'EN', N'MSG_PAGO_ANULAR_SIN_ADELANTO', N'The reservation is confirmed: voiding this payment would leave it without a deposit (RN-07). Record the replacement payment first or cancel the reservation.', N'The reservation is confirmed: voiding this payment would leave it without a deposit. Record the replacement payment first or cancel the reservation.'),
+        (N'PT', N'MSG_PAGO_ANULAR_SIN_ADELANTO', N'A reserva está confirmada: anular este pagamento a deixaria sem adiantamento (RN-07). Registre primeiro o pagamento que o substitui ou cancele a reserva.', N'A reserva está confirmada: anular este pagamento a deixaria sem adiantamento. Registre primeiro o pagamento que o substitui ou cancele a reserva.')
+    ) AS v(Codigo, Clave, Anterior, Nuevo)
+)
+UPDATE t SET Texto = f.Nuevo
+FROM dbo.Traducciones t
+JOIN dbo.Idiomas i ON i.Id = t.IdiomaId
+JOIN Fix f ON f.Codigo = i.Codigo AND f.Clave = t.Clave
+WHERE t.Texto COLLATE Latin1_General_BIN = f.Anterior COLLATE Latin1_General_BIN
+  AND DATALENGTH(t.Texto) = DATALENGTH(f.Anterior);   -- '=' ignora los espacios finales
+GO
+
+-- ===========================================================================
+-- QA-13/09/2026 R06
+-- ===========================================================================
+-- ===========================================================================
+-- R06 - Idiomas, traducciones y mensajes de error comunes (se agrega a db/schema.sql).
+-- Idempotente: inserta solo lo que falte, asi una traduccion editada por el
+-- usuario desde Gestion de Idiomas se conserva. Guardado en UTF-8 con BOM.
+--  * MSG_ERROR_OPERACION: aviso comun cuando la base respondio pero la operacion
+--    no se pudo completar (una restriccion, un dato que no entra, un bloqueo). El
+--    aviso MSG_ERROR_SIN_BASE queda para los errores de conexion: red, tiempo de
+--    espera, base inexistente o fuera de linea, inicio de sesion rechazado.
+--  * EST_DESCONOCIDO: leyenda de un estado de reserva almacenado que no es ninguno
+--    de la tabla de estados (alteracion externa de la base), en lugar de la clave
+--    cruda "EST_-1" en la grilla, en los avisos y en Versiones.
+--  * IDI_FILTRO_INVALIDO: el editor de idiomas rechaza un CMP_FILTER que no es un
+--    filtro de archivos del cuadro "Guardar como" (descripcion|patron).
+-- ===========================================================================
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'MSG_ERROR_OPERACION', N'No se pudo completar la operación. Reintentá o contactate con un administrador.'),
+        (N'EN', N'MSG_ERROR_OPERACION', N'The operation could not be completed. Try again or contact an administrator.'),
+        (N'PT', N'MSG_ERROR_OPERACION', N'Não foi possível concluir a operação. Tente novamente ou contate um administrador.'),
+        (N'ES', N'EST_DESCONOCIDO', N'(estado desconocido)'),
+        (N'EN', N'EST_DESCONOCIDO', N'(unknown status)'),
+        (N'PT', N'EST_DESCONOCIDO', N'(estado desconhecido)'),
+        (N'ES', N'IDI_FILTRO_INVALIDO', N'El texto de ''{0}'' tiene que ser un filtro de archivos: descripción y patrón separados por ''|'', por ejemplo: Documento HTML (*.html)|*.html'),
+        (N'EN', N'IDI_FILTRO_INVALIDO', N'The text for ''{0}'' must be a file filter: description and pattern separated by ''|'', for example: HTML document (*.html)|*.html'),
+        (N'PT', N'IDI_FILTRO_INVALIDO', N'O texto de ''{0}'' deve ser um filtro de arquivos: descrição e padrão separados por ''|'', por exemplo: Documento HTML (*.html)|*.html')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
+GO
+
+-- ===========================================================================
+-- QA-13/09/2026 R08
+-- ===========================================================================
+-- ----------------------------------------------------------------------------
+-- R08: aviso de la ventana principal antes de descartar una vista con cambios sin
+-- guardar al cambiar de seccion (volver a pulsar la seccion activa ya no la rearma).
+-- Inserta solo lo que falte; una clave repetida no rompe el INSERT (GROUP BY).
+-- ----------------------------------------------------------------------------
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'MAIN_CAMBIOS_SIN_GUARDAR', N'Hay cambios sin guardar en la sección actual. ¿Descartarlos y continuar?'),
+        (N'EN', N'MAIN_CAMBIOS_SIN_GUARDAR', N'There are unsaved changes in the current section. Discard them and continue?'),
+        (N'PT', N'MAIN_CAMBIOS_SIN_GUARDAR', N'Há alterações não salvas na seção atual. Descartá-las e continuar?')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;
+GO
+
+-- ===========================================================================
+-- QA-13/09/2026 R09
+-- ===========================================================================
+-- EvenTech - Agregado al esquema del paquete R09 (catalogo de servicios)
+--
+-- Se inserta dentro de db/schema.sql, que ya trae al principio la guarda contra
+-- las bases del sistema: este bloque no crea la base, no hace USE ni repite la
+-- guarda. Idempotente, mismo criterio que db/schema.sql: solo inserta las claves
+-- que falten y corrige un texto de fabrica mientras conserve el valor sembrado.
+-- Guardado en UTF-8 con BOM (tildes para sqlcmd).
+
+SET QUOTED_IDENTIFIER ON;
+GO
+
+-- ===========================================================================
+-- R09 - MSG_SRV_PRECIO_MAX pasa a ser una plantilla con {0}. La ficha del catalogo
+-- escribe el tope con la configuracion regional de la estacion (Tr_704ILR.F_704ILR
+-- con el importe ya formateado en N2): es el formato de la columna Precio de la
+-- grilla y el que la ficha acepta al leer el precio. Hasta ahora cada idioma traia
+-- el numero fijo ("9.999.999.999,99" en ES y PT, "9,999,999,999.99" en EN): en una
+-- estacion en-US el mensaje en espanol mostraba un numero que la propia ficha
+-- rechazaba como invalido. El editor de idiomas admite el marcador porque la clave
+-- figura en BLL_Idioma_704ILR.MarcadoresPorClave_704ILR con "{0}".
+-- Idempotente: solo inserta las claves que falten.
+-- ===========================================================================
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'MSG_SRV_PRECIO_MAX', N'El precio no puede superar {0}.'), (N'EN', N'MSG_SRV_PRECIO_MAX', N'The price cannot exceed {0}.'), (N'PT', N'MSG_SRV_PRECIO_MAX', N'O preço não pode ultrapassar {0}.')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
+GO
+
+-- ===========================================================================
+-- QA-14/09/2026 S01
+-- ===========================================================================
+-- ===========================================================================
+-- QA tercera ronda - paquete S01 (ficha de Reservas)
+-- ===========================================================================
+-- Agregado al esquema del paquete S01. Idempotente, con el mismo patron que
+-- db/schema.sql: corre sobre la base que indica -d (no crea la base, no hace USE
+-- ni repite la guarda), despues de las semillas de traducciones, y se puede
+-- repetir: solo inserta las claves que falten y corrige un texto de fabrica
+-- mientras conserve exactamente ese valor. Guardado en UTF-8 con BOM (tildes y
+-- eñe para sqlcmd).
+
+SET QUOTED_IDENTIFIER ON;
+GO
+
+-- ---------------------------------------------------------------------------
+-- Avisos nuevos de la ficha de Reservas (ucReservas_704ILR):
+--  * MSG_RES_DATO_NO_DISPONIBLE: el cliente o el salon de la reserva no figuran en
+--    las listas de la ficha ni despues de recargarlas; la ficha queda de solo lectura
+--    (antes el combo quedaba en otro cliente y Guardar le reasignaba la reserva).
+--  * MSG_RES_FECHA_FUERA_RANGO: la fecha del evento almacenada esta fuera del
+--    calendario que admite el selector (alteracion externa: 9999, o 2080 con el
+--    calendario de ar-SA); la ficha queda de solo lectura.
+--  * MSG_RES_NO_CARGADA: la reserva no se pudo mostrar por una falla; solo lectura.
+--  * MSG_RES_CAMBIOS_PAGOS: Pagos con los servicios cambiados y sin guardar (el
+--    dialogo cobra contra el total guardado).
+--  * MSG_RES_CAMBIOS_DOCUMENTOS: Comprobante o Email con cambios sin guardar (el
+--    documento se arma con la reserva guardada).
+--  * MSG_RES_CANCELAR_OTROS_CAMBIOS: linea que se suma a la pregunta de cancelacion
+--    cuando la ficha tiene, ademas del estado, otros cambios que no se guardan.
+-- Inserta solo lo que falte; una clave repetida no rompe el INSERT (GROUP BY).
+-- ---------------------------------------------------------------------------
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'MSG_RES_DATO_NO_DISPONIBLE', N'El cliente o el salón registrado en la reserva no figura en las listas de la ficha: no admite modificaciones. Contactate con un administrador.'),
+        (N'EN', N'MSG_RES_DATO_NO_DISPONIBLE', N'The client or venue recorded in the reservation is not in the form''s lists: it cannot be modified. Contact an administrator.'),
+        (N'PT', N'MSG_RES_DATO_NO_DISPONIBLE', N'O cliente ou o salão registrado na reserva não consta nas listas da ficha: não admite modificações. Contate um administrador.'),
+        (N'ES', N'MSG_RES_FECHA_FUERA_RANGO', N'La fecha del evento registrada está fuera del calendario admitido: no admite modificaciones. Contactate con un administrador.'),
+        (N'EN', N'MSG_RES_FECHA_FUERA_RANGO', N'The recorded event date is outside the supported calendar: it cannot be modified. Contact an administrator.'),
+        (N'PT', N'MSG_RES_FECHA_FUERA_RANGO', N'A data do evento registrada está fora do calendário admitido: não admite modificações. Contate um administrador.'),
+        (N'ES', N'MSG_RES_NO_CARGADA', N'No se pudo mostrar la reserva: no se admite modificarla. Seleccione otra reserva y vuelva a abrirla.'),
+        (N'EN', N'MSG_RES_NO_CARGADA', N'The reservation could not be displayed: it cannot be modified. Select another reservation and open it again.'),
+        (N'PT', N'MSG_RES_NO_CARGADA', N'Não foi possível exibir a reserva: não é possível modificá-la. Selecione outra reserva e abra-a novamente.'),
+        (N'ES', N'MSG_RES_CAMBIOS_PAGOS', N'Los servicios de la reserva tienen cambios sin guardar: guarde la reserva antes de registrar pagos.'),
+        (N'EN', N'MSG_RES_CAMBIOS_PAGOS', N'The reservation''s services have unsaved changes: save the reservation before adding payments.'),
+        (N'PT', N'MSG_RES_CAMBIOS_PAGOS', N'Os serviços da reserva têm alterações não salvas: salve a reserva antes de registrar pagamentos.'),
+        (N'ES', N'MSG_RES_CAMBIOS_DOCUMENTOS', N'La reserva tiene cambios sin guardar: guárdela antes de emitir su documentación.'),
+        (N'EN', N'MSG_RES_CAMBIOS_DOCUMENTOS', N'The reservation has unsaved changes: save it before issuing its paperwork.'),
+        (N'PT', N'MSG_RES_CAMBIOS_DOCUMENTOS', N'A reserva tem alterações não salvas: salve-a antes de emitir sua documentação.'),
+        (N'ES', N'MSG_RES_CANCELAR_OTROS_CAMBIOS', N'Los demás cambios sin guardar de la ficha se descartarán: solo se aplica la cancelación.'),
+        (N'EN', N'MSG_RES_CANCELAR_OTROS_CAMBIOS', N'The other unsaved changes in the form will be discarded: only the cancellation is applied.'),
+        (N'PT', N'MSG_RES_CANCELAR_OTROS_CAMBIOS', N'As demais alterações não salvas da ficha serão descartadas: só o cancelamento é aplicado.'),
+        (N'ES', N'MSG_RES_MONTO', N'El monto no puede ser negativo ni superar {0}.'),
+        (N'EN', N'MSG_RES_MONTO', N'The amount cannot be negative or exceed {0}.'),
+        (N'PT', N'MSG_RES_MONTO', N'O valor não pode ser negativo nem ultrapassar {0}.')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
+GO
+
+-- ---------------------------------------------------------------------------
+-- MSG_RES_MONTO pasa a plantilla con {0}: la ficha escribe el tope del monto
+-- (BLL_Reserva_704ILR.MontoMaximo_704ILR) con la configuracion regional de la
+-- estacion (N2), el mismo formato del campo Monto y de la grilla. Cada idioma traia
+-- el numero fijo ("0,00 y 9.999.999.999,99" en ES y PT, "0.00 and 9,999,999,999.99"
+-- en EN): en otra configuracion regional el aviso mostraba otros separadores que los
+-- de la ficha. El editor de idiomas admite el marcador con la clave registrada en
+-- BLL_Idioma_704ILR.MarcadoresPorClave_704ILR.
+-- Correccion de fabrica: se aplica a CUALQUIER idioma cuyo texto sea exactamente uno
+-- de los textos de fabrica anteriores de la clave (tambien un idioma propio que los
+-- copio), con comparacion binaria y del largo en bytes ('=' ignora los espacios
+-- finales). Cada texto anterior pasa a la plantilla de su idioma. Una traduccion
+-- editada desde la aplicacion se respeta.
+-- ---------------------------------------------------------------------------
+;WITH Fix(Anterior, Nuevo) AS (
+    SELECT * FROM (VALUES
+        (N'El monto debe estar entre 0,00 y 9.999.999.999,99.',     N'El monto no puede ser negativo ni superar {0}.'),
+        (N'El monto no puede ser negativo.',                        N'El monto no puede ser negativo ni superar {0}.'),
+        (N'The amount must be between 0.00 and 9,999,999,999.99.',  N'The amount cannot be negative or exceed {0}.'),
+        (N'The amount cannot be negative.',                         N'The amount cannot be negative or exceed {0}.'),
+        (N'O valor deve estar entre 0,00 e 9.999.999.999,99.',      N'O valor não pode ser negativo nem ultrapassar {0}.'),
+        (N'O valor não pode ser negativo.',                         N'O valor não pode ser negativo nem ultrapassar {0}.'),
+        (N'O valor nao pode ser negativo.',                         N'O valor não pode ser negativo nem ultrapassar {0}.')
+    ) AS v(Anterior, Nuevo)
+)
+UPDATE t SET Texto = f.Nuevo
+FROM dbo.Traducciones t
+JOIN Fix f ON t.Texto COLLATE Latin1_General_BIN2 = f.Anterior COLLATE Latin1_General_BIN2
+          AND DATALENGTH(t.Texto) = DATALENGTH(f.Anterior)
+WHERE t.Clave = N'MSG_RES_MONTO';
+GO
+
+-- ===========================================================================
+-- QA-14/09/2026 S03
+-- ===========================================================================
+-- EvenTech - Tercera ronda de QA, paquete S03 (Clientes): cambios de base.
+--
+-- Idempotente, igual que db/schema.sql: se ejecuta sobre la base que indica -d (no crea
+-- la base ni cambia de contexto) y se puede volver a correr sin efectos nuevos.
+
+-- Correccion de fabrica: en ingles la confirmacion del alta de un cliente decia
+-- "Customer registered.", la unica aparicion de "Customer" en toda la interfaz; el resto
+-- de la pantalla (titulo, ficha, contador y avisos) dice "client".
+-- Se corrige en CUALQUIER idioma cuyo texto sea EXACTAMENTE el sembrado, tambien un idioma
+-- propio que lo copio al crearse: comparacion binaria y el mismo largo en bytes (el '='
+-- ignora los espacios finales). Una traduccion editada desde la aplicacion se respeta.
+;WITH Fix(Clave, Anterior, Nuevo) AS (
+    SELECT * FROM (VALUES
+        (N'MSG_CLI_CREADO', N'Customer registered.', N'Client registered.')
+    ) AS v(Clave, Anterior, Nuevo)
+)
+UPDATE t SET Texto = f.Nuevo
+FROM dbo.Traducciones t
+JOIN Fix f ON f.Clave = t.Clave
+WHERE t.Texto COLLATE Latin1_General_BIN2 = f.Anterior COLLATE Latin1_General_BIN2
+  AND DATALENGTH(t.Texto) = DATALENGTH(f.Anterior);
+GO
+
+-- ===========================================================================
+-- QA-14/09/2026 S04
+-- ===========================================================================
+-- ===========================================================================
+-- QA ronda 3 - S04 (Perfiles)
+-- ===========================================================================
+-- Se inserta dentro de db/schema.sql, que ya trae al principio la guarda contra
+-- las bases del sistema y SET QUOTED_IDENTIFIER ON: este bloque no crea la base,
+-- no hace USE ni repite la guarda. Idempotente, mismo criterio que db/schema.sql:
+-- solo inserta las claves que falten (una clave repetida no rompe el INSERT).
+-- Guardado en UTF-8 con BOM (tildes para sqlcmd).
+-- ----------------------------------------------------------------------------
+-- Perfiles: pregunta antes de descartar los permisos tildados y no guardados de un
+-- perfil al elegir otro en el combo o al pasar al perfil recién creado. Es otra
+-- clave que MAIN_CAMBIOS_SIN_GUARDAR porque cambiar de perfil descarta solo la
+-- composición a la vista: las asignaciones de la grilla se conservan.
+-- ----------------------------------------------------------------------------
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'MSG_PERF_DESCARTAR_PERMISOS', N'Hay cambios sin guardar en los permisos de este perfil. ¿Descartarlos y cambiar de perfil?'),
+        (N'EN', N'MSG_PERF_DESCARTAR_PERMISOS', N'There are unsaved changes in this profile''s permissions. Discard them and change profile?'),
+        (N'PT', N'MSG_PERF_DESCARTAR_PERMISOS', N'Há alterações não salvas nas permissões deste perfil. Descartá-las e trocar de perfil?')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;
+GO
+
+-- ===========================================================================
+-- QA-14/09/2026 S05
+-- ===========================================================================
+-- ===========================================================================
+-- S05 - Mensajes de error, idiomas y arranque (se agrega a db/schema.sql).
+-- Idempotente: inserta solo lo que falte, asi una traduccion editada por el
+-- usuario desde Gestion de Idiomas se conserva. Guardado en UTF-8 con BOM.
+--  * CRIT_DESCONOCIDA: leyenda de la criticidad de un asiento de bitacora que no
+--    es Info, Advertencia ni Error (Bitacora.Criticidad alterada por fuera de la
+--    aplicacion), en lugar de la clave cruda "CRIT_7" en la grilla de Bitacora.
+--  * BACC_CARGA_DE_IDIOMAS_RECUPERADA: accion que se asienta cuando la carga de
+--    idiomas y traducciones habia fallado (por ejemplo al arrancar, con la base
+--    caida un momento) y se completo al reintentarla.
+-- ===========================================================================
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'CRIT_DESCONOCIDA', N'(desconocida)'),
+        (N'EN', N'CRIT_DESCONOCIDA', N'(unknown)'),
+        (N'PT', N'CRIT_DESCONOCIDA', N'(desconhecida)'),
+        (N'ES', N'BACC_CARGA_DE_IDIOMAS_RECUPERADA', N'Carga de idiomas recuperada'),
+        (N'EN', N'BACC_CARGA_DE_IDIOMAS_RECUPERADA', N'Language loading recovered'),
+        (N'PT', N'BACC_CARGA_DE_IDIOMAS_RECUPERADA', N'Carregamento de idiomas recuperado')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
+GO
+
+-- ===========================================================================
+-- QA-14/09/2026 S06
+-- ===========================================================================
+-- ===========================================================================
+-- QA-14/09/2026 S06 - Servicios: correccion de fabrica de MSG_SRV_PRECIO_MAX
+-- ===========================================================================
+-- Se agrega a db/schema.sql (antes del cierre SET NOEXEC OFF). No crea la base,
+-- no hace USE ni repite la guarda del principio. Guardado en UTF-8 con BOM.
+--
+-- MSG_SRV_PRECIO_MAX paso a ser una plantilla con {0}: la ficha del catalogo
+-- escribe el tope con la configuracion regional de la estacion. Donde quedo
+-- sembrado el texto viejo con el numero fijo, pasa a la plantilla.
+--  * Alcanza a CUALQUIER idioma cuyo texto sea exactamente uno de los textos de
+--    fabrica anteriores, no solo a ES, EN y PT: un idioma creado desde Gestion de
+--    Idiomas copia los textos de ES y conservaba el numero fijo despues de correr
+--    el script. Recibe la plantilla del idioma cuyo texto viejo tiene.
+--  * La comparacion es exacta: intercalacion binaria (distingue mayusculas,
+--    tildes y cualquier caracter) y la misma longitud en bytes (DATALENGTH). El
+--    '=' de SQL Server completa con espacios antes de comparar, aun con
+--    intercalacion binaria, y daba por igual un texto con espacios al final.
+--  * Una traduccion editada por el usuario (cualquier diferencia) se conserva.
+-- Idempotente: una vez corregido, el texto ya no es ninguno de los anteriores.
+-- ===========================================================================
+SET QUOTED_IDENTIFIER ON;
+GO
+
+;WITH Fix(Clave, Anterior, Nuevo) AS (
+    SELECT * FROM (VALUES
+        (N'MSG_SRV_PRECIO_MAX', N'El precio no puede superar 9.999.999.999,99.', N'El precio no puede superar {0}.'),
+        (N'MSG_SRV_PRECIO_MAX', N'The price cannot exceed 9,999,999,999.99.', N'The price cannot exceed {0}.'),
+        (N'MSG_SRV_PRECIO_MAX', N'O preço não pode ultrapassar 9.999.999.999,99.', N'O preço não pode ultrapassar {0}.')
+    ) AS v(Clave, Anterior, Nuevo)
+)
+UPDATE t SET Texto = f.Nuevo
+FROM dbo.Traducciones t
+JOIN Fix f ON f.Clave = t.Clave
+WHERE t.Texto COLLATE Latin1_General_BIN = f.Anterior COLLATE Latin1_General_BIN
+  AND DATALENGTH(t.Texto) = DATALENGTH(f.Anterior);
+GO
+
+-- ===========================================================================
+-- QA-14/09/2026 S09
+-- ===========================================================================
+-- ===========================================================================
+-- QA-14/09/2026 S09 - Pantalla de configuracion de conexion
+-- ===========================================================================
+-- Aviso que muestra la pantalla cuando se pide cerrarla (Salir, la cruz o Alt+F4)
+-- mientras la configuracion elegida ya se esta escribiendo: en lugar de cerrar a
+-- mitad del guardado, la pantalla lo termina (connection.cfg y su asiento en la
+-- bitacora) y cierra con ese resultado. El codigo trae el mismo texto ES como
+-- valor por defecto. Idempotente (solo inserta las claves que falten), mismo
+-- patron que db/schema.sql.
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'CONN_GUARDANDO', N'Guardando la configuración...'), (N'EN', N'CONN_GUARDANDO', N'Saving the settings...'), (N'PT', N'CONN_GUARDANDO', N'Salvando a configuração...')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
+GO
+
+-- ===========================================================================
+-- QA-15/09/2026 integracion
+-- ===========================================================================
+-- Modulo de bitacora de la red de seguridad de la interfaz (Program_704ILR): una
+-- excepcion no manejada en un evento de pantalla se asienta con este modulo.
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'MOD_APLICACION', N'Aplicación'), (N'EN', N'MOD_APLICACION', N'Application'), (N'PT', N'MOD_APLICACION', N'Aplicação')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;
+GO
+
+-- ===========================================================================
+-- QA-15/09/2026 T04
+-- ===========================================================================
+-- EvenTech - Agregado al esquema del paquete T04 (Servicios: catalogo).
+--
+-- Idempotente y con el mismo patron que db/schema.sql: corre sobre la base que
+-- indica -d y solo inserta las claves que falten. Guardado en UTF-8 con BOM
+-- (tildes para sqlcmd). Se integra en el bloque de traducciones de Servicios.
+--
+--   MSG_SRV_NOTFOUND  guardar un servicio que se borro por fuera de la pantalla
+--                     (antes se mostraba el texto de Reservas "La reserva ya no
+--                     existe."). Mismo criterio que MSG_CLI_NOTFOUND en Clientes.
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        -- Servicios (Proceso 1): edicion de un servicio borrado
+        (N'ES', N'MSG_SRV_NOTFOUND', N'El servicio ya no existe.'), (N'EN', N'MSG_SRV_NOTFOUND', N'The service no longer exists.'), (N'PT', N'MSG_SRV_NOTFOUND', N'O serviço não existe mais.')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
+GO
+
+-- ===========================================================================
+-- QA-15/09/2026 T05
+-- ===========================================================================
+-- ===========================================================================
+-- Ficha de Reservas, comprobante y correo: textos nuevos.
+-- Corre sobre la base que indica -d, igual que db\schema.sql; inserta solo lo que
+-- falte, asi que se puede volver a correr sin efecto (una clave repetida tampoco
+-- rompe el INSERT: GROUP BY).
+--  * MSG_RES_INVITADOS_FUERA_RANGO: la cantidad de invitados registrada esta fuera
+--    del rango del campo (alteracion externa); la ficha queda de solo lectura.
+--  * MSG_EMAIL_ILEGIBLE: el email del cliente es un paquete cifrado que este equipo
+--    no puede abrir (base restaurada en otra PC); no se prepara el envio.
+--  * MSG_EMAIL_SIN_PROGRAMA: no se pudo abrir un programa de correo; el aviso agrega
+--    la ruta del comprobante guardado para adjuntarlo.
+--  * MSG_EMAIL_SIN_CARPETA: se abrio el correo pero no la carpeta del adjunto; el
+--    aviso agrega la ruta.
+--  * MSG_CMP_NO_ABIERTO: el comprobante se guardo pero no se pudo abrir; el aviso
+--    agrega la ruta.
+-- ===========================================================================
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'MSG_RES_INVITADOS_FUERA_RANGO', N'La cantidad de invitados registrada está fuera del rango admitido: no admite modificaciones. Contactate con un administrador.'),
+        (N'EN', N'MSG_RES_INVITADOS_FUERA_RANGO', N'The recorded number of guests is outside the allowed range: it cannot be modified. Contact an administrator.'),
+        (N'PT', N'MSG_RES_INVITADOS_FUERA_RANGO', N'A quantidade de convidados registrada está fora do intervalo admitido: não admite modificações. Contate um administrador.'),
+        (N'ES', N'MSG_EMAIL_ILEGIBLE', N'El email del cliente no se puede leer en este equipo (quedó cifrado con la clave de otra instalación): vuelva a cargarlo en la ficha del cliente.'),
+        (N'EN', N'MSG_EMAIL_ILEGIBLE', N'The client''s email cannot be read on this computer (it was encrypted with another installation''s key): enter it again in the client''s record.'),
+        (N'PT', N'MSG_EMAIL_ILEGIBLE', N'O email do cliente não pode ser lido neste computador (foi criptografado com a chave de outra instalação): cadastre-o novamente na ficha do cliente.'),
+        (N'ES', N'MSG_EMAIL_SIN_PROGRAMA', N'No se pudo abrir un programa de correo para preparar el mensaje. El comprobante quedó guardado para adjuntarlo en:'),
+        (N'EN', N'MSG_EMAIL_SIN_PROGRAMA', N'No email program could be opened to prepare the message. The receipt was saved so it can be attached from:'),
+        (N'PT', N'MSG_EMAIL_SIN_PROGRAMA', N'Não foi possível abrir um programa de email para preparar a mensagem. O comprovante foi salvo para ser anexado a partir de:'),
+        (N'ES', N'MSG_EMAIL_SIN_CARPETA', N'Se abrió el correo con el mensaje listo, pero no se pudo abrir la carpeta del comprobante. El archivo para adjuntar quedó en:'),
+        (N'EN', N'MSG_EMAIL_SIN_CARPETA', N'The email opened with the message ready, but the receipt''s folder could not be opened. The file to attach is at:'),
+        (N'PT', N'MSG_EMAIL_SIN_CARPETA', N'O email foi aberto com a mensagem pronta, mas não foi possível abrir a pasta do comprovante. O arquivo para anexar ficou em:'),
+        (N'ES', N'MSG_CMP_NO_ABIERTO', N'El comprobante se guardó, pero no se pudo abrir automáticamente. El archivo quedó en:'),
+        (N'EN', N'MSG_CMP_NO_ABIERTO', N'The receipt was saved, but it could not be opened automatically. The file is at:'),
+        (N'PT', N'MSG_CMP_NO_ABIERTO', N'O comprovante foi salvo, mas não foi possível abri-lo automaticamente. O arquivo ficou em:')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;   -- una sola fila por idioma+clave: una clave repetida en el
+                          -- bloque de arriba no puede romper UQ_Traducciones.
+GO
+
+-- ===========================================================================
+-- QA-15/09/2026 integracion ronda 4
+-- ===========================================================================
+-- CONN_NO_GUARDADA, CONN_CAUSA_ACCESO y CONN_CAUSA_EN_USO: aviso de la pantalla de conexion
+-- cuando la configuracion probada no se puede escribir (antes era un texto fijo en castellano
+-- seguido del mensaje de .NET, tambien en EN/PT).
+-- CMP_DATO_ILEGIBLE: el comprobante muestra esta leyenda en lugar de un contacto que quedo
+-- cifrado con la clave de otra instalacion.
+;WITH Txt(Codigo, Clave, Texto) AS (
+    SELECT * FROM (VALUES
+        (N'ES', N'CONN_NO_GUARDADA', N'No se pudo guardar la configuración.'), (N'EN', N'CONN_NO_GUARDADA', N'The configuration could not be saved.'), (N'PT', N'CONN_NO_GUARDADA', N'Não foi possível salvar a configuração.'),
+        (N'ES', N'CONN_CAUSA_ACCESO', N'No hay permiso para escribir el archivo de configuración.'), (N'EN', N'CONN_CAUSA_ACCESO', N'There is no permission to write the configuration file.'), (N'PT', N'CONN_CAUSA_ACCESO', N'Não há permissão para gravar o arquivo de configuração.'),
+        (N'ES', N'CONN_CAUSA_EN_USO', N'El archivo de configuración está en uso o no se pudo escribir.'), (N'EN', N'CONN_CAUSA_EN_USO', N'The configuration file is in use or could not be written.'), (N'PT', N'CONN_CAUSA_EN_USO', N'O arquivo de configuração está em uso ou não pôde ser gravado.'),
+        (N'ES', N'CMP_DATO_ILEGIBLE', N'(no se puede leer en este equipo)'), (N'EN', N'CMP_DATO_ILEGIBLE', N'(cannot be read on this computer)'), (N'PT', N'CMP_DATO_ILEGIBLE', N'(não pode ser lido neste computador)')
+    ) AS v(Codigo, Clave, Texto)
+)
+INSERT INTO dbo.Traducciones (IdiomaId, Clave, Texto)
+SELECT i.Id, t.Clave, MIN(t.Texto)
+FROM Txt t
+JOIN dbo.Idiomas i ON i.Codigo = t.Codigo
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Traducciones x WHERE x.IdiomaId = i.Id AND x.Clave = t.Clave
+)
+GROUP BY i.Id, t.Clave;
+GO
+
+-- ===========================================================================
+-- Cierre: si la guarda del principio activo NOEXEC (script corrido sobre una base
+-- del sistema desde SSMS), la sesion vuelve a ejecutar lotes, asi una nueva
+-- corrida en la misma ventana sobre la base correcta no termina vacia.
+-- ===========================================================================
+SET NOEXEC OFF;
 GO

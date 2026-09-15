@@ -194,6 +194,79 @@ namespace EvenTech.DAL
                 reserva_704ILR.VenceEl_704ILR.HasValue ? (object)reserva_704ILR.VenceEl_704ILR.Value : DBNull.Value;
         }
 
+        // Reservas cuyo Estado almacenado no es exactamente uno de los nombres del ciclo
+        // de vida: otra capitalizacion ('confirmada') o un texto ajeno. La comparacion
+        // es binaria a proposito, porque la intercalacion de la columna no distingue
+        // mayusculas. Los nombres viajan como parametros desde el enumerado, igual que
+        // en el resto de las consultas por estado. La usa la verificacion de integridad
+        // para informar la reserva alterada en vez de abortar.
+        public static List<int> IdsConEstadoFueraDeDominio_704ILR()
+        {
+            var ids_704ILR = new List<int>();
+            using (var cn_704ILR = new DAL_DB_Connection_704ILR())
+            using (var cmd_704ILR = new SqlCommand(string.Empty, cn_704ILR.OpenConnection_704ILR()))
+            {
+                cmd_704ILR.CommandText = "SELECT Id FROM dbo.Reservas WHERE " +
+                    FiltroEstadoFueraDeDominio_704ILR(cmd_704ILR) + " ORDER BY Id";
+                using (var r_704ILR = cmd_704ILR.ExecuteReader())
+                    while (r_704ILR.Read()) ids_704ILR.Add(r_704ILR.GetInt32(0));
+            }
+            return ids_704ILR;
+        }
+
+        // El mismo criterio para UNA reserva, sobre la conexion y la transaccion que le
+        // pasan: devuelve el Estado tal cual esta almacenado si no es exactamente uno de
+        // los nombres del ciclo de vida, o null si lo es (o si la reserva no existe). La
+        // capa de negocio la consulta con la cabecera ya bloqueada y antes de reescribirla:
+        // la escritura persiste el nombre exacto del estado y el valor alterado se pierde,
+        // sin que el DV horizontal lo advierta porque se calcula con ese mismo nombre.
+        public static string EstadoFueraDeDominio_704ILR(int id_704ILR,
+            SqlConnection conn_704ILR, SqlTransaction tx_704ILR)
+        {
+            using (var cmd_704ILR = new SqlCommand(string.Empty, conn_704ILR, tx_704ILR))
+            {
+                cmd_704ILR.CommandText = "SELECT Estado FROM dbo.Reservas WHERE Id = @id AND " +
+                    FiltroEstadoFueraDeDominio_704ILR(cmd_704ILR);
+                cmd_704ILR.Parameters.Add("@id", SqlDbType.Int).Value = id_704ILR;
+                object valor_704ILR = cmd_704ILR.ExecuteScalar();
+                return valor_704ILR == null || valor_704ILR == DBNull.Value ? null : (string)valor_704ILR;
+            }
+        }
+
+        // Condicion "Estado fuera del dominio exacto" que comparten las dos consultas de
+        // arriba y la de las versiones (DAL_ReservaMemento_704ILR.EstadoFueraDeDominio_704ILR),
+        // para que la verificacion de integridad, las escrituras y los asientos de rechazo
+        // juzguen igual. Agrega al comando un parametro por cada nombre del enumerado.
+        internal static string FiltroEstadoFueraDeDominio_704ILR(SqlCommand cmd_704ILR)
+        {
+            string[] nombres_704ILR = Enum.GetNames(typeof(EstadoReserva_704ILR));
+            var marcadores_704ILR = new List<string>();
+            for (int i_704ILR = 0; i_704ILR < nombres_704ILR.Length; i_704ILR++)
+            {
+                string marcador_704ILR = "@e" + i_704ILR;
+                marcadores_704ILR.Add(marcador_704ILR);
+                cmd_704ILR.Parameters.Add(marcador_704ILR, SqlDbType.NVarChar, 20).Value = nombres_704ILR[i_704ILR];
+            }
+            return "Estado COLLATE Latin1_General_BIN2 NOT IN (" + string.Join(", ", marcadores_704ILR) + ")";
+        }
+
+        // Lectura tolerante del Estado almacenado. La base compara esa columna sin
+        // distinguir mayusculas: para el motor (anti-solapamiento, indice unico de las
+        // confirmadas) 'confirmada' ES 'CONFIRMADA'. La lectura aplica el mismo criterio
+        // en lugar de abortar el listado completo por una sola fila escrita por fuera
+        // del sistema; la verificacion de integridad informa esas filas aparte
+        // (IdsConEstadoFueraDeDominio_704ILR). Como en la base, solo los espacios finales
+        // no cuentan. Un texto que no corresponde a ningun estado se devuelve como un
+        // valor fuera del enum, que la capa de negocio no deja operar (RN-05).
+        internal static EstadoReserva_704ILR EstadoDesdeTexto_704ILR(string texto_704ILR)
+        {
+            string limpio_704ILR = (texto_704ILR ?? string.Empty).TrimEnd();
+            foreach (EstadoReserva_704ILR estado_704ILR in Enum.GetValues(typeof(EstadoReserva_704ILR)))
+                if (string.Equals(estado_704ILR.ToString(), limpio_704ILR, StringComparison.OrdinalIgnoreCase))
+                    return estado_704ILR;
+            return (EstadoReserva_704ILR)(-1);
+        }
+
         private static BE_Reserva_704ILR Map_704ILR(SqlDataReader r_704ILR) => new BE_Reserva_704ILR
         {
             Id_704ILR = r_704ILR.GetInt32(0),
@@ -202,7 +275,7 @@ namespace EvenTech.DAL
             SalonId_704ILR = r_704ILR.GetInt32(3),
             SalonNombre_704ILR = r_704ILR.GetString(4),
             FechaEvento_704ILR = r_704ILR.GetDateTime(5),
-            Estado_704ILR = (EstadoReserva_704ILR)Enum.Parse(typeof(EstadoReserva_704ILR), r_704ILR.GetString(6)),
+            Estado_704ILR = EstadoDesdeTexto_704ILR(r_704ILR.GetString(6)),
             Monto_704ILR = r_704ILR.GetDecimal(7),
             CantidadInvitados_704ILR = r_704ILR.IsDBNull(8) ? 0 : r_704ILR.GetInt32(8),
             CreatedAt_704ILR = r_704ILR.GetDateTime(9),

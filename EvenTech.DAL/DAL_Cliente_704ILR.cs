@@ -90,11 +90,20 @@ namespace EvenTech.DAL
         // igualdad en SQL (el cifrado con IV aleatorio rompe ambas cosas).
         private static void Bind_704ILR(SqlCommand cmd_704ILR, BE_Cliente_704ILR c_704ILR)
         {
-            cmd_704ILR.Parameters.Add("@n", SqlDbType.NVarChar, 60).Value = c_704ILR.Nombre_704ILR ?? string.Empty;
-            cmd_704ILR.Parameters.Add("@a", SqlDbType.NVarChar, 60).Value = Nz_704ILR(c_704ILR.Apellido_704ILR);
-            cmd_704ILR.Parameters.Add("@d", SqlDbType.NVarChar, 20).Value = Nz_704ILR(c_704ILR.Dni_704ILR);
-            cmd_704ILR.Parameters.Add("@e", SqlDbType.NVarChar, 400).Value = NzCifrado_704ILR(c_704ILR.Email_704ILR);
-            cmd_704ILR.Parameters.Add("@t", SqlDbType.NVarChar, 200).Value = NzCifrado_704ILR(c_704ILR.Telefono_704ILR);
+            cmd_704ILR.Parameters.Add("@n", SqlDbType.NVarChar, 60).Value = Ancho_704ILR("Nombre", (c_704ILR.Nombre_704ILR ?? string.Empty).Trim(), 60);
+            cmd_704ILR.Parameters.Add("@a", SqlDbType.NVarChar, 60).Value = Ancho_704ILR("Apellido", Nz_704ILR(c_704ILR.Apellido_704ILR), 60);
+            cmd_704ILR.Parameters.Add("@d", SqlDbType.NVarChar, 20).Value = Ancho_704ILR("Dni", Nz_704ILR(c_704ILR.Dni_704ILR), 20);
+            cmd_704ILR.Parameters.Add("@e", SqlDbType.NVarChar, 400).Value = Ancho_704ILR("Email", NzCifrado_704ILR(c_704ILR.Email_704ILR), 400);
+            cmd_704ILR.Parameters.Add("@t", SqlDbType.NVarChar, 200).Value = Ancho_704ILR("Telefono", NzCifrado_704ILR(c_704ILR.Telefono_704ILR), 200);
+
+            // Con un tamano fijo SqlClient recorta el valor sin avisar, y un contacto cifrado
+            // recortado ya no se puede descifrar. La BLL rechaza el dato que no entra; si uno
+            // llegara igual, la escritura falla en vez de guardarlo recortado.
+            static object Ancho_704ILR(string columna_704ILR, object valor_704ILR, int ancho_704ILR) =>
+                valor_704ILR is string texto_704ILR && texto_704ILR.Length > ancho_704ILR
+                    ? throw new ArgumentException("El valor de " + columna_704ILR + " supera el ancho de su columna (" +
+                                                  ancho_704ILR + " caracteres): no se guarda recortado.")
+                    : valor_704ILR;
         }
 
         // string vacio/blanco -> NULL (para respetar el indice unico filtrado de DNI).

@@ -11,6 +11,10 @@ namespace EvenTech.UI
     {
         private TextBox _txtNombre_704ILR, _txtDesc_704ILR;
         private Label _lblMsg_704ILR;
+        // La fila del mensaje crece con el texto (un mensaje de dos lineas se cortaba en la
+        // fila fija de 22 px) y el popup se agranda lo mismo para no tapar los botones.
+        private TableLayoutPanel _body_704ILR;
+        private int _altoBase_704ILR;
 
         public int NuevoId_704ILR { get; private set; }
 
@@ -44,7 +48,7 @@ namespace EvenTech.UI
             pnlTitle_704ILR.Controls.Add(lblTitle_704ILR);
             pnlTitle_704ILR.Controls.Add(btnClose_704ILR);
 
-            var body_704ILR = new TableLayoutPanel
+            var body_704ILR = _body_704ILR = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
@@ -55,14 +59,14 @@ namespace EvenTech.UI
             body_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             body_704ILR.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
             body_704ILR.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
-            body_704ILR.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+            body_704ILR.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             body_704ILR.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             _txtNombre_704ILR = Ui_704ILR.Input_704ILR(); _txtNombre_704ILR.MaxLength = 80;
-            var fNombre_704ILR = Ui_704ILR.Field_704ILR(T_704ILR("IDI_NOMBRE", "Nombre"), _txtNombre_704ILR); fNombre_704ILR.Dock = DockStyle.Fill;
+            var fNombre_704ILR = Ui_704ILR.Field_704ILR(T_704ILR("IDI_NOMBRE", "Nombre"), _txtNombre_704ILR); fNombre_704ILR.Dock = DockStyle.Fill; fNombre_704ILR.Margin = new Padding(0);
             _txtDesc_704ILR = Ui_704ILR.Input_704ILR(); _txtDesc_704ILR.MaxLength = 250;
-            var fDesc_704ILR = Ui_704ILR.Field_704ILR(T_704ILR("PERF_DESC", "Descripcion"), _txtDesc_704ILR); fDesc_704ILR.Dock = DockStyle.Fill;
-            _lblMsg_704ILR = new Label { Dock = DockStyle.Fill, Font = Theme_704ILR.FontSmall_704ILR, ForeColor = Theme_704ILR.Error_704ILR, BackColor = Color.Transparent, TextAlign = ContentAlignment.MiddleLeft };
+            var fDesc_704ILR = Ui_704ILR.Field_704ILR(T_704ILR("PERF_DESC", "Descripción"), _txtDesc_704ILR); fDesc_704ILR.Dock = DockStyle.Fill; fDesc_704ILR.Margin = new Padding(0);
+            _lblMsg_704ILR = new Label { AutoSize = true, MinimumSize = new Size(0, 22), Anchor = AnchorStyles.Left, Margin = new Padding(0), Font = Theme_704ILR.FontSmall_704ILR, ForeColor = Theme_704ILR.Error_704ILR, BackColor = Color.Transparent, TextAlign = ContentAlignment.MiddleLeft };
 
             var acciones_704ILR = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, BackColor = Color.Transparent, Margin = new Padding(0) };
             var btnCrear_704ILR = Ui_704ILR.Primary_704ILR(T_704ILR("PERF_CREAR", "Crear perfil"), Theme_704ILR.IcoAdd_704ILR); btnCrear_704ILR.BehindColor_704ILR = Theme_704ILR.BgContent_704ILR; btnCrear_704ILR.Size = new Size(150, 38); btnCrear_704ILR.Click += (s_704ILR, e_704ILR) => Crear_704ILR();
@@ -83,7 +87,7 @@ namespace EvenTech.UI
             try
             {
                 PerfilResult_704ILR r_704ILR = BLL_Perfil_704ILR.CrearPerfil_704ILR(_txtNombre_704ILR.Text, _txtDesc_704ILR.Text, out int id_704ILR);
-                if (r_704ILR != PerfilResult_704ILR.Success_704ILR) { _lblMsg_704ILR.Text = MensajeError_704ILR(r_704ILR); return; }
+                if (r_704ILR != PerfilResult_704ILR.Success_704ILR) { MostrarMensaje_704ILR(MensajeError_704ILR(r_704ILR)); return; }
                 NuevoId_704ILR = id_704ILR;
                 DialogResult = DialogResult.OK;
                 Close();
@@ -91,7 +95,7 @@ namespace EvenTech.UI
             catch (Exception ex_704ILR)
             {
                 BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Perfiles", "Crear perfil (popup)");
-                _lblMsg_704ILR.Text = Tr_704ILR.T_704ILR("MSG_ERROR_PREFIJO") + ex_704ILR.Message;
+                MostrarMensaje_704ILR(Tr_704ILR.MensajeExcepcion_704ILR(ex_704ILR));
             }
         }
 
@@ -103,6 +107,15 @@ namespace EvenTech.UI
                 case PerfilResult_704ILR.NombreDuplicado_704ILR: return T_704ILR("MSG_PERF_DUP", "Ya existe un perfil con ese nombre.");
                 default:                           return Tr_704ILR.T_704ILR("MSG_ERROR");
             }
+        }
+
+        private void MostrarMensaje_704ILR(string texto_704ILR)
+        {
+            if (_altoBase_704ILR == 0) _altoBase_704ILR = ClientSize.Height;
+            _lblMsg_704ILR.MaximumSize = new Size(Math.Max(1, _body_704ILR.ClientSize.Width - _body_704ILR.Padding.Horizontal), 0);
+            _lblMsg_704ILR.Text = texto_704ILR ?? string.Empty;
+            _body_704ILR.PerformLayout();
+            ClientSize = new Size(ClientSize.Width, _altoBase_704ILR + Math.Max(0, _lblMsg_704ILR.Height - _lblMsg_704ILR.MinimumSize.Height));
         }
 
         private static string T_704ILR(string clave_704ILR, string defecto_704ILR)

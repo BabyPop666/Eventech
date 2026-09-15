@@ -13,7 +13,68 @@ namespace EvenTech.DAL
     // permite apuntar la app a otra instancia sin recompilar.
     public class DAL_DB_Connection_704ILR : IDisposable
     {
-        public static string ConnectionString_704ILR => ConfiguracionConexion_704ILR.Actual_704ILR;
+        // Cadena con la que la DAL abre sus conexiones: la vigente mas las opciones
+        // de AplicarResiliencia. Se recalcula solo cuando cambia la vigente.
+        public static string ConnectionString_704ILR
+        {
+            get
+            {
+                string vigente_704ILR = ConfiguracionConexion_704ILR.Actual_704ILR;
+                Tuple<string, string> par_704ILR = _efectiva_704ILR;
+                if (par_704ILR != null && ReferenceEquals(par_704ILR.Item1, vigente_704ILR)) return par_704ILR.Item2;
+                string efectiva_704ILR = Efectiva_704ILR(vigente_704ILR);
+                _efectiva_704ILR = Tuple.Create(vigente_704ILR, efectiva_704ILR);
+                return efectiva_704ILR;
+            }
+        }
+
+        private static Tuple<string, string> _efectiva_704ILR;
+
+        private static string Efectiva_704ILR(string vigente_704ILR)
+        {
+            if (string.IsNullOrWhiteSpace(vigente_704ILR)) return vigente_704ILR;
+            try
+            {
+                var cadena_704ILR = new SqlConnectionStringBuilder(vigente_704ILR);
+                AplicarResiliencia_704ILR(cadena_704ILR);
+                return cadena_704ILR.ConnectionString;
+            }
+            catch (Exception)
+            {
+                // Cadena mal formada: se usa tal cual y SqlConnection informa el error como siempre.
+                return vigente_704ILR;
+            }
+        }
+
+        // Sin reintento de apertura (sistema monopuesto, RNF-05): ante una base fuera
+        // de linea el cliente de SQL Server reintenta por defecto una vez a los 10 s,
+        // con la ventana congelada todo ese tiempo. Se prefiere fallar enseguida e
+        // informar.
+        //
+        // El periodo de bloqueo del pool queda en su valor por defecto. Cuando no se
+        // llega al SERVIDOR (instancia detenida, puerto cerrado, equipo apagado) cada
+        // intento espera el tiempo de conexion completo, y ese bloqueo devuelve el
+        // mismo error al instante durante unos segundos en lugar de congelar la
+        // ventana en cada accion. Cuando el servidor responde y lo que no esta
+        // disponible es la base, OpenConnection_704ILR vacia el pool para que el
+        // bloqueo no demore la vuelta de la base.
+        private static void AplicarResiliencia_704ILR(SqlConnectionStringBuilder cadena_704ILR)
+        {
+            cadena_704ILR.ConnectRetryCount = 0;
+        }
+
+        // Errores con los que el servidor respondio pero la base no se pudo abrir:
+        // inexistente o sin acceso (4060, 18456), fuera de linea (942), en
+        // recuperacion (922), en uso exclusivo (924), en restauracion (927), con
+        // archivos inaccesibles (945) o cambiando de estado (952).
+        private static readonly HashSet<int> ErroresDeBase_704ILR = new HashSet<int> { 4060, 18456, 942, 922, 924, 927, 945, 952 };
+
+        private static bool EsErrorDeBase_704ILR(SqlException ex_704ILR)
+        {
+            foreach (SqlError error_704ILR in ex_704ILR.Errors)
+                if (ErroresDeBase_704ILR.Contains(error_704ILR.Number)) return true;
+            return false;
+        }
 
         private readonly SqlConnection _connection_704ILR;
 
@@ -22,10 +83,34 @@ namespace EvenTech.DAL
             _connection_704ILR = new SqlConnection(ConnectionString_704ILR);
         }
 
+        // Marca que queda en Exception.Data de la SqlException producida al ABRIR la
+        // conexion. Con ella la interfaz distingue "no se pudo establecer la conexion"
+        // (aviso de base no disponible) de un error con la conexion ya abierta, como un
+        // tiempo de espera por un bloqueo de otra estacion (aviso de operacion no
+        // completada): el numero no alcanza, porque un tiempo de espera al conectar y uno
+        // al ejecutar son el mismo -2, y los dos traen identificador de conexion.
+        // Tr_704ILR.MensajeExcepcion_704ILR busca la misma cadena.
+        private const string MarcaApertura_704ILR = "EvenTech.AperturaDeConexion";
+
         public SqlConnection OpenConnection_704ILR()
         {
             if (_connection_704ILR.State == ConnectionState.Closed)
-                _connection_704ILR.Open();
+            {
+                try
+                {
+                    _connection_704ILR.Open();
+                }
+                catch (SqlException ex_704ILR)
+                {
+                    ex_704ILR.Data[MarcaApertura_704ILR] = true;
+                    // Si el servidor respondio y lo que no esta disponible es la base, se
+                    // descarta el estado de error del pool, asi la proxima accion vuelve a
+                    // intentar y funciona apenas la base esta disponible (sin esto el pool
+                    // repite este mismo error 5 s o mas).
+                    if (EsErrorDeBase_704ILR(ex_704ILR)) SqlConnection.ClearPool(_connection_704ILR);
+                    throw;
+                }
+            }
             return _connection_704ILR;
         }
 
@@ -42,8 +127,9 @@ namespace EvenTech.DAL
         // ================== Diagnostico de conectividad ==================
 
         // Contrato minimo del esquema que la app necesita para arrancar: las 20
-        // tablas de db/schema.sql y las columnas que ese script agrega por
-        // migracion (una base de una revision anterior tiene Users pero no estas).
+        // tablas de db/schema.sql y TODAS las columnas que ese script agrega por
+        // migracion con ALTER TABLE ... ADD (una base de una revision anterior tiene
+        // Users pero no estas). Una columna migrada nueva se agrega tambien aca.
         // Nombres de tabla/columna sin sufijo: son datos de la base, no
         // identificadores del codigo.
         private static readonly string[] TablasRequeridas_704ILR =
@@ -56,7 +142,8 @@ namespace EvenTech.DAL
         private static readonly string[] ColumnasRequeridas_704ILR =
         {
             "Users.PerfilId", "Users.Activo", "Users.Blocked", "Users.FailedAttempts",
-            "Reservas.VenceEl", "Reservas.CantidadInvitados", "Reservas.Dvh"
+            "Reservas.ClienteId", "Reservas.VenceEl", "Reservas.CantidadInvitados", "Reservas.Dvh",
+            "ReservaMemento.CantidadInvitados"
         };
 
         // Verifica que se pueda abrir la conexion Y que la base exista. Abrir con
@@ -70,7 +157,7 @@ namespace EvenTech.DAL
             mensaje_704ILR = null;
             if (string.IsNullOrWhiteSpace(connectionString_704ILR))
             {
-                mensaje_704ILR = "La cadena de conexion esta vacia.";
+                mensaje_704ILR = "La cadena de conexión está vacía.";
                 return false;
             }
 
@@ -81,17 +168,23 @@ namespace EvenTech.DAL
             }
             catch (Exception ex_704ILR)
             {
-                mensaje_704ILR = "La cadena de conexion no es valida: " + ex_704ILR.Message;
+                mensaje_704ILR = "La cadena de conexión no es válida: " + ex_704ILR.Message;
                 return false;
             }
 
             // Primero contra master: si esto anda, el servidor responde y lo unico
             // que puede faltar es la base.
+            // Una prueba es siempre un intento real: sin el periodo de bloqueo del pool,
+            // volver a probar despues de levantar el servicio o de poner la base en
+            // linea no devuelve el error de unos segundos antes. La pantalla de
+            // configuracion la corre en segundo plano y el arranque, una sola vez.
             var aMaster_704ILR = new SqlConnectionStringBuilder(connectionString_704ILR)
             {
                 InitialCatalog = "master",
-                ConnectTimeout = 5
+                ConnectTimeout = 5,
+                PoolBlockingPeriod = PoolBlockingPeriod.NeverBlock
             };
+            AplicarResiliencia_704ILR(aMaster_704ILR);
 
             try
             {
@@ -105,7 +198,7 @@ namespace EvenTech.DAL
                         if (existe_704ILR == 0)
                         {
                             mensaje_704ILR = $"El servidor responde, pero no existe la base '{baseDatos_704ILR}'. " +
-                                      "Verifica el nombre o ejecuta el script de creacion.";
+                                      "Verificá el nombre o ejecutá el script de creación.";
                             return false;
                         }
                     }
@@ -129,21 +222,22 @@ namespace EvenTech.DAL
             // configuracion.
             try
             {
-                var conBase_704ILR = new SqlConnectionStringBuilder(connectionString_704ILR) { ConnectTimeout = 5 };
+                var conBase_704ILR = new SqlConnectionStringBuilder(connectionString_704ILR) { ConnectTimeout = 5, PoolBlockingPeriod = PoolBlockingPeriod.NeverBlock };
+                AplicarResiliencia_704ILR(conBase_704ILR);
                 using (var cn_704ILR = new SqlConnection(conBase_704ILR.ConnectionString))
                 {
                     cn_704ILR.Open();
                     List<string> faltantes_704ILR = ObjetosFaltantes_704ILR(cn_704ILR);
                     if (faltantes_704ILR.Contains("Users"))
                     {
-                        mensaje_704ILR = $"La base '{baseDatos_704ILR}' existe pero no tiene el esquema de la aplicacion. " +
-                                  "Ejecuta db/schema.sql sobre esa base o elegi otra.";
+                        mensaje_704ILR = $"La base '{baseDatos_704ILR}' existe pero no tiene el esquema de la aplicación. " +
+                                  "Ejecutá db/schema.sql sobre esa base o elegí otra.";
                         return false;
                     }
                     if (faltantes_704ILR.Count > 0)
                     {
                         mensaje_704ILR = Texto_704ILR("CONN_ESQUEMA_INCOMPLETO",
-                            "La base '{0}' existe pero su esquema esta incompleto o es de una version anterior (faltan: {1}). " +
+                            "La base '{0}' existe pero su esquema está incompleto o es de una versión anterior (faltan: {1}). " +
                             "Completalo con db/schema.sql (agrega solo lo que falta) antes de usarla.",
                             baseDatos_704ILR, string.Join(", ", faltantes_704ILR));
                         return false;
@@ -193,15 +287,12 @@ namespace EvenTech.DAL
         }
 
         // Mensaje traducido con respaldo: al arrancar las traducciones todavia no
-        // estan cargadas (o el texto editado puede estar mal formado), y en ese caso
-        // se usa el texto por defecto del codigo.
+        // estan cargadas, el texto editado puede estar mal formado o ser desmesurado
+        // (un relleno {0,999999} armaba un aviso de un millon de caracteres que la
+        // pantalla de conexion no llegaba a mostrar). En esos casos se usa el texto por
+        // defecto del codigo, con el mismo criterio que el resto de la aplicacion.
         private static string Texto_704ILR(string clave_704ILR, string defecto_704ILR, params object[] args_704ILR)
-        {
-            string plantilla_704ILR = GestorDeIdioma_704ILR.GetInstance_704ILR.Traducir_704ILR(clave_704ILR);
-            if (plantilla_704ILR == clave_704ILR) plantilla_704ILR = defecto_704ILR;
-            try { return string.Format(plantilla_704ILR, args_704ILR); }
-            catch (FormatException) { return string.Format(defecto_704ILR, args_704ILR); }
-        }
+            => GestorDeIdioma_704ILR.GetInstance_704ILR.Formatear_704ILR(clave_704ILR, defecto_704ILR, args_704ILR);
 
         // Prueba la cadena vigente (la que usa realmente la app).
         public static bool ProbarActual_704ILR(out string mensaje_704ILR) => Probar_704ILR(ConnectionString_704ILR, out mensaje_704ILR);

@@ -18,6 +18,9 @@
     </application>
   </compatibility>
   <!-- El modo de PPP (DPI) se configura via la propiedad del proyecto
-       ApplicationHighDpiMode (PerMonitorV2), aplicada por
-       ApplicationConfiguration.Initialize() en Program_704ILR.cs. -->
+       ApplicationHighDpiMode (DpiUnaware), aplicada por
+       ApplicationConfiguration.Initialize() en Program_704ILR.cs: la aplicacion no
+       declara conciencia de DPI y Windows escala la ventana entera, de modo que a
+       125/150 % se ve el mismo layout que a 96 DPI. No se agrega dpiAware ni
+       dpiAwareness en este manifiesto para no contradecir esa propiedad. -->
 </assembly>

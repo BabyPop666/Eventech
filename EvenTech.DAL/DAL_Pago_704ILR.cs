@@ -98,14 +98,16 @@ namespace EvenTech.DAL
                 Delete_704ILR(id_704ILR, cn_704ILR.OpenConnection_704ILR(), null);
         }
 
-        // Sobrecarga transaccional (ver GetById_704ILR).
-        public static void Delete_704ILR(int id_704ILR,
+        // Sobrecarga transaccional (ver GetById_704ILR). Devuelve las filas borradas:
+        // 0 si el pago ya no estaba, para que quien orquesta la anulacion no la informe
+        // ni la asiente como hecha.
+        public static int Delete_704ILR(int id_704ILR,
             SqlConnection conn_704ILR, SqlTransaction tx_704ILR)
         {
             using (var cmd_704ILR = new SqlCommand("DELETE FROM dbo.Pagos WHERE Id = @id", conn_704ILR, tx_704ILR))
             {
                 cmd_704ILR.Parameters.Add("@id", SqlDbType.Int).Value = id_704ILR;
-                cmd_704ILR.ExecuteNonQuery();
+                return cmd_704ILR.ExecuteNonQuery();
             }
         }
 

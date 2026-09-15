@@ -8,8 +8,14 @@
     <Nullable>disable</Nullable>
     <LangVersion>latest</LangVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <!-- DPI por monitor v2 (escalado nitido en pantallas de alta densidad). -->
-    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- Sin conciencia de DPI. Todas las pantallas estan dimensionadas en pixeles de
+         96 DPI: con PerMonitorV2 las letras crecian con la escala de Windows y el layout
+         no, y a 125/150 % quedaban textos, campos y botones cortados. Asi Windows dibuja
+         la ventana a 96 DPI y la escala entera: el layout es el mismo en cualquier escala
+         (algo menos nitido). Se descarto DpiUnawareGdiScaled: el sistema vuelve a dibujar
+         el texto con la letra al doble, las medidas no escalan lineal (hasta 14 px mas en
+         Ebrima 9 pt) y lo que entra justo a 96 DPI quedaba recortado. -->
+    <ApplicationHighDpiMode>DpiUnaware</ApplicationHighDpiMode>
   </PropertyGroup>
   <ItemGroup>
     <!-- Isologotipo del sistema: viaja embebido en el ensamblado, sin archivos

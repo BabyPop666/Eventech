@@ -15,6 +15,11 @@ namespace EvenTech.UI
         private readonly Label _globe_704ILR;
         private readonly Color _baseColor_704ILR;
         private readonly Color _hoverColor_704ILR;
+        // Menu del globo: uno solo por selector, se rearma en cada apertura y se libera
+        // con el selector. Un ContextMenuStrip nuevo por clic quedaba vivo al cerrarse
+        // (conserva su ventana y lo retienen los eventos del sistema): cada apertura
+        // dejaba dos objetos USER sin liberar.
+        private ContextMenuStrip _menu_704ILR;
 
         // Habilita la opcion "Gestionar idiomas" del menu. La ventana principal
         // la ajusta segun el permiso IDIOMAS_GESTION del perfil; el login la deja
@@ -50,13 +55,32 @@ namespace EvenTech.UI
             Controls.Add(_globe_704ILR);
 
             Load += (s_704ILR, e_704ILR) => GestorDeIdioma_704ILR.GetInstance_704ILR.Suscribir_704ILR(this);
-            Disposed += (s_704ILR, e_704ILR) => GestorDeIdioma_704ILR.GetInstance_704ILR.Desuscribir_704ILR(this);
+            Disposed += (s_704ILR, e_704ILR) =>
+            {
+                GestorDeIdioma_704ILR.GetInstance_704ILR.Desuscribir_704ILR(this);
+                _menu_704ILR?.Dispose();
+                _menu_704ILR = null;
+            };
         }
 
         private void MostrarMenu_704ILR()
         {
+            // Si la carga de idiomas del arranque fallo, se reintenta al abrir el menu: sin
+            // idiomas cargados no habia nada que elegir.
+            Program_704ILR.ReintentarIdiomas_704ILR("al abrir el selector de idioma");
             var g_704ILR = GestorDeIdioma_704ILR.GetInstance_704ILR;
-            var menu_704ILR = new ContextMenuStrip { Font = Theme_704ILR.FontBody_704ILR };
+            if (_menu_704ILR == null || _menu_704ILR.IsDisposed)
+                _menu_704ILR = new ContextMenuStrip { Font = Theme_704ILR.FontBody_704ILR };
+            else
+            {
+                if (_menu_704ILR.Visible) _menu_704ILR.Close();
+                // Los items de la apertura anterior (con sus manejadores) se liberan.
+                var anteriores_704ILR = new ToolStripItem[_menu_704ILR.Items.Count];
+                _menu_704ILR.Items.CopyTo(anteriores_704ILR, 0);
+                _menu_704ILR.Items.Clear();
+                foreach (ToolStripItem anterior_704ILR in anteriores_704ILR) anterior_704ILR.Dispose();
+            }
+            var menu_704ILR = _menu_704ILR;
 
             foreach (var idi_704ILR in g_704ILR.IdiomasDisponibles_704ILR)
             {

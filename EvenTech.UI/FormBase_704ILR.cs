@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
@@ -36,33 +37,50 @@ namespace EvenTech.UI
         // el formulario responde el codigo de zona que corresponde a cada borde y
         // Windows la redimensiona como a cualquier otra. Lo usa frmMain, para que en
         // pantallas mas grandes la ventana pueda aprovechar el espacio.
-        protected bool Redimensionable_704ILR { get; set; }
+        protected bool Redimensionable_704ILR
+        {
+            get => _redimensionable_704ILR;
+            set
+            {
+                _redimensionable_704ILR = value;
+                if (value) AtenderFranja_704ILR(this);
+            }
+        }
+        private bool _redimensionable_704ILR;
 
         private const int BordeRedimension_704ILR = 6;
+        private const int WM_NCHITTEST_704ILR = 0x0084;
+        private const int HTTRANSPARENT_704ILR = -1, HTCLIENT_704ILR = 1;
+        private const int HTLEFT_704ILR = 10, HTRIGHT_704ILR = 11, HTTOP_704ILR = 12;
+        private const int HTTOPLEFT_704ILR = 13, HTTOPRIGHT_704ILR = 14, HTBOTTOM_704ILR = 15;
+        private const int HTBOTTOMLEFT_704ILR = 16, HTBOTTOMRIGHT_704ILR = 17;
 
         protected override void WndProc(ref Message m_704ILR)
         {
-            const int WM_NCHITTEST_704ILR = 0x0084;
-            const int HTCLIENT_704ILR = 1;
-            const int HTLEFT_704ILR = 10, HTRIGHT_704ILR = 11, HTTOP_704ILR = 12;
-            const int HTTOPLEFT_704ILR = 13, HTTOPRIGHT_704ILR = 14, HTBOTTOM_704ILR = 15;
-            const int HTBOTTOMLEFT_704ILR = 16, HTBOTTOMRIGHT_704ILR = 17;
-
             base.WndProc(ref m_704ILR);
 
-            if (!Redimensionable_704ILR || m_704ILR.Msg != WM_NCHITTEST_704ILR ||
+            if (!_redimensionable_704ILR || m_704ILR.Msg != WM_NCHITTEST_704ILR ||
                 WindowState != FormWindowState.Normal || (int)m_704ILR.Result != HTCLIENT_704ILR)
                 return;
 
-            int lp_704ILR = m_704ILR.LParam.ToInt32();
+            int zona_704ILR = ZonaDeBorde_704ILR(m_704ILR.LParam);
+            if (zona_704ILR != HTCLIENT_704ILR) m_704ILR.Result = (IntPtr)zona_704ILR;
+        }
+
+        // Codigo de zona de un punto de pantalla (el lParam de WM_NCHITTEST): el borde o
+        // la esquina si cae en la franja de redimension, HTCLIENT si no.
+        private int ZonaDeBorde_704ILR(IntPtr lParam_704ILR)
+        {
+            int lp_704ILR = unchecked((int)lParam_704ILR.ToInt64());
             Point p_704ILR = PointToClient(new Point(unchecked((short)lp_704ILR),
                                                      unchecked((short)(lp_704ILR >> 16))));
+            if (!ClientRectangle.Contains(p_704ILR)) return HTCLIENT_704ILR;
             bool izq_704ILR = p_704ILR.X <= BordeRedimension_704ILR;
             bool der_704ILR = p_704ILR.X >= ClientSize.Width - BordeRedimension_704ILR;
             bool arr_704ILR = p_704ILR.Y <= BordeRedimension_704ILR;
             bool aba_704ILR = p_704ILR.Y >= ClientSize.Height - BordeRedimension_704ILR;
 
-            int zona_704ILR =
+            return
                 arr_704ILR && izq_704ILR ? HTTOPLEFT_704ILR :
                 arr_704ILR && der_704ILR ? HTTOPRIGHT_704ILR :
                 aba_704ILR && izq_704ILR ? HTBOTTOMLEFT_704ILR :
@@ -71,8 +89,85 @@ namespace EvenTech.UI
                 der_704ILR ? HTRIGHT_704ILR :
                 arr_704ILR ? HTTOP_704ILR :
                 aba_704ILR ? HTBOTTOM_704ILR : HTCLIENT_704ILR;
+        }
 
-            if (zona_704ILR != HTCLIENT_704ILR) m_704ILR.Result = (IntPtr)zona_704ILR;
+        // Los controles acoplados de una ventana sin borde cubren toda su area cliente, y
+        // Windows le consulta la zona del cursor (WM_NCHITTEST) a la ventana hija que esta
+        // debajo: el formulario nunca recibia la consulta de su propio borde y no se podia
+        // redimensionar con el mouse. Cada descendiente responde "transparente" dentro de
+        // la franja de redimension y Windows le pasa la consulta a su contenedor, hasta
+        // llegar al formulario, que devuelve la zona del borde. Fuera de la franja, con la
+        // ventana maximizada o sin redimension, los controles responden como siempre y el
+        // layout no cambia.
+        private readonly ConditionalWeakTable<Control, FranjaDeBorde_704ILR> _franjas_704ILR =
+            new ConditionalWeakTable<Control, FranjaDeBorde_704ILR>();
+
+        protected override void OnControlAdded(ControlEventArgs e_704ILR)
+        {
+            base.OnControlAdded(e_704ILR);
+            if (_redimensionable_704ILR) AtenderFranja_704ILR(e_704ILR.Control);
+        }
+
+        // Suma el control, sus descendientes y los que se le agreguen despues.
+        // Ni el manejador ni el gancho guardan una referencia fuerte al formulario: un
+        // control que sobrevive a la ventana (por ejemplo, el origen de un menu contextual
+        // que nadie libero) no puede mantener vivo al formulario cerrado.
+        private void AtenderFranja_704ILR(Control c_704ILR)
+        {
+            if (c_704ILR == null) return;
+            if (c_704ILR != this)
+            {
+                if (_franjas_704ILR.TryGetValue(c_704ILR, out _)) return;
+                _franjas_704ILR.Add(c_704ILR, new FranjaDeBorde_704ILR(this, c_704ILR));
+                c_704ILR.ControlAdded += HijoAgregado_704ILR;
+            }
+            foreach (Control hijo_704ILR in c_704ILR.Controls) AtenderFranja_704ILR(hijo_704ILR);
+        }
+
+        private static void HijoAgregado_704ILR(object s_704ILR, ControlEventArgs e_704ILR)
+        {
+            if ((s_704ILR as Control)?.FindForm() is FormBase_704ILR form_704ILR && form_704ILR._redimensionable_704ILR)
+                form_704ILR.AtenderFranja_704ILR(e_704ILR.Control);
+        }
+
+        private bool EnFranjaDeRedimension_704ILR(IntPtr lParam_704ILR) =>
+            _redimensionable_704ILR && IsHandleCreated && WindowState == FormWindowState.Normal &&
+            ZonaDeBorde_704ILR(lParam_704ILR) != HTCLIENT_704ILR;
+
+        // Engancha la ventana de un control descendiente para responder HTTRANSPARENT en la
+        // franja de redimension del formulario; el resto de los mensajes siguen su curso.
+        private sealed class FranjaDeBorde_704ILR : NativeWindow
+        {
+            private readonly WeakReference<FormBase_704ILR> _form_704ILR;
+            private readonly Control _control_704ILR;
+
+            public FranjaDeBorde_704ILR(FormBase_704ILR form_704ILR, Control control_704ILR)
+            {
+                _form_704ILR = new WeakReference<FormBase_704ILR>(form_704ILR);
+                _control_704ILR = control_704ILR;
+                // La suscripcion mantiene vivo este objeto mientras viva el control, y si el
+                // control vuelve a crear su ventana se engancha a la nueva.
+                control_704ILR.HandleCreated += VentanaCreada_704ILR;
+                if (control_704ILR.IsHandleCreated) AssignHandle(control_704ILR.Handle);
+            }
+
+            private void VentanaCreada_704ILR(object s_704ILR, EventArgs e_704ILR)
+            {
+                if (Handle == _control_704ILR.Handle) return;
+                if (Handle != IntPtr.Zero) ReleaseHandle();
+                AssignHandle(_control_704ILR.Handle);
+            }
+
+            protected override void WndProc(ref Message m_704ILR)
+            {
+                if (m_704ILR.Msg == WM_NCHITTEST_704ILR && _form_704ILR.TryGetTarget(out FormBase_704ILR form_704ILR) &&
+                    _control_704ILR.TopLevelControl == form_704ILR && form_704ILR.EnFranjaDeRedimension_704ILR(m_704ILR.LParam))
+                {
+                    m_704ILR.Result = (IntPtr)HTTRANSPARENT_704ILR;
+                    return;
+                }
+                base.WndProc(ref m_704ILR);
+            }
         }
 
         // Permite arrastrar la ventana tomando el control indicado (barra de titulo).

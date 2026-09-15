@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
 using EvenTech.BE;
@@ -10,8 +11,9 @@ using EvenTech.Services;
 namespace EvenTech.UI
 {
     // Auditoria de login. Mismo estilo y filtros que la bitacora general (tarjeta
-    // de filtros + grilla), para que ambas pestanas sean simetricas. El filtrado
-    // es en memoria sobre los ultimos registros cargados. Observa el idioma.
+    // de filtros + grilla), para que ambas pestanas sean simetricas. Los filtros se
+    // resuelven en la base, sobre toda la tabla (no sobre los ultimos registros
+    // leidos). Observa el idioma.
     public class ucAuditoria_704ILR : UserControl, IObservadorIdioma_704ILR
     {
         private TextBox _txtUsuario_704ILR;
@@ -20,14 +22,27 @@ namespace EvenTech.UI
         private AppButton_704ILR _btnBuscar_704ILR, _btnLimpiar_704ILR;
         private DataGridView _grid_704ILR;
         private Label _lblCount_704ILR, _lblError_704ILR;
-        private List<BE_LoginAuditEntry_704ILR> _todos_704ILR = new List<BE_LoginAuditEntry_704ILR>();
+        // Aviso vigente, guardado de forma re-traducible: la clave y el texto por defecto
+        // si sale de una clave, o la excepcion si sale de un error (su texto se vuelve a
+        // armar con Tr_704ILR.MensajeExcepcion_704ILR en el idioma activo). Clave y
+        // excepcion en null = no hay aviso (la ultima busqueda se ejecuto bien).
+        private string _claveAviso_704ILR, _defectoAviso_704ILR;
+        private Exception _excepcionAviso_704ILR;
 
         public ucAuditoria_704ILR()
         {
             BackColor = Theme_704ILR.BgContent_704ILR;
             BuildUi_704ILR();
             ActualizarTextos_704ILR();
-            Load += (s_704ILR, e_704ILR) => { SafeLoadData_704ILR(); GestorDeIdioma_704ILR.GetInstance_704ILR.Suscribir_704ILR(this); };
+            // En una pestana que no esta seleccionada el control se carga recien al
+            // abrirla: si el idioma cambio despues de construirlo no recibio el aviso
+            // (todavia no estaba suscripto), asi que al suscribirse se re-traduce.
+            Load += (s_704ILR, e_704ILR) =>
+            {
+                SafeLoadData_704ILR();
+                GestorDeIdioma_704ILR.GetInstance_704ILR.Suscribir_704ILR(this);
+                ActualizarTextos_704ILR();
+            };
             Disposed += (s_704ILR, e_704ILR) => GestorDeIdioma_704ILR.GetInstance_704ILR.Desuscribir_704ILR(this);
         }
 
@@ -64,7 +79,7 @@ namespace EvenTech.UI
             _dtDesde_704ILR = Ui_704ILR.DatePicker_704ILR(); _dtDesde_704ILR.Width = 130; _dtDesde_704ILR.ShowCheckBox = true; _dtDesde_704ILR.Checked = false;
             _dtHasta_704ILR = Ui_704ILR.DatePicker_704ILR(); _dtHasta_704ILR.Width = 130; _dtHasta_704ILR.ShowCheckBox = true; _dtHasta_704ILR.Checked = false;
             _cboAccion_704ILR = Ui_704ILR.Combo_704ILR(); _cboAccion_704ILR.Width = 150;
-            _cboAccion_704ILR.Items.Add(Tr_704ILR.T_704ILR("OPT_TODAS"));
+            _cboAccion_704ILR.Items.Add(Tr_704ILR.F_704ILR("OPT_TODAS", "(Todas)"));
             _cboAccion_704ILR.Items.Add(new AccionItem_704ILR("LOGIN_OK"));
             _cboAccion_704ILR.Items.Add(new AccionItem_704ILR("LOGIN_FAIL"));
             _cboAccion_704ILR.Items.Add(new AccionItem_704ILR("LOGOUT"));
@@ -83,7 +98,7 @@ namespace EvenTech.UI
             _btnBuscar_704ILR.Click += (s_704ILR, e_704ILR) => SafeLoadData_704ILR();
             _btnLimpiar_704ILR = Ui_704ILR.Secondary_704ILR("Limpiar", Theme_704ILR.IcoClear_704ILR);
             _btnLimpiar_704ILR.Tag = "T:BTN_LIMPIAR"; _btnLimpiar_704ILR.Size = new Size(120, 32); _btnLimpiar_704ILR.Margin = new Padding(0, 18, 0, 0);
-            _btnLimpiar_704ILR.Click += (s_704ILR, e_704ILR) => { LimpiarFiltros_704ILR(); Aplicar_704ILR(); };
+            _btnLimpiar_704ILR.Click += (s_704ILR, e_704ILR) => { LimpiarFiltros_704ILR(); SafeLoadData_704ILR(); };
 
             flow_704ILR.Controls.Add(fUsuario_704ILR); flow_704ILR.Controls.Add(fDesde_704ILR); flow_704ILR.Controls.Add(fHasta_704ILR); flow_704ILR.Controls.Add(fAccion_704ILR);
             flow_704ILR.Controls.Add(_btnBuscar_704ILR); flow_704ILR.Controls.Add(_btnLimpiar_704ILR);
@@ -101,9 +116,13 @@ namespace EvenTech.UI
             UiGrid_704ILR.Style_704ILR(_grid_704ILR);
             _grid_704ILR.CellFormatting += Grid_CellFormatting_704ILR;
             _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cId",      HeaderText = "Id",      DataPropertyName = "Id_704ILR",          FillWeight = 30 });
-            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cFecha",   HeaderText = "Fecha",   DataPropertyName = "Timestamp_704ILR",   FillWeight = 90, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm:ss" } });
+            // Fecha en gregoriano con separadores invariantes, como en la bitacora general: el patron solo
+            // fija el orden, y con la cultura de la estacion th-TH mostraba 2569 y fi-FI 01.21.53.
+            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cFecha",   HeaderText = "Fecha",   DataPropertyName = "Timestamp_704ILR",   FillWeight = 90, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm:ss", FormatProvider = CultureInfo.InvariantCulture } });
             _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cUsuario", HeaderText = "Usuario", DataPropertyName = "Username_704ILR",    FillWeight = 70 });
-            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cAccion",  HeaderText = "Accion",  DataPropertyName = "Action_704ILR",      FillWeight = 60 });
+            // Se enlaza el codigo guardado (no el enum): una accion fuera de dominio se
+            // ve tal cual y las conocidas se traducen en CellFormatting.
+            _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cAccion",  HeaderText = "Accion",  DataPropertyName = "ActionCodigo_704ILR", FillWeight = 60 });
             _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cMaquina", HeaderText = "Maquina", DataPropertyName = "MachineName_704ILR", FillWeight = 70 });
             _grid_704ILR.Columns.Add(new DataGridViewTextBoxColumn { Name = "cDetalle", HeaderText = "Detalle", DataPropertyName = "Details_704ILR",     FillWeight = 120 });
             cardGrid_704ILR.Controls.Add(_grid_704ILR);
@@ -134,7 +153,12 @@ namespace EvenTech.UI
                 _cboAccion_704ILR.SelectedIndex = sel_704ILR;
                 _cboAccion_704ILR.Invalidate();
             }
-            if (_grid_704ILR.DataSource != null && _lblCount_704ILR.Visible) _lblCount_704ILR.Text = _grid_704ILR.Rows.Count + " " + Tr_704ILR.T_704ILR("AUD_COUNT");
+            // Conteo y aviso se re-traducen segun el aviso vigente y no segun Visible: en
+            // la pestana no seleccionada del hub los controles no estan visibles y, al
+            // volver a ella, quedarian en el idioma anterior.
+            bool hayAviso_704ILR = HayAviso_704ILR();
+            if (_grid_704ILR.DataSource != null && !hayAviso_704ILR) _lblCount_704ILR.Text = _grid_704ILR.Rows.Count + " " + Tr_704ILR.F_704ILR("AUD_COUNT", "registros");
+            if (hayAviso_704ILR) _lblError_704ILR.Text = TextoAviso_704ILR();
             _grid_704ILR.Invalidate(); // re-traduce los valores de accion en las celdas
         }
 
@@ -152,47 +176,85 @@ namespace EvenTech.UI
             // exige aca y no solo donde se decide mostrarla.
             if (!Permisos_704ILR.Tiene_704ILR("AUDIT_LOGIN_VER"))
             {
-                _lblCount_704ILR.Visible = false;
-                _lblError_704ILR.Text = Tr_704ILR.T_704ILR("MSG_SIN_PERMISO");
-                _lblError_704ILR.Visible = true;
+                MostrarAviso_704ILR("MSG_SIN_PERMISO", "No tenés permiso para realizar esta acción.");
                 return;
             }
+            if (!RangoFechasValido_704ILR()) return;
 
             try
             {
+                _claveAviso_704ILR = null;
+                _excepcionAviso_704ILR = null;
                 _lblError_704ILR.Visible = false;
                 _lblCount_704ILR.Visible = true;
-                _todos_704ILR = BLL_LoginAudit_704ILR.GetAll_704ILR(500);
-                Aplicar_704ILR();
+
+                var filtros_704ILR = new LoginAuditFiltros_704ILR
+                {
+                    Usuario_704ILR = string.IsNullOrWhiteSpace(_txtUsuario_704ILR.Text) ? null : _txtUsuario_704ILR.Text.Trim(),
+                    FechaInicio_704ILR = _dtDesde_704ILR.Checked ? _dtDesde_704ILR.Value : (DateTime?)null,
+                    FechaFin_704ILR = _dtHasta_704ILR.Checked ? _dtHasta_704ILR.Value : (DateTime?)null,
+                    Accion_704ILR = _cboAccion_704ILR.SelectedItem is AccionItem_704ILR ai_704ILR
+                        ? (LoginAuditAction_704ILR)Enum.Parse(typeof(LoginAuditAction_704ILR), ai_704ILR.Code_704ILR)
+                        : (LoginAuditAction_704ILR?)null
+                };
+
+                List<BE_LoginAuditEntry_704ILR> data_704ILR = BLL_LoginAudit_704ILR.Buscar_704ILR(filtros_704ILR);
+                _grid_704ILR.DataSource = data_704ILR;
+                _lblCount_704ILR.Text = data_704ILR.Count + " " + Tr_704ILR.F_704ILR("AUD_COUNT", "registros");
             }
             catch (Exception ex_704ILR)
             {
                 BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Auditoria", "Cargar auditoria de login");
-                _lblCount_704ILR.Visible = false;
-                _lblError_704ILR.Text = Tr_704ILR.T_704ILR("MSG_ERROR_PREFIJO") + ex_704ILR.GetType().Name + " - " + ex_704ILR.Message;
-                _lblError_704ILR.Visible = true;
+                MostrarAvisoExcepcion_704ILR(ex_704ILR);
             }
         }
 
-        // Aplica los filtros en memoria sobre los registros cargados.
-        private void Aplicar_704ILR()
+        // Un rango invertido (Desde posterior a Hasta) no se consulta: el resultado
+        // vacio haria pensar que no hubo accesos. Se comparan dias, como el filtro.
+        private bool RangoFechasValido_704ILR()
         {
-            IEnumerable<BE_LoginAuditEntry_704ILR> q_704ILR = _todos_704ILR ?? new List<BE_LoginAuditEntry_704ILR>();
-
-            string u_704ILR = _txtUsuario_704ILR.Text.Trim();
-            if (u_704ILR.Length > 0)
-                q_704ILR = q_704ILR.Where(x_704ILR => (x_704ILR.Username_704ILR ?? "").IndexOf(u_704ILR, StringComparison.OrdinalIgnoreCase) >= 0);
-            if (_dtDesde_704ILR.Checked)
-                q_704ILR = q_704ILR.Where(x_704ILR => x_704ILR.Timestamp_704ILR >= _dtDesde_704ILR.Value.Date);
-            if (_dtHasta_704ILR.Checked)
-                q_704ILR = q_704ILR.Where(x_704ILR => x_704ILR.Timestamp_704ILR < _dtHasta_704ILR.Value.Date.AddDays(1));
-            if (_cboAccion_704ILR.SelectedItem is AccionItem_704ILR ai_704ILR)
-                q_704ILR = q_704ILR.Where(x_704ILR => x_704ILR.Action_704ILR.ToString() == ai_704ILR.Code_704ILR);
-
-            var data_704ILR = q_704ILR.ToList();
-            _grid_704ILR.DataSource = data_704ILR;
-            _lblCount_704ILR.Text = data_704ILR.Count + " " + Tr_704ILR.T_704ILR("AUD_COUNT");
+            if (!_dtDesde_704ILR.Checked || !_dtHasta_704ILR.Checked || _dtDesde_704ILR.Value.Date <= _dtHasta_704ILR.Value.Date) return true;
+            MostrarAviso_704ILR("MSG_RANGO_FECHAS", "La fecha Desde no puede ser posterior a la fecha Hasta.");
+            return false;
         }
+
+        // Muestra un aviso que sale de una clave de traduccion y la recuerda, para
+        // re-traducirlo si el idioma cambia mientras sigue vigente.
+        private void MostrarAviso_704ILR(string clave_704ILR, string defecto_704ILR)
+        {
+            _claveAviso_704ILR = clave_704ILR;
+            _defectoAviso_704ILR = defecto_704ILR;
+            _excepcionAviso_704ILR = null;
+            PresentarAviso_704ILR();
+        }
+
+        // Muestra el aviso de una consulta que fallo. Se guarda la excepcion y no el
+        // texto, para re-traducirlo si el idioma cambia mientras sigue vigente.
+        private void MostrarAvisoExcepcion_704ILR(Exception ex_704ILR)
+        {
+            _claveAviso_704ILR = null;
+            _defectoAviso_704ILR = null;
+            _excepcionAviso_704ILR = ex_704ILR;
+            PresentarAviso_704ILR();
+        }
+
+        // Con un aviso la consulta no se ejecuto (sin permiso, rango invertido o error):
+        // la grilla se vacia, porque las filas de la busqueda anterior no corresponden
+        // a los filtros que quedan a la vista.
+        private void PresentarAviso_704ILR()
+        {
+            _grid_704ILR.DataSource = new List<BE_LoginAuditEntry_704ILR>();
+            _lblCount_704ILR.Visible = false;
+            _lblError_704ILR.Text = TextoAviso_704ILR();
+            _lblError_704ILR.Visible = true;
+        }
+
+        private bool HayAviso_704ILR() => _claveAviso_704ILR != null || _excepcionAviso_704ILR != null;
+
+        // Texto del aviso vigente en el idioma activo.
+        private string TextoAviso_704ILR() => _claveAviso_704ILR != null
+            ? Tr_704ILR.F_704ILR(_claveAviso_704ILR, _defectoAviso_704ILR)
+            : Tr_704ILR.MensajeExcepcion_704ILR(_excepcionAviso_704ILR);
 
         private void Grid_CellFormatting_704ILR(object sender_704ILR, DataGridViewCellFormattingEventArgs e_704ILR)
         {

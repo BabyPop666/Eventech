@@ -18,6 +18,10 @@ namespace EvenTech.UI
         private CheckBox _chkRemember_704ILR;
         private AppButton_704ILR _btnLogin_704ILR;
 
+        // Ultimo mensaje de estado, guardado como la forma de armarlo y no como el texto
+        // ya traducido: al cambiar de idioma se vuelve a armar en el idioma nuevo.
+        private Func<string> _mensajeEstado_704ILR;
+
         public frmLogin_704ILR()
         {
             BuildUi_704ILR();
@@ -25,18 +29,33 @@ namespace EvenTech.UI
             GestorDeIdioma_704ILR.GetInstance_704ILR.Suscribir_704ILR(this);
             FormClosed += (s_704ILR, e_704ILR) => GestorDeIdioma_704ILR.GetInstance_704ILR.Desuscribir_704ILR(this);
 
-            // "Recordar cuenta": precarga el usuario guardado (nunca la contrasena).
             LoginPrefs_704ILR.Load_704ILR();
+            AplicarCuentaRecordada_704ILR();
+            Shown += (s_704ILR, e_704ILR) => EnfocarCampoInicial_704ILR();
+        }
+
+        // "Recordar cuenta": precarga el usuario guardado (nunca la contrasena). Corre al
+        // abrir la pantalla y cada vez que se vuelve de la ventana principal, porque la
+        // misma instancia de frmLogin vive toda la ejecucion.
+        private void AplicarCuentaRecordada_704ILR()
+        {
             if (LoginPrefs_704ILR.Remember_704ILR)
             {
                 _txtUser_704ILR.Text = LoginPrefs_704ILR.Username_704ILR;
                 _chkRemember_704ILR.Checked = true;
             }
-            Shown += (s_704ILR, e_704ILR) =>
+            else
             {
-                if (string.IsNullOrEmpty(_txtUser_704ILR.Text)) _txtUser_704ILR.Focus();
-                else _txtPass_704ILR.Focus();
-            };
+                _txtUser_704ILR.Clear();
+                _chkRemember_704ILR.Checked = false;
+            }
+        }
+
+        // Foco inicial: el usuario si esta vacio; si no, la contrasena. Se fija con la
+        // ventana visible (con la ventana oculta, Focus no tiene efecto).
+        private void EnfocarCampoInicial_704ILR()
+        {
+            ActiveControl = string.IsNullOrEmpty(_txtUser_704ILR.Text) ? (Control)_txtUser_704ILR : _txtPass_704ILR;
         }
 
         private void BuildUi_704ILR()
@@ -111,11 +130,16 @@ namespace EvenTech.UI
                 BackColor = Color.Transparent
             };
             tbl_704ILR.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            int[] heights_704ILR = { 64, 22, 22, 60, 60, 30, 8, 50, 42, /*fill*/ 0 };
+            // La fila 8 (mensaje de estado) crece con el texto: con alto fijo, un mensaje
+            // de mas de dos lineas (una traduccion editada, por ejemplo) quedaba cortado.
+            // El rotulo conserva 42 px de alto minimo, asi que el estado normal no cambia.
+            int[] heights_704ILR = { 64, 22, 22, 60, 60, 30, 8, 50, /*auto*/ 42, /*fill*/ 0 };
             for (int i_704ILR = 0; i_704ILR < heights_704ILR.Length; i_704ILR++)
                 tbl_704ILR.RowStyles.Add(i_704ILR == 9
                     ? new RowStyle(SizeType.Percent, 100)
-                    : new RowStyle(SizeType.Absolute, heights_704ILR[i_704ILR]));
+                    : i_704ILR == 8
+                        ? new RowStyle(SizeType.AutoSize)
+                        : new RowStyle(SizeType.Absolute, heights_704ILR[i_704ILR]));
 
             // El isologotipo encabeza la pantalla de acceso (G05). A este tamano se
             // usa la variante compacta (isotipo + EVENTECH, sin lema): el lema no se
@@ -178,6 +202,8 @@ namespace EvenTech.UI
             _lblStatus_704ILR = new Label
             {
                 Dock = DockStyle.Fill,
+                AutoSize = true,
+                MinimumSize = new Size(0, 42),
                 ForeColor = Color.FromArgb(255, 170, 170),
                 Font = Theme_704ILR.FontSmall_704ILR,
                 TextAlign = ContentAlignment.MiddleCenter,
@@ -211,7 +237,7 @@ namespace EvenTech.UI
 
             if (string.IsNullOrWhiteSpace(username_704ILR) || string.IsNullOrEmpty(plain_704ILR))
             {
-                SetError_704ILR(T_704ILR("LOGIN_COMPLETAR", "Completar usuario y contraseña."));
+                SetError_704ILR(() => T_704ILR("LOGIN_COMPLETAR", "Completar usuario y contraseña."));
                 return;
             }
 
@@ -225,49 +251,79 @@ namespace EvenTech.UI
             }
             catch (Exception ex_704ILR)
             {
+                // El detalle tecnico va a la bitacora. En pantalla, un mensaje traducido: el
+                // texto del motor salia en ingles, con el nombre de la base y la cuenta de
+                // Windows, y no entraba en el rotulo. La causa se clasifica como en el resto de
+                // las pantallas (Tr_704ILR.MensajeExcepcion_704ILR): el aviso propio del login
+                // queda para cuando no se pudo acceder a la base; un ingreso frenado por un
+                // bloqueo de otra estacion, con la base en linea, es una operacion no completada.
                 BLL_Bitacora_704ILR.RegistrarExcepcion_704ILR(ex_704ILR, "Login", "Autenticacion");
-                SetError_704ILR(T_704ILR("LOGIN_ERR_CONEXION", "Error de conexión:") + " " + ex_704ILR.Message);
+                SetError_704ILR(() => Tr_704ILR.EsSinBase_704ILR(ex_704ILR)
+                    ? T_704ILR("LOGIN_ERR_SIN_BASE", "No se pudo acceder a la base de datos. Reintentá o contactate con un administrador.")
+                    : Tr_704ILR.MensajeExcepcion_704ILR(ex_704ILR));
                 return;
             }
 
             switch (resp_704ILR.Result_704ILR)
             {
                 case LoginResult_704ILR.Success_704ILR:
-                    LoginPrefs_704ILR.Save_704ILR(_chkRemember_704ILR.Checked, username_704ILR);
+                    // Se recuerda el nombre de la cuenta y no lo tipeado ("ADMIN" -> "admin").
+                    LoginPrefs_704ILR.Save_704ILR(_chkRemember_704ILR.Checked, SessionManager_704ILR.GetInstance_704ILR.User_704ILR.Username_704ILR);
+                    // Si la carga de idiomas del arranque fallo, se reintenta antes de armar
+                    // la ventana principal: la base acaba de responder a la autenticacion.
+                    Program_704ILR.ReintentarIdiomas_704ILR("al entrar a la ventana principal");
                     Hide();
                     using (var main_704ILR = new frmMain_704ILR()) main_704ILR.ShowDialog();
-                    _txtUser_704ILR.Clear();
-                    _txtPass_704ILR.Clear();
-                    _lblStatus_704ILR.Text = "";
-                    _txtUser_704ILR.Focus();
-                    Show();
+                    RestablecerPantalla_704ILR();
                     break;
                 case LoginResult_704ILR.IncorrectPassword_704ILR:
-                    // Mismo mensaje para usuario inexistente y contrasena incorrecta:
-                    // la pantalla no revela si el nombre existe. Muestra el intento
-                    // actual: "Usuario o contraseña incorrectos. Intento 2 de 3."
-                    SetError_704ILR(T_704ILR("LOGIN_ERR_CREDENCIALES", "Usuario o contraseña incorrectos.") + " " +
-                             Tr_704ILR.F_704ILR("LOGIN_INTENTOS", "Intento {0} de {1}.", resp_704ILR.FailedAttempts_704ILR, resp_704ILR.MaxAttempts_704ILR));
+                {
+                    // Mismo mensaje para usuario inexistente, contrasena incorrecta y cuenta
+                    // bloqueada o inactiva sin la contrasena correcta: la pantalla no revela
+                    // si el nombre existe. Muestra el intento: "... Intento 2 de 3."
+                    int fallidos_704ILR = resp_704ILR.FailedAttempts_704ILR, maximo_704ILR = resp_704ILR.MaxAttempts_704ILR;
+                    SetError_704ILR(() => T_704ILR("LOGIN_ERR_CREDENCIALES", "Usuario o contraseña incorrectos.") + " " +
+                             Tr_704ILR.F_704ILR("LOGIN_INTENTOS", "Intento {0} de {1}.", fallidos_704ILR, maximo_704ILR));
                     break;
+                }
                 case LoginResult_704ILR.UserBlocked_704ILR:
-                    SetError_704ILR(T_704ILR("LOGIN_BLOQUEADA", "Cuenta bloqueada. Contactate con un administrador."));
+                    SetError_704ILR(() => T_704ILR("LOGIN_BLOQUEADA", "Cuenta bloqueada. Contactate con un administrador."));
                     break;
                 case LoginResult_704ILR.AccountInactive_704ILR:
-                    SetError_704ILR(T_704ILR("LOGIN_INACTIVA", "La cuenta esta inactiva. Contactate con un administrador."));
+                    SetError_704ILR(() => T_704ILR("LOGIN_INACTIVA", "La cuenta está inactiva. Contactate con un administrador."));
                     break;
             }
         }
 
+        // Deja la pantalla lista para el proximo ingreso al volver de la ventana principal
+        // (por "Cerrar sesion" o por la X). La misma instancia vive toda la ejecucion: lo
+        // que no se restablece aca queda como lo dejo el usuario anterior.
+        private void RestablecerPantalla_704ILR()
+        {
+            _txtPass_704ILR.Clear();
+            Ui_704ILR.OcultarClave_704ILR(_txtPass_704ILR);   // el siguiente no tipea su clave a la vista
+            _mensajeEstado_704ILR = null;
+            _lblStatus_704ILR.Text = "";
+            // Una carga de idiomas que siguiera pendiente se reintenta antes de volver a
+            // mostrar la pantalla de acceso.
+            Program_704ILR.ReintentarIdiomas_704ILR("al volver a la pantalla de acceso");
+            AplicarCuentaRecordada_704ILR();
+            Show();
+            EnfocarCampoInicial_704ILR();
+        }
+
         private void LblCrearCuenta_Click_704ILR(object sender_704ILR, EventArgs e_704ILR)
         {
+            Program_704ILR.ReintentarIdiomas_704ILR("al abrir Crear cuenta");
             using (var alta_704ILR = new frmCrearCuenta_704ILR()) alta_704ILR.ShowDialog();
             _txtUser_704ILR.Focus();
         }
 
-        private void SetError_704ILR(string msg_704ILR)
+        private void SetError_704ILR(Func<string> mensaje_704ILR)
         {
+            _mensajeEstado_704ILR = mensaje_704ILR;
             _lblStatus_704ILR.ForeColor = Color.FromArgb(255, 170, 170);
-            _lblStatus_704ILR.Text = msg_704ILR;
+            _lblStatus_704ILR.Text = mensaje_704ILR();
         }
 
         // Devuelve la traduccion de 'clave' o, si falta, el texto por defecto dado.
@@ -277,15 +333,19 @@ namespace EvenTech.UI
             return t_704ILR == clave_704ILR ? defecto_704ILR : t_704ILR;
         }
 
-        // Observador del patron Observer: traduce las leyendas del login.
+        // Observador del patron Observer: traduce las leyendas del login. Todas llevan
+        // texto por defecto: si la carga de idiomas del arranque fallo, la pantalla de
+        // acceso se ve en castellano y no con las claves crudas mientras se reintenta.
         public void ActualizarTextos_704ILR()
         {
-            if (_lblUser_704ILR != null)        _lblUser_704ILR.Text        = Tr_704ILR.T_704ILR("LOGIN_USER");
-            if (_lblPass_704ILR != null)        _lblPass_704ILR.Text        = Tr_704ILR.T_704ILR("LOGIN_PASS");
-            if (_btnLogin_704ILR != null)       _btnLogin_704ILR.Text       = Tr_704ILR.T_704ILR("LOGIN_ENTER");
-            if (_lblCrearCuenta_704ILR != null) _lblCrearCuenta_704ILR.Text = Tr_704ILR.T_704ILR("LOGIN_CREATE");
+            if (_lblUser_704ILR != null)        _lblUser_704ILR.Text        = T_704ILR("LOGIN_USER", "Usuario");
+            if (_lblPass_704ILR != null)        _lblPass_704ILR.Text        = T_704ILR("LOGIN_PASS", "Contraseña");
+            if (_btnLogin_704ILR != null)       _btnLogin_704ILR.Text       = T_704ILR("LOGIN_ENTER", "Ingresar");
+            if (_lblCrearCuenta_704ILR != null) _lblCrearCuenta_704ILR.Text = T_704ILR("LOGIN_CREATE", "¿No tenés cuenta? Crear");
             if (_lblTagline_704ILR != null)     _lblTagline_704ILR.Text     = T_704ILR("LOGIN_TAGLINE", "Gestión de eventos y reservas");
             if (_chkRemember_704ILR != null)    _chkRemember_704ILR.Text    = T_704ILR("LOGIN_REMEMBER", "Recordar cuenta");
+            // El mensaje de estado a la vista se vuelve a armar en el idioma nuevo.
+            if (_lblStatus_704ILR != null)      _lblStatus_704ILR.Text      = _mensajeEstado_704ILR?.Invoke() ?? "";
         }
     }
 }

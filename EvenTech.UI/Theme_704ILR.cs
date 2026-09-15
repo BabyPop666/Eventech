@@ -94,6 +94,7 @@ namespace EvenTech.UI
         public static readonly string IcoClose_704ILR    = Glyph_704ILR(0xE8BB); // ChromeClose
         public static readonly string IcoMinimize_704ILR = Glyph_704ILR(0xE921); // ChromeMinimize
         public static readonly string IcoMaximize_704ILR = Glyph_704ILR(0xE922); // ChromeMaximize
+        public static readonly string IcoRestore_704ILR  = Glyph_704ILR(0xE923); // ChromeRestore (ventana maximizada)
 
         // Isologotipo del sistema, embebido en el ensamblado. Se carga una sola vez.
         private static System.Drawing.Image _logo_704ILR;
@@ -149,8 +150,7 @@ namespace EvenTech.UI
         public static readonly string IcoClear_704ILR    = Glyph_704ILR(0xE894); // Clear
         public static readonly string IcoWarning_704ILR  = Glyph_704ILR(0xE7BA);
         public static readonly string IcoLogout_704ILR   = Glyph_704ILR(0xF3B1); // SignOut
-        public static readonly string IcoEye_704ILR      = Glyph_704ILR(0xE7B3); // RedEye (ver contrasena)
-        public static readonly string IcoEyeOff_704ILR   = Glyph_704ILR(0xED1A); // Hide
+        public static readonly string IcoEye_704ILR      = Glyph_704ILR(0xE7B3); // RedEye (ver contrasena; tachado a mano con la clave a la vista)
         public static readonly string IcoUnlock_704ILR   = Glyph_704ILR(0xE785); // Unlock (desbloquear)
         public static readonly string IcoPago_704ILR     = Glyph_704ILR(0xE8C7); // PaymentCard (pagos)
         public static readonly string IcoDocumento_704ILR = Glyph_704ILR(0xE8A5); // Document (comprobante)

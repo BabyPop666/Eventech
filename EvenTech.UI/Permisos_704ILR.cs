@@ -63,7 +63,7 @@ namespace EvenTech.UI
                              (string.IsNullOrEmpty(accion_704ILR) ? "" : " | Accion: " + accion_704ILR);
             BLL_Bitacora_704ILR.Registrar_704ILR("Seguridad", "Acceso denegado", CriticidadBitacora_704ILR.Advertencia, detalle_704ILR);
 
-            string msg_704ILR = T_704ILR("MSG_SIN_PERMISO", "No tenes permiso para realizar esta accion.");
+            string msg_704ILR = T_704ILR("MSG_SIN_PERMISO", "No tenés permiso para realizar esta acción.");
             if (owner_704ILR != null)
                 MessageBox.Show(owner_704ILR, msg_704ILR, "EvenTech", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             else

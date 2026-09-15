@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Net;
 using System.Text;
 using EvenTech.BE;
@@ -75,15 +76,34 @@ namespace EvenTech.UI
               .Append(".doc b{color:#fff;font-size:15px;}")
               .Append(".body{padding:24px 32px;}")
               .Append(".grid{display:flex;gap:32px;margin-bottom:20px;}")
-              .Append(".grid .col{flex:1;}")
+              .Append(".grid .col{flex:1;min-width:0;}")
               .Append("h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:").Append(Gold_704ILR).Append(";border-bottom:2px solid ").Append(Line_704ILR).Append(";padding-bottom:6px;margin:0 0 10px;}")
-              .Append(".row{font-size:14px;margin:4px 0;}")
-              .Append(".row span{color:").Append(Muted_704ILR).Append(";display:inline-block;min-width:90px;}")
+              // Rotulo y valor: el rotulo reserva un ancho comun y siempre deja aire
+              // antes del valor ("Fecha del evento:" no entraba en 90px y se pegaba).
+              // Los textos libres (nombre, correo, servicio, observacion) pueden no
+              // tener espacios: se parten dentro de su caja para que la hoja no pierda
+              // columnas. Fechas e importes no se parten.
+              .Append(".row{font-size:14px;margin:4px 0;overflow-wrap:anywhere;word-break:break-word;}")
+              .Append(".row span{color:").Append(Muted_704ILR).Append(";display:inline-block;min-width:120px;padding-right:8px;}")
               .Append("table{width:100%;border-collapse:collapse;margin-top:6px;font-size:14px;}")
               .Append("th{background:").Append(Navy_704ILR).Append(";color:#fff;text-align:left;padding:9px 10px;font-size:12px;text-transform:uppercase;letter-spacing:.5px;}")
               .Append("td{padding:9px 10px;border-bottom:1px solid ").Append(Line_704ILR).Append(";}")
               .Append("tr:nth-child(even) td{background:").Append(Soft_704ILR).Append(";}")
               .Append(".num{text-align:right;white-space:nowrap;}")
+              .Append(".txt{overflow-wrap:anywhere;word-break:break-word;}")
+              // Celda del metodo de pago con una palabra larga: se parte (txt) y declara un
+              // ancho. En el reparto automatico de la tabla una columna con ancho declarado
+              // crece antes que las demas: la palabra queda entera mientras la hoja tenga
+              // lugar (hasta 14em) y se parte dentro de su celda cuando no lo tiene. Con
+              // "txt" sola la Observacion se llevaba el espacio y partia hasta "Transferencia".
+              .Append(".met{width:14em;}")
+              // La Observacion que sigue a esa celda conserva un ancho minimo. Su encabezado no
+              // siempre la sostiene ("Note" en ingles es corto): sin minimo, la columna del metodo
+              // se llevaba el espacio y a 560 px la Observacion quedaba en 53-68 px, partiendo
+              // palabras comunes letra por letra. Con 8em las palabras quedan enteras y nada sale
+              // de la hoja; con metodos de palabras cortas (sin "met") la regla no aplica.
+              .Append(".met+.txt{min-width:8em;}")
+              .Append(".nw{white-space:nowrap;}")
               .Append(".totals{margin-top:18px;margin-left:auto;width:300px;font-size:14px;}")
               .Append(".totals .t{display:flex;justify-content:space-between;padding:6px 0;}")
               .Append(".totals .grand{border-top:2px solid ").Append(Navy_704ILR).Append(";font-weight:bold;font-size:16px;padding-top:8px;}")
@@ -95,12 +115,15 @@ namespace EvenTech.UI
               .Append("</style></head><body><div class=\"sheet\">");
 
             // ---- Encabezado ----
+            // Las fechas del documento (emision, evento y pagos) van en gregoriano con separadores
+            // invariantes, como las de la bitacora: con la cultura de la estacion th-TH emitia 2569 y
+            // fi-FI 01.15. Los importes siguen con el formato de la cultura (N2).
             sb_704ILR.Append("<div class=\"head\"><div class=\"brand\">EvenTech<small>")
-              .Append(E_704ILR(T_704ILR("CMP_TAGLINE", "GESTION DE EVENTOS"))).Append("</small></div>");
+              .Append(E_704ILR(T_704ILR("CMP_TAGLINE", "GESTIÓN DE EVENTOS"))).Append("</small></div>");
             sb_704ILR.Append("<div class=\"doc\">").Append(E_704ILR(docNro_704ILR))
               .Append("<b> #").Append(reservaId_704ILR).Append("</b><br>")
               .Append(E_704ILR(T_704ILR("CMP_EMITIDO", "Emitido"))).Append(": ")
-              .Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm")).Append("<br>")
+              .Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)).Append("<br>")
               .Append("<span class=\"badge\">").Append(E_704ILR(estadoPago_704ILR)).Append("</span></div></div>");
 
             sb_704ILR.Append("<div class=\"body\">");
@@ -111,12 +134,12 @@ namespace EvenTech.UI
             if (cliente_704ILR != null)
             {
                 if (!string.IsNullOrWhiteSpace(cliente_704ILR.Dni_704ILR)) sb_704ILR.Append("<div class=\"row\"><span>").Append(E_704ILR(T_704ILR("LBL_DNI", "DNI"))).Append(":</span>").Append(E_704ILR(cliente_704ILR.Dni_704ILR)).Append("</div>");
-                if (!string.IsNullOrWhiteSpace(cliente_704ILR.Email_704ILR)) sb_704ILR.Append("<div class=\"row\"><span>").Append(E_704ILR(T_704ILR("LBL_EMAIL", "Email"))).Append(":</span>").Append(E_704ILR(cliente_704ILR.Email_704ILR)).Append("</div>");
-                if (!string.IsNullOrWhiteSpace(cliente_704ILR.Telefono_704ILR)) sb_704ILR.Append("<div class=\"row\"><span>").Append(E_704ILR(T_704ILR("LBL_TELEFONO", "Tel"))).Append(":</span>").Append(E_704ILR(cliente_704ILR.Telefono_704ILR)).Append("</div>");
+                if (!string.IsNullOrWhiteSpace(cliente_704ILR.Email_704ILR)) sb_704ILR.Append("<div class=\"row\"><span>").Append(E_704ILR(T_704ILR("LBL_EMAIL", "Email"))).Append(":</span>").Append(E_704ILR(ContactoLegible_704ILR(cliente_704ILR.Email_704ILR))).Append("</div>");
+                if (!string.IsNullOrWhiteSpace(cliente_704ILR.Telefono_704ILR)) sb_704ILR.Append("<div class=\"row\"><span>").Append(E_704ILR(T_704ILR("LBL_TELEFONO", "Tel"))).Append(":</span>").Append(E_704ILR(ContactoLegible_704ILR(cliente_704ILR.Telefono_704ILR))).Append("</div>");
             }
             sb_704ILR.Append("</div><div class=\"col\"><h2>").Append(E_704ILR(T_704ILR("CMP_EVENTO", "Evento"))).Append("</h2>");
-            sb_704ILR.Append("<div class=\"row\"><span>").Append(E_704ILR(T_704ILR("COL_SALON", "Salon"))).Append(":</span>").Append(E_704ILR(reserva_704ILR.SalonNombre_704ILR ?? "-")).Append("</div>");
-            sb_704ILR.Append("<div class=\"row\"><span>").Append(E_704ILR(T_704ILR("RES_LBL_FECHA", "Fecha del evento"))).Append(":</span>").Append(reserva_704ILR.FechaEvento_704ILR.ToString("yyyy-MM-dd")).Append("</div>");
+            sb_704ILR.Append("<div class=\"row\"><span>").Append(E_704ILR(T_704ILR("COL_SALON", "Salón"))).Append(":</span>").Append(E_704ILR(reserva_704ILR.SalonNombre_704ILR ?? "-")).Append("</div>");
+            sb_704ILR.Append("<div class=\"row\"><span>").Append(E_704ILR(T_704ILR("RES_LBL_FECHA", "Fecha del evento"))).Append(":</span>").Append(reserva_704ILR.FechaEvento_704ILR.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)).Append("</div>");
             sb_704ILR.Append("<div class=\"row\"><span>").Append(E_704ILR(T_704ILR("COL_ESTADO", "Estado"))).Append(":</span>").Append(E_704ILR(Tr_704ILR.Estado_704ILR(reserva_704ILR.Estado_704ILR))).Append("</div>");
             sb_704ILR.Append("</div></div>");
 
@@ -134,7 +157,7 @@ namespace EvenTech.UI
                   .Append("</th><th class=\"num\">").Append(E_704ILR(T_704ILR("COL_SUBTOTAL", "Subtotal")))
                   .Append("</th></tr></thead><tbody>");
                 foreach (var s_704ILR in servicios_704ILR)
-                    sb_704ILR.Append("<tr><td>").Append(E_704ILR(s_704ILR.ServicioNombre_704ILR))
+                    sb_704ILR.Append("<tr><td class=\"txt\">").Append(E_704ILR(s_704ILR.ServicioNombre_704ILR))
                       .Append("</td><td class=\"num\">").Append(s_704ILR.Cantidad_704ILR)
                       .Append("</td><td class=\"num\">").Append(s_704ILR.PrecioUnitario_704ILR.ToString("N2"))
                       .Append("</td><td class=\"num\">").Append(s_704ILR.Subtotal_704ILR.ToString("N2"))
@@ -158,30 +181,70 @@ namespace EvenTech.UI
             else
             {
                 sb_704ILR.Append("<table><thead><tr><th>").Append(E_704ILR(T_704ILR("COL_FECHA", "Fecha")))
-                  .Append("</th><th>").Append(E_704ILR(T_704ILR("COL_METODO", "Metodo")))
-                  .Append("</th><th>").Append(E_704ILR(T_704ILR("COL_OBSERVACION", "Observacion")))
+                  .Append("</th><th>").Append(E_704ILR(T_704ILR("COL_METODO", "Método")))
+                  .Append("</th><th>").Append(E_704ILR(T_704ILR("COL_OBSERVACION", "Observación")))
                   .Append("</th><th class=\"num\">").Append(E_704ILR(T_704ILR("COL_MONTO", "Monto")))
                   .Append("</th></tr></thead><tbody>");
+                // El nombre del metodo es texto libre (catalogo de hasta 50 caracteres o una
+                // traduccion editable). Con palabras cortas la celda es la comun: su palabra
+                // mas larga fija el ancho de la columna y no se parte. Una palabra larga, sin
+                // partirse, fijaba el ancho minimo de la tabla y la hoja recortaba Observacion
+                // y Monto: esa celda se parte con prioridad de ancho (ClaseCeldaMetodo_704ILR).
                 foreach (var p_704ILR in pagos_704ILR)
-                    sb_704ILR.Append("<tr><td>").Append(p_704ILR.Fecha_704ILR.ToString("yyyy-MM-dd HH:mm"))
-                      .Append("</td><td>").Append(E_704ILR(p_704ILR.MetodoNombre_704ILR))
-                      .Append("</td><td>").Append(E_704ILR(p_704ILR.Observacion_704ILR ?? ""))
+                {
+                    string metodo_704ILR = frmReservaPagos_704ILR.TextoMetodo_704ILR(p_704ILR.MetodoNombre_704ILR);
+                    sb_704ILR.Append("<tr><td class=\"nw\">").Append(p_704ILR.Fecha_704ILR.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture))
+                      .Append("</td><td").Append(ClaseCeldaMetodo_704ILR(metodo_704ILR)).Append('>').Append(E_704ILR(metodo_704ILR))
+                      .Append("</td><td class=\"txt\">").Append(E_704ILR(p_704ILR.Observacion_704ILR ?? ""))
                       .Append("</td><td class=\"num\">").Append(p_704ILR.Monto_704ILR.ToString("N2"))
                       .Append("</td></tr>");
+                }
                 sb_704ILR.Append("</tbody></table>");
             }
 
             sb_704ILR.Append("</div>"); // body
             sb_704ILR.Append("<div class=\"foot\">")
               .Append(E_704ILR(esPresupuesto_704ILR
-                  ? T_704ILR("CMP_PRESUPUESTO_NOTA", "Presupuesto sin compromiso de reserva. Sujeto a disponibilidad del salon al momento de confirmar.")
+                  ? T_704ILR("CMP_PRESUPUESTO_NOTA", "Presupuesto sin compromiso de reserva. Sujeto a disponibilidad del salón al momento de confirmar.")
                   : T_704ILR("CMP_GRACIAS", "Gracias por su reserva.")))
               .Append("</div>");
             sb_704ILR.Append("</div></body></html>");
             return sb_704ILR.ToString();
         }
 
+        // Un contacto que quedo cifrado con la clave de otra instalacion (la base se restauro en otra
+        // PC y la lectura devuelve el paquete "ENC:..." tal cual) no se imprime como si fuera el dato
+        // del cliente: se aclara que no se puede leer, con el mismo criterio que Email aplica al
+        // destinatario (CryptoService_704ILR.EstaProtegido_704ILR).
+        private static string ContactoLegible_704ILR(string valor_704ILR)
+            => CryptoService_704ILR.EstaProtegido_704ILR(valor_704ILR.Trim())
+                ? T_704ILR("CMP_DATO_ILEGIBLE", "(no se puede leer en este equipo)")
+                : valor_704ILR;
+
         private static string E_704ILR(string s_704ILR) => WebUtility.HtmlEncode(s_704ILR ?? "");
+
+        // Palabra mas larga (en caracteres) con la que la celda del metodo de pago se emite
+        // comun. Hasta 15 caracteres de ancho corriente, tambien en mayusculas, la palabra entra
+        // entera en su columna aun con la hoja a 560 px e importes de ocho cifras; los nombres
+        // de fabrica llegan a 13 ("Transferencia").
+        private const int LargoPalabraMetodo_704ILR = 15;
+
+        // Atributo de clase de la celda del metodo: ninguno si todas sus palabras son cortas
+        // (la celda de siempre, que nunca parte "Transferencia" ni "MercadoPago"); "txt met" si
+        // alguna supera LargoPalabraMetodo_704ILR (se parte dentro de su celda, con prioridad
+        // de ancho sobre la Observacion). Un espacio de no separacion no corta la palabra: el
+        // navegador tampoco pasa de linea en el.
+        private static string ClaseCeldaMetodo_704ILR(string metodo_704ILR)
+        {
+            int largo_704ILR = 0;
+            foreach (char c_704ILR in metodo_704ILR ?? "")
+            {
+                bool separa_704ILR = char.IsWhiteSpace(c_704ILR) && c_704ILR != '\u00A0' && c_704ILR != '\u2007' && c_704ILR != '\u202F';
+                largo_704ILR = separa_704ILR ? 0 : largo_704ILR + 1;
+                if (largo_704ILR > LargoPalabraMetodo_704ILR) return " class=\"txt met\"";
+            }
+            return "";
+        }
 
         private static string T_704ILR(string clave_704ILR, string defecto_704ILR)
         {

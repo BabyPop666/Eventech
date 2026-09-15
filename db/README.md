@@ -48,7 +48,10 @@ sqlcmd -S localhost\SQLEXPRESS -d EvenTechDB -E -C -b -i schema.sql
 - `sqlcmd` no viene con el motor: se instala con SSMS, con *Microsoft Command Line
   Utilities for SQL Server* o como `go-sqlcmd`. El script está verificado con el
   `sqlcmd` ODBC y con `go-sqlcmd`; también se puede ejecutar desde SSMS sobre la
-  base ya creada.
+  base ya creada. Si en SSMS se lo ejecuta por error con `master` seleccionada, la
+  guarda corta con un error y el resto del script no se ejecuta; el último lote
+  vuelve a habilitar la ejecución de la ventana (`SET NOEXEC OFF`), así que alcanza
+  con elegir la base creada en el combo y volver a ejecutar el script.
 
 > Un `CREATE TABLE` dentro de un `IF OBJECT_ID(...) IS NULL` solo se ejecuta la
 > primera vez: editarlo **no** cambia una base ya creada. Toda corrección de una
@@ -94,7 +97,7 @@ email mal escrito), de modo que la ficha del cliente nunca queda trabada.
 
 ## Opción B — Restaurar el snapshot completo (con datos)
 
-`EvenTechDB.bak` es un backup full, **generado el 06/09/2026 a la 01:10**, con los
+`EvenTechDB.bak` es un backup full, **generado el 15/09/2026 a las 06:03**, con los
 datos de demostración: 12 clientes (contactos en texto plano), 24 reservas
 repartidas en los tres salones y los cuatro estados (11 CONFIRMADA, 6 COTIZACIÓN,
 5 PENDIENTE y 2 CANCELADA), 96 líneas de servicios contratados, 11 pagos (toda
@@ -154,5 +157,6 @@ WITH MOVE 'EvenTechDB'     TO N'C:\...\MSSQL\DATA\EvenTechDB.mdf',
 igual o mayor versión que el de origen (SQL Server Express 2019 / MSSQL15).
 
 Si el `.bak` restaurado fuera anterior al `schema.sql` vigente, correr el script
-sobre la base restaurada (Opción A, segundo comando): agrega solo lo que falte, y
-la aplicación lo exige al conectar.
+sobre la base restaurada (Opción A, segundo comando): agrega solo lo que falte. La
+aplicación lo exige al conectar solo cuando faltan tablas o columnas; las
+traducciones y restricciones nuevas no se controlan, así que el script se corre igual.
