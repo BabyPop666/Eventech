@@ -146,8 +146,9 @@ Dependencias entre capas, tal como las declaran los `ProjectReference`:
 `UI -> BLL, BE, Services` · `BLL -> DAL, BE, Services` · `DAL -> BE, Services` ·
 `Services -> BE` · `BE` no referencia a ninguna otra.
 
-Unicos paquetes NuGet: `Microsoft.Data.SqlClient` y
-`System.Security.Cryptography.ProtectedData`.
+Unico paquete NuGet: `Microsoft.Data.SqlClient`, el proveedor de SQL Server que usa la
+DAL (.NET 8 no trae ninguno en el framework). No contiene logica del sistema: todo el SQL
+esta escrito a mano. DPAPI (`ProtectedData`) se toma del runtime de escritorio de .NET 8.
 
 **Patrones aplicados:** Singleton (gestion de sesion: instancia unica con
 constructor privado y acceso sincronizado), Composite (arbol de perfiles y
