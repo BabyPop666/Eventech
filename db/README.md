@@ -97,7 +97,7 @@ email mal escrito), de modo que la ficha del cliente nunca queda trabada.
 
 ## Opción B — Restaurar el snapshot completo (con datos)
 
-`EvenTechDB.bak` es un backup full, **generado el 15/09/2026 a las 06:03**, con los
+`EvenTechDB.bak` es un backup full, **generado el 26/09/2026 a las 08:12**, con los
 datos de demostración: 12 clientes (contactos en texto plano), 24 reservas
 repartidas en los tres salones y los cuatro estados (11 CONFIRMADA, 6 COTIZACIÓN,
 5 PENDIENTE y 2 CANCELADA), 96 líneas de servicios contratados, 11 pagos (toda
